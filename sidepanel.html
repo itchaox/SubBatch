@@ -145,355 +145,6 @@
         fill: currentColor;
       }
 
-      .checkbox-container {
-        margin: 12px 0;
-      }
-
-      .checkbox-group {
-        display: grid;
-        grid-template-columns: repeat(2, 1fr);
-        gap: 12px;
-      }
-
-      .checkbox-label {
-        display: flex;
-        align-items: center;
-        gap: 4px;
-        color: #333;
-        font-size: 14px;
-        cursor: pointer;
-        padding: 6px 8px;
-        border-radius: 6px;
-        transition: all 0.2s ease;
-        user-select: none;
-        -webkit-user-select: none;
-      }
-
-      .checkbox-label:hover {
-        background-color: #f0f2f5;
-      }
-
-      .checkbox-label svg {
-        width: 16px;
-        height: 16px;
-        fill: #666;
-        transition: fill 0.2s ease;
-      }
-
-      .checkbox-label:hover svg {
-        fill: #333;
-      }
-
-      .checkbox-input {
-        width: 16px;
-        height: 16px;
-        margin: 0;
-        margin-right: 4px;
-        cursor: pointer;
-        accent-color: #3370ff;
-      }
-
-      .number-input-container {
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        margin-top: 16px;
-      }
-
-      .number-input-wrapper {
-        position: relative;
-        width: 100px;
-        margin-right: 0;
-      }
-
-      .number-input {
-        width: 100%;
-        padding: 8px 24px 8px 12px;
-        border: 1px solid #e0e0e0;
-        border-radius: 6px;
-        font-size: 14px;
-        color: #333;
-        transition: all 0.3s ease;
-        -moz-appearance: textfield;
-      }
-
-      .number-input::placeholder {
-        color: #999;
-        text-overflow: ellipsis;
-        overflow: hidden;
-        white-space: nowrap;
-      }
-
-      .number-input::-webkit-outer-spin-button,
-      .number-input::-webkit-inner-spin-button {
-        -webkit-appearance: none;
-        margin: 0;
-      }
-
-      .number-input:focus {
-        outline: none;
-        border-color: #3370ff;
-        box-shadow: 0 0 0 3px rgba(51, 112, 255, 0.1);
-      }
-
-      /* 自定义数字输入框的上下箭头按钮 */
-      .number-controls {
-        position: absolute;
-        right: -40px;
-        top: 0;
-        bottom: 0;
-        width: 24px;
-        display: flex;
-        flex-direction: column;
-        border-left: 1px solid #e0e0e0;
-        background: #fff;
-        border-top-right-radius: 6px;
-        border-bottom-right-radius: 6px;
-        overflow: hidden;
-      }
-
-      .number-control-btn {
-        flex: 1;
-        border: none;
-        background: none;
-        cursor: pointer;
-        padding: 0;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: #666;
-        transition: all 0.2s ease;
-        height: 50%;
-      }
-
-      .number-control-btn:hover {
-        color: #333;
-        background-color: #f0f2f5;
-      }
-
-      .number-control-btn:active {
-        background-color: #e6e8ea;
-      }
-
-      .number-control-btn svg {
-        width: 14px;
-        height: 14px;
-        fill: currentColor;
-      }
-
-      .number-up-btn {
-        border-bottom: 1px solid #e0e0e0;
-      }
-
-      .number-down-btn {
-        border-bottom-right-radius: 6px;
-      }
-
-      .result-url {
-        margin-top: 12px;
-        padding: 8px 12px;
-        background-color: #f5f6f7;
-        border-radius: 4px;
-        font-size: 14px;
-        color: #666;
-        word-break: break-all;
-        display: none;
-      }
-
-      .result-url.show {
-        display: block;
-      }
-
-      .table-container {
-        margin-top: 12px;
-        border: 1px solid #eee;
-        border-radius: 4px;
-        overflow: hidden;
-      }
-
-      .plugins-table {
-        width: 100%;
-        border-collapse: separate;
-        border-spacing: 0;
-        font-size: 14px;
-        border-radius: 8px;
-        overflow: hidden;
-      }
-
-      .plugins-table thead {
-        position: sticky;
-        top: 0;
-        background-color: #f9f9f9;
-        z-index: 1;
-      }
-
-      .plugins-table th {
-        font-weight: 500;
-        color: #666;
-        background-color: #f9f9f9;
-        padding: 12px;
-        border-bottom: 1px solid #eee;
-      }
-
-      .plugins-table tbody {
-        display: block;
-        height: 240px;
-        overflow-y: auto;
-        overflow-x: hidden;
-        background: white;
-      }
-
-      .plugins-table thead,
-      .plugins-table tbody tr {
-        display: table;
-        width: 100%;
-        table-layout: fixed;
-      }
-
-      .plugins-table th,
-      .plugins-table td {
-        padding: 6px 12px;
-        text-align: left;
-      }
-
-      .plugins-table tr:hover {
-        background-color: #f5f6f7;
-        transition: background-color 0.2s ease;
-      }
-
-      .plugins-table td:first-child,
-      .plugins-table th:first-child {
-        width: 40px;
-        text-align: center;
-      }
-
-      .plugins-table td:nth-child(2),
-      .plugins-table th:nth-child(2) {
-        width: 60px;
-      }
-
-      .radio-input {
-        width: 16px;
-        height: 16px;
-        margin: 0;
-        cursor: pointer;
-      }
-
-      /* 自定义滚动条样式 */
-      .plugins-table tbody::-webkit-scrollbar {
-        width: 8px;
-      }
-
-      .plugins-table tbody::-webkit-scrollbar-track {
-        background: #f5f6f7;
-        border-radius: 4px;
-      }
-
-      .plugins-table tbody::-webkit-scrollbar-thumb {
-        background: #ddd;
-        border-radius: 4px;
-        transition: background 0.3s ease;
-      }
-
-      .plugins-table tbody::-webkit-scrollbar-thumb:hover {
-        background: #bbb;
-      }
-
-      .table-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 8px;
-        width: 100%;
-      }
-
-      .search-container {
-        position: relative;
-        flex: 1;
-        margin-right: 16px;
-      }
-
-      .search-input {
-        width: 100%;
-        padding: 10px 32px 10px 12px;
-        border: 1px solid #e0e0e0;
-        border-radius: 6px;
-        font-size: 14px;
-        color: #333;
-        box-sizing: border-box;
-        transition: all 0.3s ease;
-        background-color: white;
-      }
-
-      .search-input:focus {
-        outline: none;
-        border-color: #3370ff;
-        box-shadow: 0 0 0 3px rgba(51, 112, 255, 0.1);
-      }
-
-      .search-input::placeholder {
-        color: #999;
-      }
-
-      .search-clear-btn {
-        position: absolute;
-        right: 8px;
-        top: 50%;
-        transform: translateY(-50%);
-        background: none;
-        border: none;
-        padding: 4px;
-        cursor: pointer;
-        color: #999;
-        display: none;
-        align-items: center;
-        justify-content: center;
-        opacity: 0.7;
-        transition: opacity 0.3s;
-      }
-
-      .search-input:focus + .search-clear-btn,
-      .search-container:hover .search-clear-btn {
-        display: flex;
-      }
-
-      .search-clear-btn:hover {
-        opacity: 1;
-      }
-
-      .search-clear-btn svg {
-        width: 16px;
-        height: 16px;
-        fill: currentColor;
-      }
-
-      .total-count {
-        font-size: 14px;
-        color: #666;
-        white-space: nowrap;
-      }
-
-      .total-count strong {
-        color: #3370ff;
-        margin: 0 2px;
-      }
-
-      .plugins-table tbody tr {
-        cursor: pointer;
-      }
-
-      .plugins-table tbody tr:hover td {
-        background-color: #f5f6f7;
-      }
-
-      .plugins-table tbody tr.selected td {
-        background-color: #eef3ff;
-      }
-
-      .plugins-table tbody tr.selected:hover td {
-        background-color: #e6eeff;
-      }
-
       .button-group {
         margin-top: 12px;
         display: flex;
@@ -597,37 +248,10 @@
         box-shadow: 0 2px 4px rgba(255, 215, 94, 0.2);
       }
 
-      .sponsor-btn svg {
-        width: 18px;
-        height: 18px;
-        fill: #ff5252;
-        filter: drop-shadow(0 2px 4px rgba(255, 82, 82, 0.2));
-        animation: heartBeat 1.2s ease-in-out infinite;
-      }
-
-      @keyframes heartBeat {
-        0% {
-          transform: scale(1);
-        }
-        14% {
-          transform: scale(1.3);
-        }
-        28% {
-          transform: scale(1);
-        }
-        42% {
-          transform: scale(1.3);
-        }
-        70% {
-          transform: scale(1);
-        }
-      }
-
       .follow-btn {
-        flex: 1.5;
-        min-width: 110px;
-        padding: 8px 12px;
-        background: linear-gradient(to right, #fb7299, #fc8bab);
+        flex: 1;
+        padding: 8px 16px;
+        background: linear-gradient(to right, #ff7eb3, #ff4d9c);
         color: white;
         border: none;
         border-radius: 8px;
@@ -638,264 +262,120 @@
         display: flex;
         align-items: center;
         justify-content: center;
-        gap: 6px;
-        box-shadow: 0 2px 8px rgba(251, 114, 153, 0.3);
-        transform-origin: center;
-        white-space: nowrap;
+        gap: 8px;
+        box-shadow: 0 2px 8px rgba(255, 77, 156, 0.3);
       }
 
       .follow-btn:hover {
-        background: linear-gradient(to right, #fc8bab, #fb7299);
+        background: linear-gradient(to right, #ff4d9c, #ff1a87);
         transform: scale(1.06);
-        box-shadow: 0 4px 12px rgba(251, 114, 153, 0.4);
+        box-shadow: 0 4px 12px rgba(255, 77, 156, 0.4);
       }
 
       .follow-btn:active {
         transform: scale(1.1) translateY(1px);
-        box-shadow: 0 2px 4px rgba(251, 114, 153, 0.2);
       }
 
+      .sponsor-btn svg,
       .follow-btn svg {
-        width: 18px;
-        height: 18px;
-        fill: white;
-        filter: drop-shadow(0 2px 4px rgba(255, 255, 255, 0.2));
+        width: 16px;
+        height: 16px;
+        fill: currentColor;
       }
 
-      .error-toast {
+      .error-toast,
+      .success-toast {
         position: fixed;
-        top: 120px;
+        bottom: 20px;
         left: 50%;
-        transform: translateX(-50%);
-        background-color: #fff2f0;
-        color: #ff4d4f;
-        padding: 8px 16px;
-        border-radius: 4px;
-        font-size: 14px;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
-        z-index: 1000;
-        display: none;
-        animation: fadeInOut 2s ease-in-out;
-        border: 1px solid #ffccc7;
+        transform: translateX(-50%) translateY(100px);
+        background-color: #fff;
+        color: #333;
+        padding: 12px 16px;
+        border-radius: 8px;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+        display: flex;
         align-items: center;
-        gap: 8px;
+        gap: 12px;
+        transition: transform 0.3s ease;
+        z-index: 1000;
+        min-width: 280px;
+        max-width: 400px;
       }
 
-      .error-toast.show {
-        display: flex;
+      .error-toast.show,
+      .success-toast.show {
+        transform: translateX(-50%) translateY(0);
       }
 
       .error-toast-icon {
         color: #ff4d4f;
-        font-size: 16px;
-        font-weight: bold;
-      }
-
-      .error-toast-close {
-        color: #999;
-        font-size: 16px;
-        margin-left: auto;
-        cursor: pointer;
-        opacity: 0.7;
-        transition: opacity 0.3s;
-      }
-
-      .error-toast-close:hover {
-        opacity: 1;
-      }
-
-      @keyframes fadeInOut {
-        0% {
-          opacity: 0;
-          transform: translate(-50%, -10px);
-        }
-        15% {
-          opacity: 1;
-          transform: translate(-50%, 0);
-        }
-        85% {
-          opacity: 1;
-          transform: translate(-50%, 0);
-        }
-        100% {
-          opacity: 0;
-          transform: translate(-50%, -10px);
-        }
-      }
-
-      .success-toast {
-        position: fixed;
-        top: 120px;
-        left: 50%;
-        transform: translateX(-50%);
-        background-color: #f6ffed;
-        color: #52c41a;
-        padding: 8px 16px;
-        border-radius: 4px;
-        font-size: 14px;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
-        z-index: 1000;
-        display: none;
-        animation: fadeInOut 2s ease-in-out;
-        border: 1px solid #b7eb8f;
-        align-items: center;
-        gap: 8px;
-      }
-
-      .success-toast.show {
-        display: flex;
+        width: 24px;
+        height: 24px;
+        min-width: 24px;
       }
 
       .success-toast-icon {
         color: #52c41a;
-        font-size: 16px;
-        font-weight: bold;
+        width: 24px;
+        height: 24px;
+        min-width: 24px;
       }
 
+      .error-toast-message,
+      .success-toast-message {
+        flex: 1;
+        font-size: 14px;
+      }
+
+      .error-toast-close,
       .success-toast-close {
-        color: #999;
-        font-size: 16px;
-        margin-left: auto;
+        background: none;
+        border: none;
         cursor: pointer;
-        opacity: 0.7;
-        transition: opacity 0.3s;
+        color: #999;
+        padding: 4px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
       }
 
+      .error-toast-close:hover,
       .success-toast-close:hover {
-        opacity: 1;
+        color: #666;
+      }
+
+      .error-toast-close svg,
+      .success-toast-close svg {
+        width: 16px;
+        height: 16px;
+        fill: currentColor;
       }
 
       .section-divider {
         width: 100%;
         height: 1px;
-        background: linear-gradient(to right, transparent, #ddd, transparent);
+        background-color: #eee;
         margin: 16px 0;
       }
 
-      .section-title {
-        font-size: 14px;
-        color: #666;
-        margin-bottom: 12px;
-        display: flex;
-        align-items: center;
-        gap: 8px;
-      }
+      @media (max-width: 480px) {
+        .sponsor-container {
+          flex-direction: column;
+        }
 
-      .section-title::after {
-        content: '';
-        flex: 1;
-        height: 1px;
-        background: linear-gradient(to right, #ddd, transparent);
-      }
-
-      .empty-state {
-        display: none;
-        flex-direction: column;
-        align-items: center;
-        justify-content: center;
-        padding: 32px 16px;
-        color: #999;
-      }
-
-      .empty-state.show {
-        display: flex;
-      }
-
-      .empty-state svg {
-        width: 48px;
-        height: 48px;
-        fill: #ddd;
-        margin-bottom: 8px;
-      }
-
-      .empty-state-text {
-        font-size: 14px;
-        color: #999;
-      }
-
-      /* 添加已选插件显示区域的样式 */
-      .selected-plugin {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        margin: 12px 0;
-        padding: 8px 12px;
-        background-color: #f0f7ff;
-        border-radius: 6px;
-        font-size: 14px;
-        height: 20px;
-        color: #333;
-        transition: all 0.3s ease;
-      }
-
-      .selected-plugin.hidden {
-        display: none;
-      }
-
-      .selected-plugin-label {
-        color: #666;
-        font-weight: 500;
-        white-space: nowrap;
-      }
-
-      .selected-plugin-name {
-        flex: 1;
-        overflow: hidden;
-        text-overflow: ellipsis;
-        white-space: nowrap;
-        color: #999;
-      }
-
-      .selected-plugin-name.default {
-        color: #ccc;
-      }
-
-      .locate-btn {
-        padding: 4px;
-        background: none;
-        border: none;
-        cursor: pointer;
-        color: #999;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        opacity: 0.8;
-        transition: all 0.3s ease;
-      }
-
-      .locate-btn:hover {
-        opacity: 1;
-        transform: scale(1.1);
-      }
-
-      .locate-btn svg {
-        width: 20px;
-        height: 20px;
-        fill: currentColor;
+        .sponsor-btn,
+        .follow-btn {
+          width: 100%;
+        }
       }
     </style>
   </head>
   <body>
-    <div
-      id="errorToast"
-      class="error-toast"
-    >
-      <span class="error-toast-icon">×</span>
-      <span class="error-toast-message"></span>
-      <span class="error-toast-close">×</span>
-    </div>
-    <div
-      id="successToast"
-      class="success-toast"
-    >
-      <span class="success-toast-icon">✓</span>
-      <span class="success-toast-message"></span>
-      <span class="success-toast-close">×</span>
-    </div>
     <div class="sponsor-container">
       <button
-        class="sponsor-btn"
         id="sponsorBtn"
+        class="sponsor-btn"
       >
         <svg viewBox="0 0 24 24">
           <path
@@ -905,12 +385,12 @@
         赞助我
       </button>
       <button
-        class="follow-btn"
         id="followBtn"
+        class="follow-btn"
       >
         <svg viewBox="0 0 24 24">
           <path
-            d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 3c1.66 0 3 1.34 3 3s-1.34 3-3 3-3-1.34-3-3 1.34-3 3-3zm0 14.2c-2.5 0-4.71-1.28-6-3.22.03-1.99 4-3.08 6-3.08 1.99 0 5.97 1.09 6 3.08-1.29 1.94-3.5 3.22-6 3.22z"
+            d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-5-6h10v2H7zm3-7c0 1.1-.9 2-2 2s-2-.9-2-2 .9-2 2-2 2 .9 2 2z"
           />
         </svg>
         关注我
@@ -918,9 +398,7 @@
     </div>
     <button class="get-url-btn">
       <svg viewBox="0 0 24 24">
-        <path
-          d="M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z"
-        />
+        <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
       </svg>
       获取当前多维表格地址
     </button>
@@ -936,11 +414,11 @@
             type="text"
             id="tableUrl"
             class="input-field"
-            placeholder="请输入多维表格的地址"
+            placeholder="请输入多维表格地址"
           />
           <button
             class="clear-btn"
-            title="清空"
+            title="清空输入"
           >
             <svg viewBox="0 0 24 24">
               <path
@@ -948,158 +426,6 @@
               />
             </svg>
           </button>
-        </div>
-      </div>
-      <div class="checkbox-container">
-        <div class="checkbox-group">
-          <label class="checkbox-label">
-            <input
-              type="checkbox"
-              class="checkbox-input"
-              id="hideSidebar"
-            />
-            <svg viewBox="0 0 24 24">
-              <path
-                d="M4 3h16c1.1 0 2 .9 2 2v14c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V5c0-1.1.9-2 2-2zm0 2v14h4V5H4zm6 0v14h10V5H10z"
-              />
-            </svg>
-            隐藏侧边栏
-          </label>
-          <label class="checkbox-label">
-            <input
-              type="checkbox"
-              class="checkbox-input"
-              id="hideHeader"
-            />
-            <svg viewBox="0 0 24 24">
-              <path d="M4 3h16c1.1 0 2 .9 2 2v14c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V5c0-1.1.9-2 2-2zm0 2v14h16V5H4z" />
-              <path d="M4 7h16v2H4z" />
-            </svg>
-            隐藏头部
-          </label>
-          <label class="checkbox-label">
-            <input
-              type="checkbox"
-              class="checkbox-input"
-              id="hideViewCreate"
-            />
-            <svg viewBox="0 0 24 24">
-              <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
-            </svg>
-            隐藏新增视图
-          </label>
-          <label class="checkbox-label">
-            <input
-              type="checkbox"
-              class="checkbox-input"
-              id="openMarket"
-            />
-            <svg viewBox="0 0 24 24">
-              <path d="M4 3h16c1.1 0 2 .9 2 2v14c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V5c0-1.1.9-2 2-2zm0 2v14h16V5H4z" />
-              <path d="M7 8h2v2H7zm4 0h2v2h-2zm4 0h2v2h-2z" />
-              <path d="M7 12h2v2H7zm4 0h2v2h-2zm4 0h2v2h-2z" />
-            </svg>
-            打开插件市场
-          </label>
-        </div>
-      </div>
-      <div class="input-row">
-        <label
-          class="input-label"
-          for="sidebarWidth"
-          >边栏展开宽度</label
-        >
-        <div class="number-input-wrapper">
-          <input
-            type="number"
-            id="sidebarWidth"
-            class="number-input"
-            min="0"
-            placeholder="请输入宽度"
-          />
-          <div class="number-controls">
-            <button
-              class="number-control-btn number-up-btn"
-              title="增加"
-            >
-              <svg viewBox="0 0 24 24">
-                <path d="M7 14l5-5 5 5H7z" />
-              </svg>
-            </button>
-            <button
-              class="number-control-btn number-down-btn"
-              title="减少"
-            >
-              <svg viewBox="0 0 24 24">
-                <path d="M7 10l5 5 5-5H7z" />
-              </svg>
-            </button>
-          </div>
-        </div>
-      </div>
-      <div class="section-divider"></div>
-      <div class="table-header">
-        <div class="search-container">
-          <input
-            type="text"
-            id="pluginSearch"
-            class="search-input"
-            placeholder="请输入插件名称"
-          />
-          <button
-            class="search-clear-btn"
-            title="清空搜索"
-          >
-            <svg viewBox="0 0 24 24">
-              <path
-                d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"
-              />
-            </svg>
-          </button>
-        </div>
-        <div class="total-count">共 <strong id="totalCount">0</strong> 个插件</div>
-      </div>
-      <div
-        id="selectedPlugin"
-        class="selected-plugin hidden"
-      >
-        <span class="selected-plugin-label">已选插件：</span>
-        <span
-          id="selectedPluginName"
-          class="selected-plugin-name"
-        ></span>
-        <button
-          id="cancelSelectionBtn"
-          class="locate-btn"
-          title="取消当前已选插件"
-        >
-          <svg viewBox="0 0 24 24">
-            <path
-              d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"
-            />
-          </svg>
-        </button>
-      </div>
-      <div class="table-container">
-        <table class="plugins-table">
-          <thead>
-            <tr>
-              <th></th>
-              <th>序号</th>
-              <th>插件名称</th>
-            </tr>
-          </thead>
-          <tbody id="pluginsTableBody">
-            <!-- 插件列表将通过JavaScript动态生成 -->
-          </tbody>
-        </table>
-        <div class="empty-state">
-          <svg viewBox="0 0 24 24">
-            <path
-              d="M15.5 14h-.79l-.28-.27C15.41 12.59 16 11.11 16 9.5 16 5.91 13.09 3 9.5 3S3 5.91 3 9.5 5.91 16 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"
-            />
-          </svg>
-          <span class="empty-state-text">暂无匹配的插件</span>
         </div>
       </div>
       <div class="button-group">
@@ -1137,6 +463,47 @@
           复制地址
         </button>
       </div>
+    </div>
+    <!-- Toast通知 -->
+    <div
+      id="errorToast"
+      class="error-toast"
+    >
+      <svg
+        class="error-toast-icon"
+        viewBox="0 0 24 24"
+      >
+        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" />
+      </svg>
+      <div class="error-toast-message">错误提示</div>
+      <button class="error-toast-close">
+        <svg viewBox="0 0 24 24">
+          <path
+            d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"
+          />
+        </svg>
+      </button>
+    </div>
+    <div
+      id="successToast"
+      class="success-toast"
+    >
+      <svg
+        class="success-toast-icon"
+        viewBox="0 0 24 24"
+      >
+        <path
+          d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"
+        />
+      </svg>
+      <div class="success-toast-message">操作成功</div>
+      <button class="success-toast-close">
+        <svg viewBox="0 0 24 24">
+          <path
+            d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"
+          />
+        </svg>
+      </button>
     </div>
     <script src="data.js"></script>
     <script src="script.js"></script>
