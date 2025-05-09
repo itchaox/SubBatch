@@ -2,6 +2,9 @@ document.addEventListener('DOMContentLoaded', function () {
   const getUrlBtn = document.querySelector('.get-url-btn');
   const tableUrlInput = document.getElementById('tableUrl');
   const clearBtn = document.querySelector('.clear-btn');
+  const bilibiliCookieInput = document.getElementById('bilibiliCookie');
+  const cookieClearBtn = document.querySelector('.cookie-clear-btn');
+  const applyCookieBtn = document.getElementById('applyCookieBtn');
   const errorToast = document.getElementById('errorToast');
   const successToast = document.getElementById('successToast');
   const generateUrlBtn = document.getElementById('generateUrlBtn');
@@ -378,7 +381,59 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   });
 
+  // Cookie 处理函数
+  function setCookie() {
+    const cookie = bilibiliCookieInput.value.trim();
+    console.log('设置Cookie (部分显示):', cookie ? cookie.substring(0, 20) + '...' : '空');
+
+    // 即使Cookie为空也发送设置请求，这样可以清除Cookie
+    chrome.runtime.sendMessage(
+      {
+        action: 'setCookie',
+        cookie: cookie,
+      },
+      (response) => {
+        if (response && response.success) {
+          showSuccess('Cookie已设置');
+          console.log('Cookie设置成功');
+        } else {
+          showError('Cookie设置失败');
+          console.error('Cookie设置失败:', response?.message || '未知错误');
+        }
+      },
+    );
+  }
+
+  // 清除Cookie按钮事件
+  cookieClearBtn.addEventListener('click', () => {
+    bilibiliCookieInput.value = '';
+    setCookie(); // 清除后发送空Cookie
+    bilibiliCookieInput.focus();
+  });
+
+  // 为Cookie输入框添加blur事件，当用户输入完成离开输入框时设置Cookie
+  bilibiliCookieInput.addEventListener('blur', setCookie);
+
+  // 为Cookie输入框添加键盘事件，当用户按下回车键时设置Cookie
+  bilibiliCookieInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      setCookie();
+    }
+  });
+
+  // 应用Cookie按钮事件
+  applyCookieBtn.addEventListener('click', () => {
+    setCookie();
+    showSuccess('Cookie已应用');
+  });
+
+  // 监听获取视频信息前先设置Cookie
   generateUrlBtn.addEventListener('click', async () => {
+    // 先设置Cookie
+    setCookie();
+
+    // 然后继续原有逻辑
     generatedUrl = generateUrl();
     if (generatedUrl) {
       previewCopyGroup.classList.add('show');
@@ -399,8 +454,12 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   });
 
-  // 获取字幕按钮事件
+  // 监听获取字幕前先设置Cookie
   getSubtitleBtn.addEventListener('click', async () => {
+    // 先设置Cookie
+    setCookie();
+
+    // 然后获取字幕
     await fetchBilibiliSubtitle();
   });
 

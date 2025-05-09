@@ -1,5 +1,15 @@
 chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch((error) => console.error(error));
 
+// 在扩展启动时从localStorage读取Cookie
+chrome.storage.local.get(['bilibiliCookie'], function (result) {
+  if (result.bilibiliCookie) {
+    bilibiliCookie = result.bilibiliCookie;
+    console.log('从存储中加载Cookie (部分显示):', bilibiliCookie.substring(0, 20) + '...');
+  } else {
+    console.log('存储中没有找到Cookie');
+  }
+});
+
 chrome.action.onClicked.addListener(async (tab) => {
   try {
     await chrome.sidePanel.open({ windowId: tab.windowId });
@@ -11,6 +21,39 @@ chrome.action.onClicked.addListener(async (tab) => {
 const RELOAD_DELAY = 1000; // 重载延迟时间（毫秒）
 let lastReloadTime = 0;
 
+// 全局变量声明 - 在文件顶部添加
+let bilibiliCookie = ''; // 确保全局变量正确初始化
+
+// 添加Cookie状态日志函数
+function logCookieStatus() {
+  try {
+    if (bilibiliCookie && bilibiliCookie.trim() !== '') {
+      console.log('当前Cookie状态: 已设置 (部分显示): ' + bilibiliCookie.substring(0, 20) + '...');
+
+      // 检查Cookie是否包含必要的部分
+      const hasSessData = bilibiliCookie.includes('SESSDATA=');
+      const hasBiliJct = bilibiliCookie.includes('bili_jct=');
+      const hasDedeUserID = bilibiliCookie.includes('DedeUserID=');
+
+      console.log(
+        'Cookie包含关键部分检查: ' +
+          'SESSDATA=' +
+          (hasSessData ? '✓' : '✗') +
+          ', ' +
+          'bili_jct=' +
+          (hasBiliJct ? '✓' : '✗') +
+          ', ' +
+          'DedeUserID=' +
+          (hasDedeUserID ? '✓' : '✗'),
+      );
+    } else {
+      console.log('当前Cookie状态: 未设置或为空');
+    }
+  } catch (error) {
+    console.error('检查Cookie状态时出错:', error);
+  }
+}
+
 function reloadExtension() {
   chrome.runtime.reload();
   chrome.tabs.query({ active: true, currentWindow: true }, (tabs) => {
@@ -20,24 +63,108 @@ function reloadExtension() {
   });
 }
 
-// 带有适当头部的API请求函数
+// 添加Cookie诊断函数
+function diagnoseCookie() {
+  try {
+    console.log('---- Cookie诊断开始 ----');
+    if (!bilibiliCookie || bilibiliCookie.trim() === '') {
+      console.log('Cookie为空，请确保已设置Cookie');
+      return false;
+    }
+
+    console.log(`Cookie长度: ${bilibiliCookie.length} 字符`);
+
+    // 检查Cookie格式是否正确（看是否包含关键的Cookie项）
+    const hasSessData = bilibiliCookie.includes('SESSDATA=');
+    const hasBiliJct = bilibiliCookie.includes('bili_jct=');
+    const hasDedeUserID = bilibiliCookie.includes('DedeUserID=');
+
+    console.log('Cookie关键项检查:');
+    console.log(`- SESSDATA: ${hasSessData ? '存在 ✓' : '不存在 ✗'}`);
+    console.log(`- bili_jct: ${hasBiliJct ? '存在 ✓' : '不存在 ✗'}`);
+    console.log(`- DedeUserID: ${hasDedeUserID ? '存在 ✓' : '不存在 ✗'}`);
+
+    // 检查Cookie格式（是否每项都用分号分隔）
+    const cookieItems = bilibiliCookie.split(';');
+    console.log(`Cookie项数量: ${cookieItems.length}`);
+
+    // 检查Cookie是否含有不必要的空格或换行
+    const hasExtraSpaces = bilibiliCookie.includes('\n') || bilibiliCookie.includes('\r');
+    if (hasExtraSpaces) {
+      console.log('警告：Cookie包含换行符，可能影响请求');
+    }
+
+    // 总体评估
+    const isValid = hasSessData && hasDedeUserID;
+    console.log(`Cookie整体评估: ${isValid ? '基本有效 ✓' : '可能无效 ✗'}`);
+    console.log('---- Cookie诊断结束 ----');
+
+    return isValid;
+  } catch (error) {
+    console.error('Cookie诊断出错:', error);
+    return false;
+  }
+}
+
+// 修改fetchWithHeaders函数，添加Cookie诊断
 async function fetchWithHeaders(url) {
   try {
     console.log('发起API请求:', url);
+    logCookieStatus(); // 添加Cookie日志记录
+
+    // 添加Cookie诊断
+    if (url.includes('api.bilibili.com')) {
+      console.log('检测到B站API请求，执行Cookie诊断');
+      diagnoseCookie();
+    }
+
+    // 检查是否是WBI接口
+    const isWbiRequest = url.includes('/x/player/wbi/v2');
+
+    const headers = {
+      'User-Agent':
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+      Accept: 'application/json, text/plain, */*',
+      'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+      Origin: 'https://www.bilibili.com',
+      Referer: 'https://www.bilibili.com/',
+      'Cache-Control': 'no-cache',
+      Connection: 'keep-alive',
+      Pragma: 'no-cache',
+      'X-Wbi-UA': 'Win32.Chrome.109.0.0.0',
+    };
+
+    // 如果有Cookie，添加到请求头中
+    if (bilibiliCookie && bilibiliCookie.trim() !== '') {
+      headers['Cookie'] = bilibiliCookie;
+      console.log('请求已添加Cookie (部分显示):', bilibiliCookie.substring(0, 20) + '...');
+    } else {
+      console.log('请求未添加Cookie，因为Cookie未设置或为空');
+      // 尝试再次从storage获取Cookie
+      try {
+        const result = await chrome.storage.local.get(['bilibiliCookie']);
+        if (result.bilibiliCookie && result.bilibiliCookie.trim() !== '') {
+          bilibiliCookie = result.bilibiliCookie;
+          headers['Cookie'] = bilibiliCookie;
+          console.log('从storage重新获取Cookie并添加到请求头 (部分显示):', bilibiliCookie.substring(0, 20) + '...');
+        }
+      } catch (storageError) {
+        console.error('从storage获取Cookie失败:', storageError);
+      }
+    }
+
+    // 如果是WBI请求，需要特殊处理
+    if (isWbiRequest) {
+      console.log('检测到WBI接口请求，进行特殊处理');
+      return await fetchWbiRequest(url, headers);
+    }
+
+    console.log('发送请求前的完整Headers:', JSON.stringify(headers));
+
     const response = await fetch(url, {
       method: 'GET',
-      headers: {
-        'User-Agent':
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-        Accept: 'application/json, text/plain, */*',
-        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
-        Origin: 'https://www.bilibili.com',
-        Referer: 'https://www.bilibili.com/',
-        'Cache-Control': 'no-cache',
-        Connection: 'keep-alive',
-        Pragma: 'no-cache',
-      },
-      credentials: 'omit',
+      headers: headers,
+      credentials: 'include', // 修改为include以确保Cookie被发送
     });
 
     if (!response.ok) {
@@ -50,6 +177,81 @@ async function fetchWithHeaders(url) {
     return data;
   } catch (error) {
     console.error('API请求出错:', error);
+    throw error;
+  }
+}
+
+// 处理WBI请求的特殊函数
+async function fetchWbiRequest(url, headers) {
+  try {
+    // 如果URL中已经包含w_rid和wts参数，直接使用
+    if (url.includes('w_rid=') && url.includes('wts=')) {
+      console.log('使用URL中已有的WBI参数');
+      const response = await fetch(url, {
+        method: 'GET',
+        headers: headers,
+        credentials: 'include', // WBI接口需要包含credentials
+      });
+
+      if (!response.ok) {
+        console.error(`WBI请求失败: ${url}, 状态码: ${response.status}`);
+        throw new Error(`WBI请求失败，状态码: ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log('WBI API请求响应:', data);
+      return data;
+    } else {
+      // 如果URL中没有WBI参数，尝试使用普通v2接口替代
+      console.log('缺少WBI签名参数，尝试使用普通v2接口替代');
+      const regularUrl = url.replace('/x/player/wbi/v2', '/x/player/v2');
+      console.log('替换为普通接口URL:', regularUrl);
+
+      const response = await fetch(regularUrl, {
+        method: 'GET',
+        headers: headers,
+        credentials: 'include', // 改为include以确保Cookie被发送
+      });
+
+      if (!response.ok) {
+        console.error(`普通API请求失败: ${regularUrl}, 状态码: ${response.status}`);
+        throw new Error(`请求失败，状态码: ${response.status}`);
+      }
+
+      const data = await response.json();
+      console.log('普通API请求响应:', data);
+
+      // 如果返回-400错误并且消息中包含'Key:'，很可能是缺少必要参数
+      if (data.code === -400 && data.message && data.message.includes('Key:')) {
+        console.warn('API返回参数错误，可能需要额外参数:', data.message);
+
+        // 尝试添加isGaiaAvoided=false参数后再次请求
+        let retryUrl = regularUrl;
+        if (!retryUrl.includes('isGaiaAvoided=')) {
+          retryUrl += (retryUrl.includes('?') ? '&' : '?') + 'isGaiaAvoided=false';
+          console.log('尝试添加参数后再次请求:', retryUrl);
+
+          const retryResponse = await fetch(retryUrl, {
+            method: 'GET',
+            headers: headers,
+            credentials: 'include',
+          });
+
+          if (!retryResponse.ok) {
+            console.error(`参数补充后请求仍然失败: ${retryUrl}, 状态码: ${retryResponse.status}`);
+            return data; // 返回原始错误
+          }
+
+          const retryData = await retryResponse.json();
+          console.log('参数补充后API响应:', retryData);
+          return retryData;
+        }
+      }
+
+      return data;
+    }
+  } catch (error) {
+    console.error('WBI请求处理出错:', error);
     throw error;
   }
 }
@@ -137,7 +339,7 @@ async function getBilibiliSubtitle(cid, bvid, retryCount = 2) {
     // 构建字幕信息请求URL - 优先使用aid+cid的组合，因为某些视频可能对bvid的支持不完善
     let subtitleInfoUrl;
     if (aid) {
-      subtitleInfoUrl = `https://api.bilibili.com/x/player/wbi/v2?aid=${aid}&cid=${cid}&isGaiaAvoided=false&web_location=1315873&dm_img_list=[]&dm_img_str=V2ViR0wgMS4wIChPcGVuR0wgRVMgMi4wIENocm9taXVtKQ&dm_cover_img_str=QU5HTEUgKEFwcGxlLCBBTkdMRSBNZXRhbCBSZW5kZXJlcjogQXBwbGUgTTEgUHJvLCBVbnNwZWNpZmllZCBWZXJzaW9uKUdvb2dsZSBJbmMuIChBcHBsZS&dm_img_inter=%7B%22ds%22:[],%22wh%22:[6686,6242,108],%22of%22:[117,234,117]%7D&w_rid=2d52fe57c57561937a6435eab1ea4bab&wts=1746808363`;
+      subtitleInfoUrl = `https://api.bilibili.com/x/player/wbi/v2?aid=${aid}&cid=${cid}`;
     } else {
       subtitleInfoUrl = `https://api.bilibili.com/x/player/v2?cid=${cid}&bvid=${bvid}`;
     }
@@ -208,20 +410,26 @@ async function getBilibiliSubtitle(cid, bvid, retryCount = 2) {
 
             // 继续处理字幕内容
             try {
+              const subtitleHeaders = {
+                Referer: 'https://www.bilibili.com/video/' + bvid,
+                'User-Agent':
+                  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                Accept: 'application/json, text/plain, */*',
+                'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+                Origin: 'https://www.bilibili.com',
+                Connection: 'keep-alive',
+                'Cache-Control': 'no-cache',
+              };
+
+              // 如果有Cookie，添加到请求头中
+              if (bilibiliCookie) {
+                subtitleHeaders['Cookie'] = bilibiliCookie;
+              }
+
               const subtitleResponse = await fetch(fullAiSubtitleUrl, {
-                headers: {
-                  Referer: 'https://www.bilibili.com/video/' + bvid,
-                  'User-Agent':
-                    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-                  Accept: 'application/json, text/plain, */*',
-                  'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
-                  Origin: 'https://www.bilibili.com',
-                  Connection: 'keep-alive',
-                  'Cache-Control': 'no-cache',
-                },
+                headers: subtitleHeaders,
               });
 
-              // 处理响应...与下面相同的逻辑
               if (!subtitleResponse.ok) {
                 throw new Error(`获取AI字幕内容失败: HTTP ${subtitleResponse.status}`);
               }
@@ -296,17 +504,24 @@ async function getBilibiliSubtitle(cid, bvid, retryCount = 2) {
 
     // 使用带Headers的请求获取字幕内容，以避免可能的跨域问题
     try {
+      const subtitleHeaders = {
+        Referer: 'https://www.bilibili.com/video/' + bvid,
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+        Accept: 'application/json, text/plain, */*',
+        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+        Origin: 'https://www.bilibili.com',
+        Connection: 'keep-alive',
+        'Cache-Control': 'no-cache',
+      };
+
+      // 如果有Cookie，添加到请求头中
+      if (bilibiliCookie) {
+        subtitleHeaders['Cookie'] = bilibiliCookie;
+      }
+
       const subtitleResponse = await fetch(fullSubtitleUrl, {
-        headers: {
-          Referer: 'https://www.bilibili.com/video/' + bvid,
-          'User-Agent':
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-          Accept: 'application/json, text/plain, */*',
-          'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
-          Origin: 'https://www.bilibili.com',
-          Connection: 'keep-alive',
-          'Cache-Control': 'no-cache',
-        },
+        headers: subtitleHeaders,
       });
 
       if (!subtitleResponse.ok) {
@@ -402,8 +617,69 @@ function formatTime(seconds) {
     .padStart(2, '0')}.${milliseconds.toString().padStart(3, '0')}`;
 }
 
-// 监听消息
+// 保存Cookie到storage
+async function saveCookieToStorage(cookie) {
+  try {
+    await chrome.storage.local.set({ bilibiliCookie: cookie });
+    bilibiliCookie = cookie;
+    console.log('Cookie已保存到storage并更新到全局变量');
+    logCookieStatus();
+  } catch (error) {
+    console.error('保存Cookie到storage失败:', error);
+  }
+}
+
+// 从storage加载Cookie
+async function loadCookieFromStorage() {
+  try {
+    const result = await chrome.storage.local.get(['bilibiliCookie']);
+    if (result.bilibiliCookie) {
+      bilibiliCookie = result.bilibiliCookie;
+      console.log('成功从storage加载Cookie');
+      logCookieStatus();
+    } else {
+      console.log('storage中没有保存的Cookie');
+    }
+  } catch (error) {
+    console.error('从storage加载Cookie失败:', error);
+  }
+}
+
+// 监听插件启动
+chrome.runtime.onStartup.addListener(() => {
+  console.log('插件启动，加载Cookie...');
+  loadCookieFromStorage();
+});
+
+// 监听插件安装或更新
+chrome.runtime.onInstalled.addListener(() => {
+  console.log('插件安装或更新，加载Cookie...');
+  loadCookieFromStorage();
+});
+
+// 在后台脚本加载时立即加载Cookie
+loadCookieFromStorage();
+
+// 监听来自sidepanel的消息
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  // 处理updateCookie消息
+  if (message.action === 'updateCookie' || message.action === 'setCookie') {
+    console.log('收到Cookie更新请求');
+    bilibiliCookie = message.cookie || '';
+    if (bilibiliCookie.trim() !== '') {
+      console.log(`Cookie已更新 (部分显示): ${bilibiliCookie.substring(0, 20)}...`);
+    } else {
+      console.log('Cookie已清除');
+    }
+
+    // 保存到storage
+    saveCookieToStorage(bilibiliCookie);
+
+    logCookieStatus();
+    sendResponse({ success: true, message: 'Cookie已更新' });
+    return true;
+  }
+
   // 处理文件变化消息
   if (message.type === 'FILE_CHANGED') {
     const currentTime = Date.now();
@@ -518,7 +794,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 async function fetchSubtitleWithAid(aid, cid, retryCount = 2) {
   try {
     console.log(`使用aid+cid获取字幕, aid: ${aid}, cid: ${cid}, 尝试次数: ${3 - retryCount}`);
-    const subtitleInfoUrl = `https://api.bilibili.com/x/player/wbi/v2?aid=${aid}&cid=${cid}&isGaiaAvoided=false&web_location=1315873&dm_img_list=[]&dm_img_str=V2ViR0wgMS4wIChPcGVuR0wgRVMgMi4wIENocm9taXVtKQ&dm_cover_img_str=QU5HTEUgKEFwcGxlLCBBTkdMRSBNZXRhbCBSZW5kZXJlcjogQXBwbGUgTTEgUHJvLCBVbnNwZWNpZmllZCBWZXJzaW9uKUdvb2dsZSBJbmMuIChBcHBsZS&dm_img_inter=%7B%22ds%22:[],%22wh%22:[6686,6242,108],%22of%22:[117,234,117]%7D&w_rid=2d52fe57c57561937a6435eab1ea4bab&wts=1746808363`;
+    const subtitleInfoUrl = `https://api.bilibili.com/x/player/wbi/v2?aid=${aid}&cid=${cid}`;
 
     console.log('字幕信息请求URL (aid方式):', subtitleInfoUrl);
     const subtitleInfoData = await fetchWithHeaders(subtitleInfoUrl);
@@ -574,17 +850,26 @@ async function fetchSubtitleWithAid(aid, cid, retryCount = 2) {
 
             // 继续处理字幕内容
             try {
+              const subtitleHeaders = {
+                Referer: 'https://www.bilibili.com/video/av' + aid, // 修正这里，使用aid而不是bvid
+                'User-Agent':
+                  'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+                Accept: 'application/json, text/plain, */*',
+                'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+                Origin: 'https://www.bilibili.com',
+                Connection: 'keep-alive',
+                'Cache-Control': 'no-cache',
+              };
+
+              // 如果有Cookie，添加到请求头中
+              if (bilibiliCookie && bilibiliCookie.trim() !== '') {
+                subtitleHeaders['Cookie'] = bilibiliCookie;
+                console.log('AI字幕请求添加Cookie (部分显示):', bilibiliCookie.substring(0, 20) + '...');
+              }
+
               const subtitleResponse = await fetch(fullAiSubtitleUrl, {
-                headers: {
-                  Referer: 'https://www.bilibili.com',
-                  'User-Agent':
-                    'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-                  Accept: 'application/json, text/plain, */*',
-                  'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
-                  Origin: 'https://www.bilibili.com',
-                  Connection: 'keep-alive',
-                  'Cache-Control': 'no-cache',
-                },
+                headers: subtitleHeaders,
+                credentials: 'include', // 修改为include以确保Cookie被发送
               });
 
               if (!subtitleResponse.ok) {
@@ -660,17 +945,26 @@ async function fetchSubtitleWithAid(aid, cid, retryCount = 2) {
 
     // 获取字幕内容
     try {
+      const subtitleHeaders = {
+        Referer: 'https://www.bilibili.com/video/av' + aid, // 修正这里，使用aid而不是bvid
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+        Accept: 'application/json, text/plain, */*',
+        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+        Origin: 'https://www.bilibili.com',
+        Connection: 'keep-alive',
+        'Cache-Control': 'no-cache',
+      };
+
+      // 如果有Cookie，添加到请求头中
+      if (bilibiliCookie && bilibiliCookie.trim() !== '') {
+        subtitleHeaders['Cookie'] = bilibiliCookie;
+        console.log('字幕内容请求添加Cookie (部分显示):', bilibiliCookie.substring(0, 20) + '...');
+      }
+
       const subtitleResponse = await fetch(fullSubtitleUrl, {
-        headers: {
-          Referer: 'https://www.bilibili.com',
-          'User-Agent':
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-          Accept: 'application/json, text/plain, */*',
-          'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
-          Origin: 'https://www.bilibili.com',
-          Connection: 'keep-alive',
-          'Cache-Control': 'no-cache',
-        },
+        headers: subtitleHeaders,
+        credentials: 'include', // 修改为include以确保Cookie被发送
       });
 
       if (!subtitleResponse.ok) {
