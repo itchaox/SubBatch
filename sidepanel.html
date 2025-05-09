@@ -359,6 +359,55 @@
         margin: 16px 0;
       }
 
+      /* 视频标题区域样式 */
+      .video-title-container {
+        margin-top: 16px;
+        padding: 12px;
+        background-color: #f8f9fa;
+        border-radius: 8px;
+        width: 100%;
+      }
+
+      .video-title-header {
+        font-size: 14px;
+        font-weight: 500;
+        color: #666;
+        margin-bottom: 8px;
+      }
+
+      .video-title {
+        font-size: 14px;
+        color: #333;
+        word-break: break-word;
+        line-height: 1.5;
+        padding: 8px 10px;
+        background: white;
+        border-radius: 6px;
+        border: 1px solid #e8e8e8;
+      }
+
+      .video-info-container {
+        margin-top: 8px;
+        padding: 8px;
+        background-color: #f0f0f0;
+        border-radius: 6px;
+      }
+
+      .video-info-row {
+        display: flex;
+        align-items: center;
+        margin-bottom: 4px;
+      }
+
+      .video-info-label {
+        font-weight: 500;
+        margin-right: 8px;
+      }
+
+      .video-info-value {
+        color: #666;
+      }
+
       @media (max-width: 480px) {
         .sponsor-container {
           flex-direction: column;
@@ -400,21 +449,21 @@
       <svg viewBox="0 0 24 24">
         <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
       </svg>
-      获取当前多维表格地址
+      获取当前页面地址
     </button>
     <div class="input-container">
       <div class="input-row">
         <label
           class="input-label"
           for="tableUrl"
-          >表格地址</label
+          >视频地址</label
         >
         <div class="input-wrapper">
           <input
             type="text"
             id="tableUrl"
             class="input-field"
-            placeholder="请输入多维表格地址"
+            placeholder="请输入B站视频地址"
           />
           <button
             class="clear-btn"
@@ -436,9 +485,54 @@
           <svg viewBox="0 0 24 24">
             <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
           </svg>
-          生成新表格地址
+          获取视频标题
         </button>
       </div>
+
+      <!-- 视频标题显示区域 -->
+      <div
+        id="videoTitleContainer"
+        class="video-title-container"
+      >
+        <div class="video-title-header">视频信息：</div>
+        <div
+          id="videoTitle"
+          class="video-title"
+        >
+          尚未获取视频信息
+        </div>
+        <div
+          id="videoInfoContainer"
+          class="video-info-container"
+          style="display: none"
+        >
+          <div class="video-info-row">
+            <span class="video-info-label">作者：</span>
+            <span
+              id="videoAuthor"
+              class="video-info-value"
+              >未知</span
+            >
+          </div>
+          <div class="video-info-row">
+            <span class="video-info-label">播放量：</span>
+            <span
+              id="videoViewCount"
+              class="video-info-value"
+              >0</span
+            >
+          </div>
+          <div class="video-info-row">
+            <span class="video-info-label">点赞数：</span>
+            <span
+              id="videoLikeCount"
+              class="video-info-value"
+              >0</span
+            >
+          </div>
+        </div>
+      </div>
+
       <div class="button-group preview-copy-group">
         <button
           id="previewBtn"
