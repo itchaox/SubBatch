@@ -87,17 +87,18 @@ async function getBilibiliVideoInfo(videoId) {
 
       return {
         success: true,
-        ...data.data,
-        // title: data.data.title,
-        // author: data.data.owner.name,
-        // cover: data.data.pic,
-        // description: data.data.desc,
-        // view_count: data.data.stat.view,
-        // like_count: data.data.stat.like,
-        // bvid: data.data.bvid,
-        // aid: data.data.aid, // 添加aid，便于后续请求
-        // cid: cid, // 使用获取到的cid
-        // duration: data.data.duration,
+        title: data.data.title,
+        author: data.data.owner.name,
+        cover: data.data.pic,
+        description: data.data.desc,
+        view_count: data.data.stat.view,
+        like_count: data.data.stat.like,
+        bvid: data.data.bvid,
+        aid: data.data.aid, // 添加aid，便于后续请求
+        cid: cid, // 使用获取到的cid
+        duration: data.data.duration,
+        // 可以添加额外字段但不要替换上面的基本字段
+        full_data: data.data, // 添加完整数据供需要时使用
       };
     } else {
       return {
@@ -136,7 +137,7 @@ async function getBilibiliSubtitle(cid, bvid, retryCount = 2) {
     // 构建字幕信息请求URL - 优先使用aid+cid的组合，因为某些视频可能对bvid的支持不完善
     let subtitleInfoUrl;
     if (aid) {
-      subtitleInfoUrl = `https://api.bilibili.com/x/player/v2?aid=${aid}&cid=${cid}`;
+      subtitleInfoUrl = `https://api.bilibili.com/x/player/wbi/v2?aid=${aid}&cid=${cid}&isGaiaAvoided=false&web_location=1315873&dm_img_list=[]&dm_img_str=V2ViR0wgMS4wIChPcGVuR0wgRVMgMi4wIENocm9taXVtKQ&dm_cover_img_str=QU5HTEUgKEFwcGxlLCBBTkdMRSBNZXRhbCBSZW5kZXJlcjogQXBwbGUgTTEgUHJvLCBVbnNwZWNpZmllZCBWZXJzaW9uKUdvb2dsZSBJbmMuIChBcHBsZS&dm_img_inter=%7B%22ds%22:[],%22wh%22:[6686,6242,108],%22of%22:[117,234,117]%7D&w_rid=2d52fe57c57561937a6435eab1ea4bab&wts=1746808363`;
     } else {
       subtitleInfoUrl = `https://api.bilibili.com/x/player/v2?cid=${cid}&bvid=${bvid}`;
     }
@@ -517,7 +518,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 async function fetchSubtitleWithAid(aid, cid, retryCount = 2) {
   try {
     console.log(`使用aid+cid获取字幕, aid: ${aid}, cid: ${cid}, 尝试次数: ${3 - retryCount}`);
-    const subtitleInfoUrl = `https://api.bilibili.com/x/player/v2?aid=${aid}&cid=${cid}`;
+    const subtitleInfoUrl = `https://api.bilibili.com/x/player/wbi/v2?aid=${aid}&cid=${cid}&isGaiaAvoided=false&web_location=1315873&dm_img_list=[]&dm_img_str=V2ViR0wgMS4wIChPcGVuR0wgRVMgMi4wIENocm9taXVtKQ&dm_cover_img_str=QU5HTEUgKEFwcGxlLCBBTkdMRSBNZXRhbCBSZW5kZXJlcjogQXBwbGUgTTEgUHJvLCBVbnNwZWNpZmllZCBWZXJzaW9uKUdvb2dsZSBJbmMuIChBcHBsZS&dm_img_inter=%7B%22ds%22:[],%22wh%22:[6686,6242,108],%22of%22:[117,234,117]%7D&w_rid=2d52fe57c57561937a6435eab1ea4bab&wts=1746808363`;
 
     console.log('字幕信息请求URL (aid方式):', subtitleInfoUrl);
     const subtitleInfoData = await fetchWithHeaders(subtitleInfoUrl);
