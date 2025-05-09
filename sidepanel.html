@@ -408,6 +408,89 @@
         color: #666;
       }
 
+      /* 获取字幕按钮 */
+      .get-subtitle-btn {
+        margin-top: 10px;
+        padding: 6px 12px;
+        background-color: #3370ff;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        font-size: 13px;
+        cursor: pointer;
+        transition: all 0.3s ease;
+      }
+
+      .get-subtitle-btn:hover {
+        background-color: #2860e1;
+      }
+
+      /* 字幕区域样式 */
+      .subtitle-container {
+        margin-top: 16px;
+        padding: 12px;
+        background-color: #f8f9fa;
+        border-radius: 8px;
+        width: 100%;
+      }
+
+      .subtitle-header {
+        display: flex;
+        justify-content: space-between;
+        font-size: 14px;
+        font-weight: 500;
+        color: #666;
+        margin-bottom: 8px;
+      }
+
+      .subtitle-status {
+        font-size: 12px;
+        color: #888;
+      }
+
+      .subtitle-content {
+        max-height: 200px;
+        overflow-y: auto;
+        padding: 10px;
+        background: white;
+        border-radius: 6px;
+        border: 1px solid #e8e8e8;
+        font-size: 13px;
+        line-height: 1.6;
+        white-space: pre-wrap;
+      }
+
+      .subtitle-actions {
+        margin-top: 10px;
+        display: flex;
+        justify-content: flex-end;
+      }
+
+      /* 无字幕选项样式 */
+      .no-subtitle-options {
+        margin-top: 16px;
+        padding: 12px;
+        background-color: #f8f8f8;
+        border: 1px dashed #ddd;
+        border-radius: 6px;
+      }
+
+      .no-subtitle-tip {
+        font-size: 13px;
+        color: #666;
+        margin-bottom: 12px;
+      }
+
+      .no-subtitle-actions {
+        display: flex;
+        gap: 8px;
+      }
+
+      .no-subtitle-actions .action-btn {
+        font-size: 13px;
+        padding: 8px 12px;
+      }
+
       @media (max-width: 480px) {
         .sponsor-container {
           flex-direction: column;
@@ -529,6 +612,75 @@
               class="video-info-value"
               >0</span
             >
+          </div>
+          <button
+            id="getSubtitleBtn"
+            class="get-subtitle-btn"
+          >
+            获取字幕
+          </button>
+        </div>
+      </div>
+
+      <!-- 字幕显示区域 -->
+      <div
+        id="subtitleContainer"
+        class="subtitle-container"
+        style="display: none"
+      >
+        <div class="subtitle-header">
+          <span>字幕内容：</span>
+          <span
+            id="subtitleStatus"
+            class="subtitle-status"
+          ></span>
+        </div>
+        <div
+          id="subtitleContent"
+          class="subtitle-content"
+        >
+          尚未获取字幕
+        </div>
+        <div class="subtitle-actions">
+          <button
+            id="exportSubtitleBtn"
+            class="action-btn primary-btn"
+          >
+            <svg viewBox="0 0 24 24">
+              <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" />
+            </svg>
+            导出字幕
+          </button>
+        </div>
+
+        <!-- 无字幕时的处理选项 -->
+        <div
+          id="noSubtitleOptions"
+          class="no-subtitle-options"
+          style="display: none"
+        >
+          <div class="no-subtitle-tip">该视频没有可提取的外挂字幕，您可以：</div>
+          <div class="no-subtitle-actions">
+            <button
+              id="downloadVideoBtn"
+              class="action-btn secondary-btn"
+            >
+              <svg viewBox="0 0 24 24">
+                <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" />
+              </svg>
+              下载视频
+            </button>
+            <button
+              id="transcribeAudioBtn"
+              class="action-btn secondary-btn"
+            >
+              <svg viewBox="0 0 24 24">
+                <path
+                  d="M12 15c1.66 0 2.99-1.34 2.99-3L15 6c0-1.66-1.34-3-3-3S9 4.34 9 6v6c0 1.66 1.34 3 3 3zm5.3-3c0 3-2.54 5.1-5.3 5.1S6.7 15 6.7 12H5c0 3.42 2.72 6.23 6 6.72V22h2v-3.28c3.28-.48 6-3.3 6-6.72h-1.7z"
+                />
+              </svg>
+              音频转字幕
+            </button>
           </div>
         </div>
       </div>
