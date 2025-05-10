@@ -504,10 +504,10 @@
 
       /* Cookie操作按钮的样式 */
       .cookie-action-btn-container {
-        display: flex;
+        /* display: flex;
         align-items: center;
         margin-bottom: 16px;
-        gap: 10px;
+        gap: 10px; */
       }
 
       .cookie-action-btn {
@@ -675,21 +675,20 @@
             </svg>
           </button>
         </div>
+        <!-- 添加Cookie操作按钮 -->
+        <div class="cookie-action-btn-container">
+          <button
+            id="applyCookieBtn"
+            class="cookie-action-btn"
+          >
+            <svg viewBox="0 0 24 24">
+              <path d="M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z" />
+            </svg>
+            应用Cookie
+          </button>
+        </div>
       </div>
 
-      <!-- 添加Cookie操作按钮 -->
-      <div class="cookie-action-btn-container">
-        <button
-          id="applyCookieBtn"
-          class="cookie-action-btn"
-        >
-          <svg viewBox="0 0 24 24">
-            <path d="M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z" />
-          </svg>
-          应用Cookie
-        </button>
-        <span class="cookie-tip">在每次请求前Cookie会自动应用</span>
-      </div>
       <!-- 视频地址输入框 -->
       <div class="input-row">
         <label class="input-label">视频地址</label>
@@ -708,21 +707,21 @@
             </svg>
           </button>
         </div>
+        <div class="cookie-action-btn-container">
+          <button
+            id="generateUrlBtn"
+            class="cookie-action-btn"
+            style="background-color: #3370ff"
+          >
+            <svg viewBox="0 0 24 24">
+              <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
+            </svg>
+            添加到表格
+          </button>
+          <span class="cookie-tip"></span>
+        </div>
       </div>
 
-      <div class="cookie-action-btn-container">
-        <button
-          id="generateUrlBtn"
-          class="cookie-action-btn"
-          style="background-color: #3370ff"
-        >
-          <svg viewBox="0 0 24 24">
-            <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
-          </svg>
-          添加到表格
-        </button>
-        <span class="cookie-tip"></span>
-      </div>
       <!-- 视频标题显示区域 -->
       <!-- <div
         id="videoTitleContainer"
