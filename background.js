@@ -769,42 +769,45 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return true;
     }
 
+    // FIXME 使用 aid 获取字幕文件的成功率很低
     // 优先使用aid+cid的方式获取字幕
-    if (message.aid) {
-      console.log('使用aid+cid方式获取字幕');
-      // 使用fetchSubtitleWithAid函数，添加重试日志
-      fetchSubtitleWithAid(message.aid, message.cid)
-        .then((result) => {
-          console.log('使用aid获取字幕结果:', result);
-          sendResponse(result);
-        })
-        .catch((error) => {
-          console.error('使用aid获取字幕出错:', error);
-          // 如果aid方式失败，尝试使用bvid
-          if (message.bvid) {
-            console.log('aid方式失败，尝试使用bvid方式');
-            getBilibiliSubtitle(message.cid, message.bvid)
-              .then((result) => {
-                console.log('使用bvid获取字幕结果:', result);
-                sendResponse(result);
-              })
-              .catch((fallbackError) => {
-                console.error('使用bvid方式也失败:', fallbackError);
-                sendResponse({
-                  success: false,
-                  message: '所有获取字幕方式均失败: ' + (fallbackError.message || '未知错误'),
-                  error: '多种获取方式尝试后均失败',
-                });
-              });
-          } else {
-            sendResponse({
-              success: false,
-              message: error.message || '使用aid获取字幕失败',
-              error: '使用aid获取字幕失败',
-            });
-          }
-        });
-    } else if (message.bvid) {
+    // if (message.aid) {
+    //   console.log('使用aid+cid方式获取字幕');
+    //   // 使用fetchSubtitleWithAid函数，添加重试日志
+    //   fetchSubtitleWithAid(message.aid, message.cid)
+    //     .then((result) => {
+    //       console.log('使用aid获取字幕结果:', result);
+    //       sendResponse(result);
+    //     })
+    //     .catch((error) => {
+    //       console.error('使用aid获取字幕出错:', error);
+    //       // 如果aid方式失败，尝试使用bvid
+    //       if (message.bvid) {
+    //         console.log('aid方式失败，尝试使用bvid方式');
+    //         getBilibiliSubtitle(message.cid, message.bvid)
+    //           .then((result) => {
+    //             console.log('使用bvid获取字幕结果:', result);
+    //             sendResponse(result);
+    //           })
+    //           .catch((fallbackError) => {
+    //             console.error('使用bvid方式也失败:', fallbackError);
+    //             sendResponse({
+    //               success: false,
+    //               message: '所有获取字幕方式均失败: ' + (fallbackError.message || '未知错误'),
+    //               error: '多种获取方式尝试后均失败',
+    //             });
+    //           });
+    //       } else {
+    //         sendResponse({
+    //           success: false,
+    //           message: error.message || '使用aid获取字幕失败',
+    //           error: '使用aid获取字幕失败',
+    //         });
+    //       }
+    //     });
+    // } else
+
+    if (message.bvid) {
       console.log('仅使用bvid方式获取字幕');
       getBilibiliSubtitle(message.cid, message.bvid)
         .then((result) => {
