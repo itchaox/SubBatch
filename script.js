@@ -302,54 +302,61 @@ document.addEventListener('DOMContentLoaded', function () {
 
   // 导出字幕为TXT文件
   async function exportSubtitleToTxt() {
-    if (!currentSubtitleData || !currentSubtitleData.metadata || !currentSubtitleData.metadata.subtitle_url) {
-      showError('没有可导出的字幕数据');
+    console.log('导出字幕数据:', currentSubtitleData);
+
+    // 首先检查是否有字幕文本内容
+    if (!currentSubtitleData || !currentSubtitleData.subtitleText) {
+      showError('没有可导出的字幕文本数据');
       return;
     }
 
     try {
-      const subtitleUrl = currentSubtitleData.metadata.subtitle_url;
+      let subtitleText = currentSubtitleData.subtitleText;
 
-      // 显示请求进度反馈
-      showSuccess('正在请求字幕内容...');
-      console.log('请求字幕内容URL:', subtitleUrl);
+      // 如果有字幕URL，尝试获取最新内容
+      if (currentSubtitleData.metadata && currentSubtitleData.metadata.subtitle_url) {
+        try {
+          const subtitleUrl = currentSubtitleData.metadata.subtitle_url;
 
-      // 获取字幕内容
-      const subtitleHeaders = {
-        Referer: 'https://www.bilibili.com/video/' + (currentVideoInfo?.bvid || ''),
-        'User-Agent':
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-        Accept: 'application/json, text/plain, */*',
-        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
-        Origin: 'https://www.bilibili.com',
-      };
+          // 显示请求进度反馈
+          showSuccess('正在请求最新字幕内容...');
+          console.log('请求字幕内容URL:', subtitleUrl);
 
-      const response = await fetch(subtitleUrl, {
-        headers: subtitleHeaders,
-        credentials: 'include', // 确保发送Cookie
-      });
+          // 获取字幕内容
+          const subtitleHeaders = {
+            Referer: 'https://www.bilibili.com/video/' + (currentVideoInfo?.bvid || ''),
+            'User-Agent':
+              'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+            Accept: 'application/json, text/plain, */*',
+            'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+            Origin: 'https://www.bilibili.com',
+          };
 
-      if (!response.ok) {
-        throw new Error(`获取字幕内容失败: HTTP ${response.status}`);
-      }
+          const response = await fetch(subtitleUrl, {
+            headers: subtitleHeaders,
+            credentials: 'include', // 确保发送Cookie
+          });
 
-      const subtitleData = await response.json();
-      console.log('成功获取字幕内容:', subtitleData);
+          if (response.ok) {
+            const subtitleData = await response.json();
+            console.log('成功获取最新字幕内容:', subtitleData);
 
-      let subtitleText = '';
-
-      // 处理字幕内容格式
-      if (subtitleData && subtitleData.body && subtitleData.body.length > 0) {
-        subtitleText = subtitleData.body
-          .map((item) => {
-            const startTime = formatTime(item.from);
-            const endTime = formatTime(item.to);
-            return `${startTime} --> ${endTime}\n${item.content}\n`;
-          })
-          .join('\n');
-      } else {
-        // 如果没有获取到新的字幕内容，使用原来的
-        subtitleText = currentSubtitleData.subtitleText;
+            // 处理字幕内容格式
+            if (subtitleData && subtitleData.body && subtitleData.body.length > 0) {
+              subtitleText = subtitleData.body
+                .map((item) => {
+                  const startTime = formatTime(item.from);
+                  const endTime = formatTime(item.to);
+                  return `${startTime} --> ${endTime}\n${item.content}\n`;
+                })
+                .join('\n');
+              console.log('成功格式化最新字幕内容');
+            }
+          }
+        } catch (fetchError) {
+          console.error('获取最新字幕内容失败，将使用缓存的字幕数据:', fetchError);
+          // 出错时继续使用缓存的字幕数据
+        }
       }
 
       // 创建Blob对象
@@ -361,7 +368,7 @@ document.addEventListener('DOMContentLoaded', function () {
       // 创建一个临时的<a>元素用于下载
       const downloadLink = document.createElement('a');
       downloadLink.href = url;
-      downloadLink.download = `${currentVideoInfo.title || 'subtitle'}.txt`;
+      downloadLink.download = `${currentVideoInfo?.title || 'subtitle'}.txt`;
 
       // 将链接添加到文档中并点击
       document.body.appendChild(downloadLink);
@@ -375,34 +382,6 @@ document.addEventListener('DOMContentLoaded', function () {
     } catch (error) {
       console.error('导出字幕错误:', error);
       showError('导出字幕失败: ' + (error.message || '未知错误'));
-
-      // 如果直接请求失败，尝试使用原有的字幕数据
-      try {
-        if (currentSubtitleData.subtitleText) {
-          // 创建Blob对象
-          const blob = new Blob([currentSubtitleData.subtitleText], { type: 'text/plain;charset=utf-8' });
-
-          // 创建下载链接
-          const url = URL.createObjectURL(blob);
-
-          // 创建一个临时的<a>元素用于下载
-          const downloadLink = document.createElement('a');
-          downloadLink.href = url;
-          downloadLink.download = `${currentVideoInfo.title || 'subtitle'}.txt`;
-
-          // 将链接添加到文档中并点击
-          document.body.appendChild(downloadLink);
-          downloadLink.click();
-
-          // 清理
-          document.body.removeChild(downloadLink);
-          URL.revokeObjectURL(url);
-
-          showSuccess('已使用缓存的字幕数据导出');
-        }
-      } catch (backupError) {
-        console.error('使用备用方法导出失败:', backupError);
-      }
     }
   }
 
