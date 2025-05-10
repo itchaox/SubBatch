@@ -927,13 +927,10 @@ document.addEventListener('DOMContentLoaded', function () {
 
       showSuccess(`开始批量导出字幕，共 ${videosWithSubtitle.length} 个文件`);
 
+      // 创建一个临时的zip文件夹
+      const zipContent = new JSZip();
       let exportedCount = 0;
       let errorCount = 0;
-
-      // 添加一个文本区域，用于给用户提供所有字幕文件的下载链接
-      const downloadLinksContainer = document.createElement('div');
-      downloadLinksContainer.style.display = 'none';
-      document.body.appendChild(downloadLinksContainer);
 
       // 依次导出每个视频的字幕
       for (const video of videosWithSubtitle) {
@@ -942,41 +939,34 @@ document.addEventListener('DOMContentLoaded', function () {
           const safeTitle = video.title.replace(/[\\/:*?"<>|]/g, '_');
           const fileName = `${safeTitle}.txt`;
 
-          // 创建blob对象
-          const blob = new Blob([video.subtitleText], { type: 'text/plain;charset=utf-8' });
-
-          // 创建下载链接
-          const url = URL.createObjectURL(blob);
-          const downloadLink = document.createElement('a');
-          downloadLink.href = url;
-          downloadLink.download = fileName;
-
-          // 触发下载
-          downloadLink.style.display = 'none';
-          document.body.appendChild(downloadLink);
-          downloadLink.click();
-
-          // 稍后清理
-          setTimeout(() => {
-            document.body.removeChild(downloadLink);
-            URL.revokeObjectURL(url);
-          }, 100);
-
+          // 将字幕内容添加到zip文件
+          zipContent.file(fileName, video.subtitleText);
           exportedCount++;
 
-          // 每导出一个更新一次状态
-          showSuccess(`已导出 ${exportedCount}/${videosWithSubtitle.length} 个字幕`);
-
-          // 添加延时，避免浏览器阻止多个下载
-          await new Promise((resolve) => setTimeout(resolve, 300));
+          // 每添加一个更新一次状态
+          showSuccess(`已处理 ${exportedCount}/${videosWithSubtitle.length} 个字幕`);
         } catch (videoError) {
           console.error(`导出视频 "${video.title}" 的字幕失败:`, videoError);
           errorCount++;
         }
       }
 
-      // 清理容器
-      document.body.removeChild(downloadLinksContainer);
+      // 生成zip文件
+      const zipBlob = await zipContent.generateAsync({ type: 'blob' });
+
+      // 创建下载链接
+      const url = URL.createObjectURL(zipBlob);
+      const downloadLink = document.createElement('a');
+      downloadLink.href = url;
+      downloadLink.download = `B站视频字幕_${new Date().toISOString().slice(0, 10)}.zip`;
+
+      // 触发下载
+      document.body.appendChild(downloadLink);
+      downloadLink.click();
+
+      // 清理
+      document.body.removeChild(downloadLink);
+      URL.revokeObjectURL(url);
 
       // 恢复按钮状态
       if (exportTableBtn) {
@@ -991,7 +981,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
       // 显示结果
       if (errorCount === 0) {
-        showSuccess(`成功导出 ${exportedCount} 个字幕文件`);
+        showSuccess(`成功导出 ${exportedCount} 个字幕文件到zip压缩包`);
       } else {
         showSuccess(`导出完成，成功: ${exportedCount}，失败: ${errorCount}`);
       }
