@@ -636,9 +636,12 @@ document.addEventListener('DOMContentLoaded', function () {
     // 遍历视频列表，为每个视频创建表格行
     videoList.forEach((video, index) => {
       const row = document.createElement('tr');
+      // <td>${video.title}</td>;
       row.innerHTML = `
         <td>${index + 1}</td>
-        <td>${video.title}</td>
+        <td><a href="https://www.bilibili.com/video/${video.bvid}" target="_blank" title="${video.title}">${
+        video.title
+      }</a></td>
         <td>${video.author}</td>
         <td>${video.subtitleStatus}</td>
         <td>
