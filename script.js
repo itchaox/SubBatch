@@ -471,6 +471,14 @@ document.addEventListener('DOMContentLoaded', function () {
     tableUrlInput.focus();
   });
 
+  // 为视频地址输入框的清除按钮添加事件监听
+  document.querySelector('#tableUrlInput + .clear-btn').addEventListener('click', () => {
+    tableUrlInput.value = '';
+    resetVideoInfo();
+    // 清空后自动聚焦输入框
+    tableUrlInput.focus();
+  });
+
   getUrlBtn.addEventListener('click', async () => {
     try {
       const response = await chrome.runtime.sendMessage({ action: 'getTabUrl' });
