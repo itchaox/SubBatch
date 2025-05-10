@@ -878,7 +878,7 @@ document.addEventListener('DOMContentLoaded', function () {
         <td>${subtitleStatusHtml}</td>
         <td>
           <button class="table-action-btn remove-row-btn" data-index="${index}">
-            移除
+            ❌
           </button>
         </td>
       `;
