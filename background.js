@@ -869,8 +869,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       return true;
     }
 
-    const page = message.page || 1;
-    const pageSize = message.pageSize || 20;
+    // 确保页码和每页数量参数有效
+    const page = typeof message.page === 'number' && message.page > 0 ? message.page : 1;
+    const pageSize =
+      typeof message.pageSize === 'number' && message.pageSize > 0 && message.pageSize <= 20 ? message.pageSize : 20;
 
     // 为确保在任何情况下都能返回响应，保存sendResponse引用
     const responseSender = sendResponse;
@@ -926,12 +928,19 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
             try {
               if (result.code === 0 && result.data) {
+                // 记录是否有更多数据需要分页
+                const hasMore = result.data.has_more === true;
+                console.log(`收藏夹是否有更多数据: ${hasMore}, 当前页: ${page}`);
+
                 responseSender({
                   success: true,
                   data: result.data,
                   message: '获取收藏夹内容成功',
+                  page: page,
+                  hasMore: hasMore,
                 });
               } else {
+                console.error('收藏夹API返回错误:', result);
                 responseSender({
                   success: false,
                   message: result.message || '获取收藏夹内容失败',
@@ -1049,7 +1058,7 @@ async function fetchSubtitleWithAid(aid, cid, retryCount = 2) {
     if (subtitles.length === 0) {
       return {
         success: false,
-        message: '该视频没有可用字2幕',
+        message: '该视频没有可用字幕',
       };
     }
 

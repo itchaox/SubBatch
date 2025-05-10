@@ -621,55 +621,95 @@ document.addEventListener('DOMContentLoaded', function () {
       // 显示正在处理的提示
       showSuccess('正在获取收藏夹内容，请稍候...');
 
-      // 构建API请求参数
-      const page = 1; // 默认第1页
-      const pageSize = 20; // 默认每页20条
-
       try {
-        // 使用Promise包装chrome.runtime.sendMessage调用
-        const response = await new Promise((resolve, reject) => {
-          // 设置超时处理
-          const timeoutId = setTimeout(() => {
-            reject(new Error('请求超时，background.js没有及时响应'));
-          }, 15000); // 15秒超时
+        // 分页获取收藏夹内容
+        let allVideos = [];
+        let hasMore = true;
+        let currentPage = 1;
+        const pageSize = 20; // B站API每页最大20条
 
-          chrome.runtime.sendMessage(
-            {
-              action: 'fetchFavoriteList',
-              mediaId: fid,
-              page: page,
-              pageSize: pageSize,
-            },
-            (response) => {
-              clearTimeout(timeoutId); // 清除超时计时器
+        while (hasMore) {
+          showSuccess(`正在获取第${currentPage}页收藏夹内容...`);
+          console.log(`获取收藏夹第${currentPage}页，每页${pageSize}条`);
 
-              // 检查是否有错误
-              const error = chrome.runtime.lastError;
-              if (error) {
-                console.error('发送消息时出错:', error);
-                reject(error);
-                return;
-              }
+          // 使用Promise包装chrome.runtime.sendMessage调用
+          const response = await new Promise((resolve, reject) => {
+            // 设置超时处理
+            const timeoutId = setTimeout(() => {
+              reject(new Error('请求超时，background.js没有及时响应'));
+            }, 15000); // 15秒超时
 
-              resolve(response);
-            },
-          );
-        });
+            chrome.runtime.sendMessage(
+              {
+                action: 'fetchFavoriteList',
+                mediaId: fid,
+                page: currentPage,
+                pageSize: pageSize,
+              },
+              (response) => {
+                clearTimeout(timeoutId); // 清除超时计时器
 
-        // 处理响应
-        if (response && response.success) {
-          showSuccess('成功获取收藏夹内容');
-          console.log('收藏夹API响应:', response);
+                // 检查是否有错误
+                const error = chrome.runtime.lastError;
+                if (error) {
+                  console.error('发送消息时出错:', error);
+                  reject(error);
+                  return;
+                }
 
-          // 如果需要，在这里处理收藏夹内容数据
-          if (response.data && response.data.medias && response.data.medias.length > 0) {
-            const videos = response.data.medias;
-            console.log(`收藏夹中有${videos.length}个视频`);
+                resolve(response);
+              },
+            );
+          });
+
+          // 处理响应
+          if (response && response.success && response.data) {
+            console.log(`第${currentPage}页收藏夹数据:`, response.data);
+
+            // 添加当前页的视频到总列表
+            if (response.data.medias && response.data.medias.length > 0) {
+              allVideos = allVideos.concat(response.data.medias);
+              console.log(`当前已获取${allVideos.length}个视频`);
+
+              // 每页获取完后显示进度
+              showSuccess(`已获取${allVideos.length}个视频 (第${currentPage}页)`);
+            }
+
+            // 检查是否有更多页
+            hasMore = response.data.has_more === true;
+            console.log(`是否有下一页: ${hasMore}`);
+
+            if (hasMore) {
+              currentPage++;
+              // 添加短暂延迟避免请求过快
+              await new Promise((resolve) => setTimeout(resolve, 300));
+            } else {
+              console.log('已到达最后一页，停止获取');
+            }
+          } else {
+            const errorMsg = response?.message || '获取收藏夹内容失败';
+            showError(errorMsg);
+            console.error('获取收藏夹失败:', response);
+            break; // 出错时停止循环
+          }
+        }
+
+        // 所有页获取完成后的处理
+        if (allVideos.length > 0) {
+          showSuccess(`成功获取收藏夹内容，共${allVideos.length}个视频`);
+          console.log('完整收藏夹内容:', allVideos);
+
+          // 获取表格相关元素
+          const videoTableBody = document.getElementById('videoTableBody');
+          const addedCount = processAndAddVideosToTable(allVideos);
+
+          if (addedCount > 0) {
+            showSuccess(`成功添加${addedCount}个视频到表格`);
+          } else {
+            showError('没有找到可添加的视频');
           }
         } else {
-          const errorMsg = response?.message || '获取收藏夹内容失败';
-          showError(errorMsg);
-          console.error('获取收藏夹失败:', response);
+          showError('收藏夹中没有视频');
         }
       } catch (error) {
         console.error('获取收藏夹出错:', error);
@@ -685,6 +725,53 @@ document.addEventListener('DOMContentLoaded', function () {
         `;
       }
     });
+  }
+
+  // 处理收藏夹视频并添加到表格
+  function processAndAddVideosToTable(videos) {
+    if (!videos || !Array.isArray(videos) || videos.length === 0) {
+      console.error('无效的视频数据');
+      return 0;
+    }
+
+    let addedCount = 0;
+
+    // 遍历收藏夹中的视频
+    videos.forEach((video) => {
+      // 只处理类型为2的条目（视频）
+      if (video.type === 2) {
+        // 检查是否已存在相同的视频（根据bvid或aid）
+        const existingVideo = videoList.find(
+          (v) => (video.bvid && v.bvid === video.bvid) || (video.id && v.aid === video.id),
+        );
+
+        if (!existingVideo) {
+          // 转换视频数据为表格需要的格式
+          const formattedVideo = {
+            id: video.id || video.bvid || Date.now().toString(),
+            bvid: video.bvid,
+            aid: video.id,
+            cid: video.ugc.first_cid,
+            title: video.title,
+            author: video.upper?.name || '未知作者',
+            subtitleStatus: '未获取',
+            subtitleText: null,
+            view_count: video.stat?.view || 0,
+            like_count: video.stat?.like || 0,
+          };
+
+          // 添加到表格
+          addVideoToTable(formattedVideo);
+          addedCount++;
+        } else {
+          console.log(`视频已存在，跳过: ${video.title}`);
+        }
+      } else {
+        console.log(`跳过非视频内容: ${video.title}, 类型: ${video.type}`);
+      }
+    });
+
+    return addedCount;
   }
 
   // 添加视频到表格
