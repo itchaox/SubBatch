@@ -589,6 +589,41 @@
       tbody tr:hover {
         background-color: #f0f2f5;
       }
+
+      /* 表格行按钮样式 */
+      .table-action-btn {
+        padding: 4px 8px;
+        font-size: 12px;
+        margin-right: 6px;
+        background-color: #f0f2f5;
+        color: #333;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+      }
+
+      .table-action-btn:hover {
+        background-color: #e4e6e8;
+      }
+
+      .get-subtitle-row-btn {
+        background-color: #3370ff;
+        color: white;
+      }
+
+      .get-subtitle-row-btn:hover {
+        background-color: #2860e1;
+      }
+
+      .remove-row-btn {
+        background-color: #ff4d4f;
+        color: white;
+      }
+
+      .remove-row-btn:hover {
+        background-color: #f5222d;
+      }
     </style>
   </head>
   <body>
@@ -665,38 +700,17 @@
             type="text"
             placeholder="输入B站视频地址"
           />
-          <button
-            id="getVideoInfoBtn"
-            class="action-btn primary-btn"
-          >
-            <svg
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              stroke-width="2"
-              stroke-linecap="round"
-              stroke-linejoin="round"
+          <div class="button-group">
+            <button
+              id="generateUrlBtn"
+              class="action-btn primary-btn"
             >
-              <circle
-                cx="12"
-                cy="12"
-                r="10"
-              ></circle>
-              <line
-                x1="12"
-                y1="8"
-                x2="12"
-                y2="16"
-              ></line>
-              <line
-                x1="8"
-                y1="12"
-                x2="16"
-                y2="12"
-              ></line>
-            </svg>
-            添加到表格
-          </button>
+              <svg viewBox="0 0 24 24">
+                <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
+              </svg>
+              添加到表格
+            </button>
+          </div>
         </div>
       </div>
 
@@ -822,6 +836,17 @@
       <div class="table-header">
         <h3>批量视频列表</h3>
         <div class="table-actions">
+          <button
+            id="batchGetSubtitleBtn"
+            class="action-btn primary-btn"
+          >
+            <svg viewBox="0 0 24 24">
+              <path
+                d="M18 8h-2v3h-3v2h3v3h2v-3h3v-2h-3V8zM5 11a5 5 0 1 1 0 10 5 5 0 0 1 0-10zm0 2a3 3 0 1 0 0 6 3 3 0 0 0 0-6zm5-9a5 5 0 1 1 0 10 5 5 0 0 1 0-10zm0 2a3 3 0 1 0 0 6 3 3 0 0 0 0-6z"
+              />
+            </svg>
+            批量获取字幕
+          </button>
           <button
             id="exportTableBtn"
             class="action-btn secondary-btn"
