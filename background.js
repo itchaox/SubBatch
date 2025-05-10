@@ -204,7 +204,7 @@ async function fetchWbiRequest(url, headers) {
     } else {
       // 如果URL中没有WBI参数，尝试使用普通v2接口替代
       console.log('缺少WBI签名参数，尝试使用普通v2接口替代');
-      const regularUrl = url.replace('/x/player/wbi/v2', '/x/player/v2');
+      const regularUrl = url.replace('/x/player/wbi/v2', '/x/player/wbi/v2');
       console.log('替换为普通接口URL:', regularUrl);
 
       const response = await fetch(regularUrl, {
