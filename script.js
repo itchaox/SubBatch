@@ -751,7 +751,7 @@ document.addEventListener('DOMContentLoaded', function () {
             id: video.id || video.bvid || Date.now().toString(),
             bvid: video.bvid,
             aid: video.id,
-            cid: video.ugc.first_cid,
+            cid: video.ugc?.first_cid,
             title: video.title,
             author: video.upper?.name || '未知作者',
             subtitleStatus: '未获取',
@@ -827,14 +827,39 @@ document.addEventListener('DOMContentLoaded', function () {
     // 遍历视频列表，为每个视频创建表格行
     videoList.forEach((video, index) => {
       const row = document.createElement('tr');
-      // <td>${video.title}</td>;
+
+      // 根据字幕状态设置样式
+      let subtitleStatusHtml = '';
+      if (video.subtitleStatus === '已获取') {
+        // 已获取状态显示为绿色并添加✅图标
+        subtitleStatusHtml = `<span style="color: #52c41a; font-weight: 500;">✅ 已获取</span>`;
+      } else if (video.subtitleStatus === '获取中') {
+        // 获取中状态显示为蓝色带动画
+        subtitleStatusHtml = `<span style="color: #1890ff; display: flex; align-items: center;">
+          <svg viewBox="0 0 24 24" style="width: 16px; height: 16px; margin-right: 4px; animation: spin 1.5s linear infinite;">
+            <path d="M12 6v3l4-4-4-4v3c-4.42 0-8 3.58-8 8 0 1.57.46 3.03 1.24 4.26L6.7 14.8c-.45-.83-.7-1.79-.7-2.8 0-3.31 2.69-6 6-6zm6.76 1.74L17.3 9.2c.44.84.7 1.79.7 2.8 0 3.31-2.69 6-6 6v-3l-4 4 4 4v-3c4.42 0 8-3.58 8-8 0-1.57-.46-3.03-1.24-4.26z" fill="currentColor"/>
+          </svg>获取中</span>`;
+      } else if (video.subtitleStatus === '未获取') {
+        // 未获取状态显示为灰色
+        subtitleStatusHtml = `<span style="color: #666;">${video.subtitleStatus}</span>`;
+      } else if (
+        video.subtitleStatus &&
+        (video.subtitleStatus.includes('失败') || video.subtitleStatus.includes('错误'))
+      ) {
+        // 失败状态显示为红色
+        subtitleStatusHtml = `<span style="color: #ff4d4f;">${video.subtitleStatus}</span>`;
+      } else {
+        // 其他状态保持默认
+        subtitleStatusHtml = video.subtitleStatus;
+      }
+
       row.innerHTML = `
         <td>${index + 1}</td>
         <td><a href="https://www.bilibili.com/video/${video.bvid}" target="_blank" title="${video.title}">${
         video.title
       }</a></td>
         <td>${video.author}</td>
-        <td>${video.subtitleStatus}</td>
+        <td>${subtitleStatusHtml}</td>
         <td>
           <button class="table-action-btn remove-row-btn" data-index="${index}">
             移除
