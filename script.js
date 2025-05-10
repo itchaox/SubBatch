@@ -14,19 +14,6 @@ document.addEventListener('DOMContentLoaded', function () {
   const copyBtn = document.getElementById('copyBtn');
   const sponsorBtn = document.getElementById('sponsorBtn');
   const followBtn = document.getElementById('followBtn');
-  const videoTitleElement = document.getElementById('videoTitle');
-  const videoInfoContainer = document.getElementById('videoInfoContainer');
-  const videoAuthorElement = document.getElementById('videoAuthor');
-  const videoViewCountElement = document.getElementById('videoViewCount');
-  const videoLikeCountElement = document.getElementById('videoLikeCount');
-  const getSubtitleBtn = document.getElementById('getSubtitleBtn');
-  const subtitleContainer = document.getElementById('subtitleContainer');
-  const subtitleStatusElement = document.getElementById('subtitleStatus');
-  const subtitleContentElement = document.getElementById('subtitleContent');
-  const exportSubtitleBtn = document.getElementById('exportSubtitleBtn');
-  const noSubtitleOptions = document.getElementById('noSubtitleOptions');
-  const downloadVideoBtn = document.getElementById('downloadVideoBtn');
-  const transcribeAudioBtn = document.getElementById('transcribeAudioBtn');
 
   // 表格相关元素
   const videoTableBody = document.getElementById('videoTableBody');
@@ -119,14 +106,6 @@ document.addEventListener('DOMContentLoaded', function () {
 
   // 重置视频信息显示
   function resetVideoInfo() {
-    videoTitleElement.textContent = '尚未获取视频信息';
-    videoInfoContainer.style.display = 'none';
-    videoAuthorElement.textContent = '未知';
-    videoViewCountElement.textContent = '0';
-    videoLikeCountElement.textContent = '0';
-    subtitleContainer.style.display = 'none';
-    subtitleContentElement.textContent = '尚未获取字幕';
-    noSubtitleOptions.style.display = 'none';
     currentVideoInfo = null;
     currentSubtitleData = null;
   }
@@ -137,25 +116,15 @@ document.addEventListener('DOMContentLoaded', function () {
       resetVideoInfo();
       return;
     }
-
-    // 注意：这里我们不再设置currentVideoInfo，因为它现在在fetchBilibiliVideoInfo中设置
-    videoTitleElement.textContent = videoInfo.title;
-    videoAuthorElement.textContent = videoInfo.author;
-    videoViewCountElement.textContent = formatNumber(videoInfo.view_count);
-    videoLikeCountElement.textContent = formatNumber(videoInfo.like_count);
-    videoInfoContainer.style.display = 'block';
   }
 
   // 获取B站视频信息
   async function fetchBilibiliVideoInfo(url) {
     try {
-      videoTitleElement.textContent = '正在获取视频信息...';
-      videoInfoContainer.style.display = 'none';
-      subtitleContainer.style.display = 'none';
+      console.log('正在获取视频信息...');
 
       const videoId = extractBilibiliVideoId(url);
       if (!videoId) {
-        videoTitleElement.textContent = '无法识别的B站视频地址';
         showError('无法识别的B站视频地址');
         return null;
       }
@@ -174,7 +143,6 @@ document.addEventListener('DOMContentLoaded', function () {
         // 检查是否有cid
         if (!currentVideoInfo.cid) {
           console.warn('视频信息中缺少cid参数，可能无法获取字幕');
-          videoTitleElement.textContent = currentVideoInfo.title + ' (可能无法获取字幕)';
         } else {
           console.log('成功获取cid:', currentVideoInfo.cid);
         }
@@ -183,13 +151,11 @@ document.addEventListener('DOMContentLoaded', function () {
         showSuccess('成功获取视频信息');
         return response;
       } else {
-        videoTitleElement.textContent = '获取视频信息失败: ' + (response?.message || '未知错误');
         showError('获取视频信息失败');
         return null;
       }
     } catch (error) {
       console.error('获取B站视频信息错误:', error);
-      videoTitleElement.textContent = `获取视频信息出错: ${error.message || '未知错误'}`;
       showError('获取视频信息出错，请稍后再试');
       return null;
     }
@@ -201,7 +167,7 @@ document.addEventListener('DOMContentLoaded', function () {
       // 只有在非批量模式下才操作UI
       if (!isBatchMode) {
         // 隐藏无字幕选项
-        noSubtitleOptions.style.display = 'none';
+        // noSubtitleOptions.style.display = 'none';
       }
 
       // 检查currentVideoInfo是否包含必要的信息
@@ -216,12 +182,12 @@ document.addEventListener('DOMContentLoaded', function () {
 
       if (!currentVideoInfo.cid) {
         if (!isBatchMode) {
-          subtitleContainer.style.display = 'block';
-          subtitleStatusElement.textContent = '(无法获取)';
-          subtitleContentElement.textContent = '无法获取字幕：视频信息中缺少cid参数';
+          // subtitleContainer.style.display = 'block';
+          // subtitleStatusElement.textContent = '(无法获取)';
+          // subtitleContentElement.textContent = '无法获取字幕：视频信息中缺少cid参数';
           showError('视频信息中没有cid，无法获取字幕');
           // 显示无字幕选项
-          noSubtitleOptions.style.display = 'block';
+          // noSubtitleOptions.style.display = 'block';
         }
         console.error('fetchBilibiliSubtitle: 视频信息中没有cid');
         return { success: false, message: '视频信息中没有cid，无法获取字幕' };
@@ -229,21 +195,22 @@ document.addEventListener('DOMContentLoaded', function () {
 
       if (!currentVideoInfo.bvid) {
         if (!isBatchMode) {
-          subtitleContainer.style.display = 'block';
-          subtitleStatusElement.textContent = '(无法获取)';
-          subtitleContentElement.textContent = '无法获取字幕：视频信息中缺少bvid参数';
+          // subtitleContainer.style.display = 'block';
+          // subtitleStatusElement.textContent = '(无法获取)';
+          // subtitleContentElement.textContent = '无法获取字幕：视频信息中缺少bvid参数';
           showError('视频信息中没有bvid，无法获取字幕');
           // 显示无字幕选项
-          noSubtitleOptions.style.display = 'block';
+          // noSubtitleOptions.style.display = 'block';
         }
         console.error('fetchBilibiliSubtitle: 视频信息中没有bvid');
         return { success: false, message: '视频信息中没有bvid，无法获取字幕' };
       }
 
       if (!isBatchMode) {
-        subtitleStatusElement.textContent = '获取中...';
-        subtitleContentElement.textContent = '正在获取字幕数据...';
-        subtitleContainer.style.display = 'block';
+        // subtitleStatusElement.textContent = '获取中...';
+        // subtitleContentElement.textContent = '正在获取字幕数据...';
+        // subtitleContainer.style.display = 'block';
+        console.log('正在获取字幕数据...');
       }
 
       // 增加详细日志
@@ -269,8 +236,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
         if (response.subtitleText && response.subtitleText.trim() !== '') {
           if (!isBatchMode) {
-            subtitleContentElement.textContent = response.subtitleText;
-            subtitleStatusElement.textContent = response.metadata?.lan_doc ? `(${response.metadata.lan_doc})` : '';
+            // subtitleContentElement.textContent = response.subtitleText;
+            // subtitleStatusElement.textContent = response.metadata?.lan_doc ? `(${response.metadata.lan_doc})` : '';
             showSuccess('成功获取字幕');
 
             // 添加测试WBI接口按钮
@@ -280,11 +247,11 @@ document.addEventListener('DOMContentLoaded', function () {
           return response;
         } else {
           if (!isBatchMode) {
-            subtitleContentElement.textContent = '获取到的字幕内容为空';
-            subtitleStatusElement.textContent = '(内容为空)';
+            // subtitleContentElement.textContent = '获取到的字幕内容为空';
+            // subtitleStatusElement.textContent = '(内容为空)';
             showError('获取到的字幕内容为空');
             // 显示无字幕选项
-            noSubtitleOptions.style.display = 'block';
+            // noSubtitleOptions.style.display = 'block';
           }
           console.warn('fetchBilibiliSubtitle: 获取到的字幕内容为空');
           return { ...response, success: false, message: '获取到的字幕内容为空' };
@@ -295,8 +262,8 @@ document.addEventListener('DOMContentLoaded', function () {
         console.error('字幕获取失败原因:', errorMessage);
 
         if (!isBatchMode) {
-          subtitleContentElement.textContent = '获取字幕失败: ' + errorMessage;
-          subtitleStatusElement.textContent = '(获取失败)';
+          // subtitleContentElement.textContent = '获取字幕失败: ' + errorMessage;
+          // subtitleStatusElement.textContent = '(获取失败)';
           showError('获取字幕失败: ' + errorMessage);
 
           // 如果是因为视频没有字幕，则显示无字幕选项
@@ -308,7 +275,7 @@ document.addEventListener('DOMContentLoaded', function () {
               response.message.includes('没有可用字幕') ||
               response.message.includes('解析字幕内容失败'))
           ) {
-            noSubtitleOptions.style.display = 'block';
+            // noSubtitleOptions.style.display = 'block';
           }
         }
 
@@ -319,13 +286,13 @@ document.addEventListener('DOMContentLoaded', function () {
 
       if (!isBatchMode) {
         // 即使出错也显示错误信息
-        subtitleContainer.style.display = 'block';
-        subtitleContentElement.textContent = `获取字幕出错: ${error.message || '未知错误'}`;
-        subtitleStatusElement.textContent = '(获取出错)';
+        // subtitleContainer.style.display = 'block';
+        // subtitleContentElement.textContent = `获取字幕出错: ${error.message || '未知错误'}`;
+        // subtitleStatusElement.textContent = '(获取出错)';
         showError('获取字幕出错，请稍后再试');
 
         // 显示无字幕选项
-        noSubtitleOptions.style.display = 'block';
+        // noSubtitleOptions.style.display = 'block';
       }
 
       return { success: false, message: error.message || '未知错误' };
@@ -560,21 +527,9 @@ document.addEventListener('DOMContentLoaded', function () {
           addVideoToTable(videoInfo);
         }
       } else {
-        videoTitleElement.textContent = '不是B站视频链接，无法获取标题';
-        videoInfoContainer.style.display = 'none';
-        subtitleContainer.style.display = 'none';
         showError('不是B站视频链接，无法添加');
       }
     }
-  });
-
-  // 监听获取字幕前先设置Cookie
-  getSubtitleBtn.addEventListener('click', async () => {
-    // 先设置Cookie
-    setCookie();
-
-    // 然后获取字幕
-    await fetchBilibiliSubtitle();
   });
 
   // 添加函数来测试WBI接口
@@ -611,30 +566,10 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   }
 
-  // 导出字幕按钮事件
-  exportSubtitleBtn.addEventListener('click', () => {
-    exportSubtitleToTxt();
-  });
-
   // 添加一个函数来创建和添加测试按钮
   function addTestApiButton() {
-    // 检查是否已经存在测试按钮
-    if (document.getElementById('testWbiApiBtn')) {
-      return; // 已存在则不重复添加
-    }
-
-    // 检查字幕容器是否存在
-    const subtitleContainer = document.getElementById('subtitleContainer');
-    if (!subtitleContainer) {
-      console.error('字幕容器不存在，无法添加测试按钮');
-      return;
-    }
-
-    const subtitleActions = subtitleContainer.querySelector('.subtitle-actions');
-    if (!subtitleActions) {
-      console.error('字幕操作区域不存在，无法添加测试按钮');
-      return;
-    }
+    // 由于DOM元素已移除，此函数不再需要执行实际操作
+    console.log('addTestApiButton函数被调用');
   }
 
   // 赞助和关注按钮的事件监听器
@@ -646,22 +581,6 @@ document.addEventListener('DOMContentLoaded', function () {
   followBtn.addEventListener('click', () => {
     showSuccess('非常感谢您的关注！🎉');
     chrome.tabs.create({ url: 'https://space.bilibili.com/521041866' });
-  });
-
-  // 为音频转字幕按钮添加事件监听
-  transcribeAudioBtn.addEventListener('click', () => {
-    showError('音频转字幕功能暂未实现');
-  });
-
-  // 为下载视频按钮添加事件监听
-  downloadVideoBtn.addEventListener('click', () => {
-    if (!currentVideoInfo || !currentVideoInfo.bvid) {
-      showError('无法获取视频信息，无法下载视频');
-      return;
-    }
-    // 打开视频页面
-    chrome.tabs.create({ url: `https://www.bilibili.com/video/${currentVideoInfo.bvid}` });
-    showSuccess('已打开视频页面，请使用第三方工具下载');
   });
 
   // 添加视频到表格
@@ -905,109 +824,123 @@ document.addEventListener('DOMContentLoaded', function () {
 
   // 批量导出字幕为独立的TXT文件
   async function batchExportSubtitles() {
-    if (videoList.length === 0) {
-      showError('表格为空，无法导出');
-      return;
-    }
-
-    // 筛选出已获取字幕的视频
-    const videosWithSubtitle = videoList.filter(
-      (video) => video.subtitleStatus === '已获取' && video.subtitleText && video.subtitleText.trim() !== '',
-    );
-
-    if (videosWithSubtitle.length === 0) {
-      showError('没有可导出的字幕，请先获取字幕');
-      return;
-    }
-
     try {
-      // 获取并禁用导出按钮，显示处理状态
-      const exportTableBtn = document.getElementById('exportTableBtn');
-      if (exportTableBtn) {
-        exportTableBtn.disabled = true;
-        exportTableBtn.innerHTML = `
-          <svg viewBox="0 0 24 24" class="spin">
-            <path d="M12 6v3l4-4-4-4v3c-4.42 0-8 3.58-8 8 0 1.57.46 3.03 1.24 4.26L6.7 14.8c-.45-.83-.7-1.79-.7-2.8 0-3.31 2.69-6 6-6zm6.76 1.74L17.3 9.2c.44.84.7 1.79.7 2.8 0 3.31-2.69 6-6 6v-3l-4 4 4 4v-3c4.42 0 8-3.58 8-8 0-1.57-.46-3.03-1.24-4.26z"/>
-          </svg>
-          导出中...
-        `;
+      console.log('开始批量导出字幕');
+
+      // 检查是否有JSZip对象
+      if (typeof JSZip === 'undefined') {
+        console.error('JSZip库未加载，无法执行批量导出');
+        showError('JSZip库未加载，无法执行批量导出。请确保jszip.min.js文件已正确加载');
+        return;
       }
 
-      showSuccess(`开始批量导出字幕，共 ${videosWithSubtitle.length} 个文件`);
+      if (videoList.length === 0) {
+        showError('表格为空，无法导出');
+        return;
+      }
 
-      // 创建一个临时的zip文件夹
-      const zipContent = new JSZip();
-      let exportedCount = 0;
-      let errorCount = 0;
+      // 筛选出已获取字幕的视频
+      const videosWithSubtitle = videoList.filter(
+        (video) => video.subtitleStatus === '已获取' && video.subtitleText && video.subtitleText.trim() !== '',
+      );
 
-      // 依次导出每个视频的字幕
-      for (const video of videosWithSubtitle) {
-        try {
-          // 创建文件名，移除不合法的文件名字符
-          const safeTitle = video.title.replace(/[\\/:*?"<>|]/g, '_');
-          const fileName = `${safeTitle}.txt`;
+      if (videosWithSubtitle.length === 0) {
+        showError('没有可导出的字幕，请先获取字幕');
+        return;
+      }
 
-          // 将字幕内容添加到zip文件
-          zipContent.file(fileName, video.subtitleText);
-          exportedCount++;
+      try {
+        // 获取并禁用导出按钮，显示处理状态
+        const exportTableBtn = document.getElementById('exportTableBtn');
+        if (exportTableBtn) {
+          exportTableBtn.disabled = true;
+          exportTableBtn.innerHTML = `
+            <svg viewBox="0 0 24 24" class="spin">
+              <path d="M12 6v3l4-4-4-4v3c-4.42 0-8 3.58-8 8 0 1.57.46 3.03 1.24 4.26L6.7 14.8c-.45-.83-.7-1.79-.7-2.8 0-3.31 2.69-6 6-6zm6.76 1.74L17.3 9.2c.44.84.7 1.79.7 2.8 0 3.31-2.69 6-6 6v-3l-4 4 4 4v-3c4.42 0 8-3.58 8-8 0-1.57-.46-3.03-1.24-4.26z"/>
+            </svg>
+            导出中...
+          `;
+        }
 
-          // 每添加一个更新一次状态
-          showSuccess(`已处理 ${exportedCount}/${videosWithSubtitle.length} 个字幕`);
-        } catch (videoError) {
-          console.error(`导出视频 "${video.title}" 的字幕失败:`, videoError);
-          errorCount++;
+        showSuccess(`开始批量导出字幕，共 ${videosWithSubtitle.length} 个文件`);
+
+        // 创建一个临时的zip文件夹
+        const zipContent = new JSZip();
+        let exportedCount = 0;
+        let errorCount = 0;
+
+        // 依次导出每个视频的字幕
+        for (const video of videosWithSubtitle) {
+          try {
+            // 创建文件名，移除不合法的文件名字符
+            const safeTitle = video.title.replace(/[\\/:*?"<>|]/g, '_');
+            const fileName = `${safeTitle}.txt`;
+
+            // 将字幕内容添加到zip文件
+            zipContent.file(fileName, video.subtitleText);
+            exportedCount++;
+
+            // 每添加一个更新一次状态
+            showSuccess(`已处理 ${exportedCount}/${videosWithSubtitle.length} 个字幕`);
+          } catch (videoError) {
+            console.error(`导出视频 "${video.title}" 的字幕失败:`, videoError);
+            errorCount++;
+          }
+        }
+
+        // 生成zip文件
+        const zipBlob = await zipContent.generateAsync({ type: 'blob' });
+
+        // 创建下载链接
+        const url = URL.createObjectURL(zipBlob);
+        const downloadLink = document.createElement('a');
+        downloadLink.href = url;
+        downloadLink.download = `B站视频字幕_${new Date().toISOString().slice(0, 10)}.zip`;
+
+        // 触发下载
+        document.body.appendChild(downloadLink);
+        downloadLink.click();
+
+        // 清理
+        document.body.removeChild(downloadLink);
+        URL.revokeObjectURL(url);
+
+        // 恢复按钮状态
+        if (exportTableBtn) {
+          exportTableBtn.disabled = false;
+          exportTableBtn.innerHTML = `
+            <svg viewBox="0 0 24 24">
+              <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" />
+            </svg>
+            批量导出字幕
+          `;
+        }
+
+        // 显示结果
+        if (errorCount === 0) {
+          showSuccess(`成功导出 ${exportedCount} 个字幕文件到zip压缩包`);
+        } else {
+          showSuccess(`导出完成，成功: ${exportedCount}，失败: ${errorCount}`);
+        }
+      } catch (error) {
+        console.error('批量导出字幕错误:', error);
+        showError('批量导出字幕失败: ' + (error.message || '未知错误'));
+
+        // 恢复按钮状态
+        const exportTableBtn = document.getElementById('exportTableBtn');
+        if (exportTableBtn) {
+          exportTableBtn.disabled = false;
+          exportTableBtn.innerHTML = `
+            <svg viewBox="0 0 24 24">
+              <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" />
+            </svg>
+            批量导出字幕
+          `;
         }
       }
-
-      // 生成zip文件
-      const zipBlob = await zipContent.generateAsync({ type: 'blob' });
-
-      // 创建下载链接
-      const url = URL.createObjectURL(zipBlob);
-      const downloadLink = document.createElement('a');
-      downloadLink.href = url;
-      downloadLink.download = `B站视频字幕_${new Date().toISOString().slice(0, 10)}.zip`;
-
-      // 触发下载
-      document.body.appendChild(downloadLink);
-      downloadLink.click();
-
-      // 清理
-      document.body.removeChild(downloadLink);
-      URL.revokeObjectURL(url);
-
-      // 恢复按钮状态
-      if (exportTableBtn) {
-        exportTableBtn.disabled = false;
-        exportTableBtn.innerHTML = `
-          <svg viewBox="0 0 24 24">
-            <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" />
-          </svg>
-          批量导出字幕
-        `;
-      }
-
-      // 显示结果
-      if (errorCount === 0) {
-        showSuccess(`成功导出 ${exportedCount} 个字幕文件到zip压缩包`);
-      } else {
-        showSuccess(`导出完成，成功: ${exportedCount}，失败: ${errorCount}`);
-      }
     } catch (error) {
-      console.error('批量导出字幕错误:', error);
+      console.error('批量导出字幕外层错误:', error);
       showError('批量导出字幕失败: ' + (error.message || '未知错误'));
-
-      // 恢复按钮状态
-      const exportTableBtn = document.getElementById('exportTableBtn');
-      if (exportTableBtn) {
-        exportTableBtn.disabled = false;
-        exportTableBtn.innerHTML = `
-          <svg viewBox="0 0 24 24">
-            <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" />
-          </svg>
-          批量导出字幕
-        `;
-      }
     }
   }
 
