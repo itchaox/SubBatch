@@ -241,6 +241,9 @@ document.addEventListener('DOMContentLoaded', function () {
           subtitleContentElement.textContent = response.subtitleText;
           subtitleStatusElement.textContent = response.metadata?.lan_doc ? `(${response.metadata.lan_doc})` : '';
           showSuccess('成功获取字幕');
+
+          // 添加测试WBI接口按钮
+          addTestApiButton();
         } else {
           subtitleContentElement.textContent = '获取到的字幕内容为空';
           subtitleStatusElement.textContent = '(内容为空)';
@@ -287,16 +290,70 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   }
 
+  // 添加formatTime函数，用于格式化时间
+  function formatTime(seconds) {
+    const pad = (num) => (num < 10 ? '0' + num : num);
+    const hours = Math.floor(seconds / 3600);
+    const minutes = Math.floor((seconds % 3600) / 60);
+    const secs = Math.floor(seconds % 60);
+    const ms = Math.floor((seconds % 1) * 1000);
+    return `${pad(hours)}:${pad(minutes)}:${pad(secs)}.${ms.toString().padStart(3, '0')}`;
+  }
+
   // 导出字幕为TXT文件
-  function exportSubtitleToTxt() {
-    if (!currentSubtitleData || !currentSubtitleData.subtitleText) {
+  async function exportSubtitleToTxt() {
+    if (!currentSubtitleData || !currentSubtitleData.metadata || !currentSubtitleData.metadata.subtitle_url) {
       showError('没有可导出的字幕数据');
       return;
     }
 
     try {
+      const subtitleUrl = currentSubtitleData.metadata.subtitle_url;
+
+      // 显示请求进度反馈
+      showSuccess('正在请求字幕内容...');
+      console.log('请求字幕内容URL:', subtitleUrl);
+
+      // 获取字幕内容
+      const subtitleHeaders = {
+        Referer: 'https://www.bilibili.com/video/' + (currentVideoInfo?.bvid || ''),
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+        Accept: 'application/json, text/plain, */*',
+        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+        Origin: 'https://www.bilibili.com',
+      };
+
+      const response = await fetch(subtitleUrl, {
+        headers: subtitleHeaders,
+        credentials: 'include', // 确保发送Cookie
+      });
+
+      if (!response.ok) {
+        throw new Error(`获取字幕内容失败: HTTP ${response.status}`);
+      }
+
+      const subtitleData = await response.json();
+      console.log('成功获取字幕内容:', subtitleData);
+
+      let subtitleText = '';
+
+      // 处理字幕内容格式
+      if (subtitleData && subtitleData.body && subtitleData.body.length > 0) {
+        subtitleText = subtitleData.body
+          .map((item) => {
+            const startTime = formatTime(item.from);
+            const endTime = formatTime(item.to);
+            return `${startTime} --> ${endTime}\n${item.content}\n`;
+          })
+          .join('\n');
+      } else {
+        // 如果没有获取到新的字幕内容，使用原来的
+        subtitleText = currentSubtitleData.subtitleText;
+      }
+
       // 创建Blob对象
-      const blob = new Blob([currentSubtitleData.subtitleText], { type: 'text/plain;charset=utf-8' });
+      const blob = new Blob([subtitleText], { type: 'text/plain;charset=utf-8' });
 
       // 创建下载链接
       const url = URL.createObjectURL(blob);
@@ -318,6 +375,34 @@ document.addEventListener('DOMContentLoaded', function () {
     } catch (error) {
       console.error('导出字幕错误:', error);
       showError('导出字幕失败: ' + (error.message || '未知错误'));
+
+      // 如果直接请求失败，尝试使用原有的字幕数据
+      try {
+        if (currentSubtitleData.subtitleText) {
+          // 创建Blob对象
+          const blob = new Blob([currentSubtitleData.subtitleText], { type: 'text/plain;charset=utf-8' });
+
+          // 创建下载链接
+          const url = URL.createObjectURL(blob);
+
+          // 创建一个临时的<a>元素用于下载
+          const downloadLink = document.createElement('a');
+          downloadLink.href = url;
+          downloadLink.download = `${currentVideoInfo.title || 'subtitle'}.txt`;
+
+          // 将链接添加到文档中并点击
+          document.body.appendChild(downloadLink);
+          downloadLink.click();
+
+          // 清理
+          document.body.removeChild(downloadLink);
+          URL.revokeObjectURL(url);
+
+          showSuccess('已使用缓存的字幕数据导出');
+        }
+      } catch (backupError) {
+        console.error('使用备用方法导出失败:', backupError);
+      }
     }
   }
 
@@ -463,10 +548,82 @@ document.addEventListener('DOMContentLoaded', function () {
     await fetchBilibiliSubtitle();
   });
 
+  // 添加函数来测试WBI接口
+  async function testWbiApi() {
+    try {
+      if (!currentVideoInfo || !currentVideoInfo.aid || !currentVideoInfo.cid) {
+        showError('请先获取视频信息');
+        return;
+      }
+
+      showSuccess('正在测试WBI接口，请查看控制台日志');
+      console.log('开始测试WBI接口:', currentVideoInfo.aid, currentVideoInfo.cid);
+
+      // 先设置Cookie
+      setCookie();
+
+      // 发送测试请求
+      const response = await chrome.runtime.sendMessage({
+        action: 'testWbiApi',
+        aid: currentVideoInfo.aid,
+        cid: currentVideoInfo.cid,
+      });
+
+      console.log('WBI接口测试结果:', response);
+
+      if (response && response.success) {
+        showSuccess('WBI接口测试成功，请查看控制台日志');
+      } else {
+        showError('WBI接口测试失败: ' + (response?.message || '未知错误'));
+      }
+    } catch (error) {
+      console.error('测试WBI接口时出错:', error);
+      showError('测试WBI接口时出错: ' + (error.message || '未知错误'));
+    }
+  }
+
   // 导出字幕按钮事件
   exportSubtitleBtn.addEventListener('click', () => {
     exportSubtitleToTxt();
   });
+
+  // 添加一个函数来创建和添加测试按钮
+  function addTestApiButton() {
+    // 检查是否已经存在测试按钮
+    if (document.getElementById('testWbiApiBtn')) {
+      return; // 已存在则不重复添加
+    }
+
+    // 检查字幕容器是否存在
+    const subtitleContainer = document.getElementById('subtitleContainer');
+    if (!subtitleContainer) {
+      console.error('字幕容器不存在，无法添加测试按钮');
+      return;
+    }
+
+    const subtitleActions = subtitleContainer.querySelector('.subtitle-actions');
+    if (!subtitleActions) {
+      console.error('字幕操作区域不存在，无法添加测试按钮');
+      return;
+    }
+
+    // 创建测试按钮
+    const testApiBtn = document.createElement('button');
+    testApiBtn.id = 'testWbiApiBtn';
+    testApiBtn.className = 'action-btn secondary-btn';
+    testApiBtn.style.marginLeft = '10px';
+    testApiBtn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M12 8V4l8 8-8 8v-4H4V8z"/></svg>测试WBI接口';
+
+    // 添加按钮到操作区域
+    subtitleActions.appendChild(testApiBtn);
+
+    // 添加点击事件
+    testApiBtn.addEventListener('click', () => {
+      testWbiApi();
+    });
+
+    console.log('测试WBI接口按钮已添加');
+  }
 
   previewBtn.addEventListener('click', () => {
     if (generatedUrl) {

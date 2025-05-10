@@ -184,28 +184,57 @@ async function fetchWithHeaders(url) {
 // 处理WBI请求的特殊函数
 async function fetchWbiRequest(url, headers) {
   try {
-    const regularUrl = url;
+    // 使用原始的WBI URL，不替换为v2接口
+    console.log('使用WBI接口请求:', url);
+    console.log('请求头:', JSON.stringify(headers));
 
-    const response = await fetch(regularUrl, {
+    const response = await fetch(url, {
       method: 'GET',
       headers: headers,
-      credentials: 'include', // 改为include以确保Cookie被发送
+      credentials: 'include', // 确保Cookie被发送
     });
 
     if (!response.ok) {
-      console.error(`普通API请求失败: ${regularUrl}, 状态码: ${response.status}`);
+      console.error(`WBI请求失败: ${url}, 状态码: ${response.status}`);
       throw new Error(`请求失败，状态码: ${response.status}`);
     }
 
     const data = await response.json();
-    console.log('普通API请求响应:', data);
+
+    // 详细打印完整接口响应数据
+    console.log('===== WBI接口响应数据开始 =====');
+    console.log('状态码:', data.code);
+    console.log('消息:', data.message);
+    console.log('完整数据:', JSON.stringify(data, null, 2));
+    console.log('===== WBI接口响应数据结束 =====');
+
+    // 如果字幕数据特别关注subtitles字段
+    if (data.code === 0 && data.data && data.data.subtitle) {
+      console.log('===== 字幕数据详情 =====');
+      console.log('字幕列表数量:', (data.data.subtitle.subtitles || []).length);
+
+      const subtitles = data.data.subtitle.subtitles || [];
+      if (subtitles.length > 0) {
+        subtitles.forEach((sub, index) => {
+          console.log(`字幕[${index}]:`, {
+            id: sub.id,
+            lan: sub.lan,
+            lan_doc: sub.lan_doc,
+            url: sub.subtitle_url,
+          });
+        });
+      } else {
+        console.log('没有找到字幕数据');
+      }
+      console.log('===== 字幕数据详情结束 =====');
+    }
 
     // 如果返回-400错误并且消息中包含'Key:'，很可能是缺少必要参数
     if (data.code === -400 && data.message && data.message.includes('Key:')) {
       console.warn('API返回参数错误，可能需要额外参数:', data.message);
 
       // 尝试添加isGaiaAvoided=false参数后再次请求
-      let retryUrl = regularUrl;
+      let retryUrl = url;
       if (!retryUrl.includes('isGaiaAvoided=')) {
         retryUrl += (retryUrl.includes('?') ? '&' : '?') + 'isGaiaAvoided=false';
         console.log('尝试添加参数后再次请求:', retryUrl);
@@ -222,7 +251,11 @@ async function fetchWbiRequest(url, headers) {
         }
 
         const retryData = await retryResponse.json();
-        console.log('参数补充后API响应:', retryData);
+        console.log('===== 参数补充后API响应 =====');
+        console.log('状态码:', retryData.code);
+        console.log('消息:', retryData.message);
+        console.log('完整数据:', JSON.stringify(retryData, null, 2));
+        console.log('===== 参数补充后API响应结束 =====');
         return retryData;
       }
     }
@@ -344,7 +377,7 @@ async function getBilibiliSubtitle(cid, bvid, retryCount = 2) {
       };
     }
 
-    const subtitles = subtitleInfoData.data.subtitle.list || [];
+    const subtitles = subtitleInfoData.data.subtitle.subtitles || [];
     console.log('找到字幕列表数量:', subtitles.length);
 
     if (subtitles.length === 0) {
@@ -370,19 +403,36 @@ async function getBilibiliSubtitle(cid, bvid, retryCount = 2) {
 
         // 对于自动生成的字幕，需要通过另一个API获取实际的字幕URL
         try {
-          const aiSubtitleUrl = `https://api.bilibili.com/x/player/v2/ai/subtitle/search/stat?aid=${
-            aid || ''
-          }&bvid=${bvid}&cid=${cid}`;
+          const aiSubtitleUrl = `https://api.bilibili.com/x/player/v2/ai/subtitle/search/stat?aid=${aid}&cid=${cid}`;
           console.log('请求AI字幕URL:', aiSubtitleUrl);
 
+          // 添加详细日志
+          console.log('===== AI字幕URL请求开始 =====');
+          console.log(`请求URL: ${aiSubtitleUrl}`);
+          console.log(`Cookie状态: ${bilibiliCookie ? '已设置' : '未设置'}`);
+          if (bilibiliCookie) {
+            console.log(`Cookie前20字符: ${bilibiliCookie.substring(0, 20)}`);
+          }
+          console.log('===== AI字幕URL请求开始结束 =====');
+
           const aiSubtitleData = await fetchWithHeaders(aiSubtitleUrl);
+
+          // 添加响应详情日志
+          console.log('===== AI字幕URL响应详情 =====');
+          console.log('状态码:', aiSubtitleData.code);
+          console.log('消息:', aiSubtitleData.message);
+          console.log('完整响应:', JSON.stringify(aiSubtitleData, null, 2));
+
+          if (aiSubtitleData.code === 0 && aiSubtitleData.data) {
+            console.log('AI字幕URL:', aiSubtitleData.data.subtitle_url || '未找到');
+          }
+          console.log('===== AI字幕URL响应详情结束 =====');
+
           console.log('AI字幕响应:', aiSubtitleData);
 
           if (aiSubtitleData.code === 0 && aiSubtitleData.data && aiSubtitleData.data.subtitle_url) {
             // 找到了AI字幕的URL
-            const fullAiSubtitleUrl = aiSubtitleData.data.subtitle_url.startsWith('http')
-              ? aiSubtitleData.data.subtitle_url
-              : `https:${aiSubtitleData.data.subtitle_url}`;
+            const fullAiSubtitleUrl = formatSubtitleUrl(aiSubtitleData.data.subtitle_url);
 
             console.log('成功获取AI字幕URL:', fullAiSubtitleUrl);
 
@@ -413,6 +463,20 @@ async function getBilibiliSubtitle(cid, bvid, retryCount = 2) {
               }
 
               const subtitleData = await subtitleResponse.json();
+
+              // 检查是否是AI字幕格式
+              if (isAISubtitleFormat(subtitleData)) {
+                console.log('检测到AI字幕格式，使用专用处理');
+                const formattedData = formatAISubtitleData(subtitleData);
+                if (formattedData) {
+                  return {
+                    success: true,
+                    metadata: formattedData.metadata,
+                    subtitles: formattedData.subtitles,
+                    subtitleText: formattedData.subtitleText,
+                  };
+                }
+              }
 
               if (!subtitleData || !subtitleData.body) {
                 return {
@@ -476,31 +540,16 @@ async function getBilibiliSubtitle(cid, bvid, retryCount = 2) {
     }
 
     // 如果字幕URL是相对路径，添加基础URL
-    const fullSubtitleUrl = subtitleUrl.startsWith('http') ? subtitleUrl : `https:${subtitleUrl}`;
+    const fullSubtitleUrl = formatSubtitleUrl(subtitleUrl);
 
     console.log('字幕内容URL:', fullSubtitleUrl);
 
     // 使用带Headers的请求获取字幕内容，以避免可能的跨域问题
     try {
-      const subtitleHeaders = {
-        Referer: 'https://www.bilibili.com/video/' + bvid,
-        'User-Agent':
-          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-        Accept: 'application/json, text/plain, */*',
-        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
-        Origin: 'https://www.bilibili.com',
-        Connection: 'keep-alive',
-        'Cache-Control': 'no-cache',
-      };
+      console.log('🚀 subtitleResponse---:', '123');
+      const subtitleResponse = await fetch(fullSubtitleUrl);
 
-      // 如果有Cookie，添加到请求头中
-      if (bilibiliCookie) {
-        subtitleHeaders['Cookie'] = bilibiliCookie;
-      }
-
-      const subtitleResponse = await fetch(fullSubtitleUrl, {
-        headers: subtitleHeaders,
-      });
+      console.log('🚀 subtitleResponse---:', subtitleResponse);
 
       if (!subtitleResponse.ok) {
         console.error('获取字幕内容失败:', subtitleResponse.status);
@@ -510,8 +559,21 @@ async function getBilibiliSubtitle(cid, bvid, retryCount = 2) {
       const subtitleData = await subtitleResponse.json();
       console.log('成功获取字幕内容');
 
+      // 检查是否是AI字幕格式
+      if (isAISubtitleFormat(subtitleData)) {
+        console.log('检测到AI字幕格式，使用专用处理');
+        const formattedData = formatAISubtitleData(subtitleData);
+        if (formattedData) {
+          return {
+            success: true,
+            metadata: formattedData.metadata,
+            subtitles: formattedData.subtitles,
+            subtitleText: formattedData.subtitleText,
+          };
+        }
+      }
+
       if (!subtitleData || !subtitleData.body) {
-        console.log('字幕数据中不包含body字段');
         return {
           success: false,
           message: '解析字幕内容失败，可能是不支持的字幕格式',
@@ -766,6 +828,33 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     }
     return true; // 保持消息通道开启，等待异步响应
   }
+
+  // 处理测试WBI接口的消息
+  if (message.action === 'testWbiApi') {
+    console.log('收到测试WBI接口请求:', message);
+
+    if (!message.aid || !message.cid) {
+      sendResponse({
+        success: false,
+        message: '缺少必要参数aid或cid',
+      });
+      return true;
+    }
+
+    testWbiApi(message.aid, message.cid)
+      .then((result) => {
+        sendResponse(result);
+      })
+      .catch((error) => {
+        console.error('测试WBI接口出错:', error);
+        sendResponse({
+          success: false,
+          message: error.message || '测试WBI接口时发生错误',
+        });
+      });
+
+    return true; // 保持消息通道开启，等待异步响应
+  }
 });
 
 // 使用aid+cid方式获取字幕
@@ -775,7 +864,46 @@ async function fetchSubtitleWithAid(aid, cid, retryCount = 2) {
     const subtitleInfoUrl = `https://api.bilibili.com/x/player/wbi/v2?aid=${aid}&cid=${cid}`;
 
     console.log('字幕信息请求URL (aid方式):', subtitleInfoUrl);
+
+    // 记录请求前的关键信息
+    console.log('===== 字幕请求前信息 =====');
+    console.log(`请求URL: ${subtitleInfoUrl}`);
+    console.log(`Cookie状态: ${bilibiliCookie ? '已设置' : '未设置'}`);
+    if (bilibiliCookie) {
+      console.log(`Cookie长度: ${bilibiliCookie.length}`);
+      console.log(`Cookie前20字符: ${bilibiliCookie.substring(0, 20)}`);
+    }
+    diagnoseCookie(); // 运行Cookie诊断
+    console.log('===== 字幕请求前信息结束 =====');
+
     const subtitleInfoData = await fetchWithHeaders(subtitleInfoUrl);
+
+    // 记录完整的字幕响应数据
+    console.log('===== 字幕响应详细数据 =====');
+    console.log('状态码:', subtitleInfoData.code);
+    console.log('消息:', subtitleInfoData.message);
+
+    if (subtitleInfoData.code === 0 && subtitleInfoData.data) {
+      // 有字幕数据时输出详细信息
+      if (subtitleInfoData.data.subtitle) {
+        console.log('字幕信息:', JSON.stringify(subtitleInfoData.data.subtitle, null, 2));
+
+        // 输出每个字幕的详细信息
+        const subtitles = subtitleInfoData.data.subtitle.subtitles || [];
+        if (subtitles.length > 0) {
+          subtitles.forEach((sub, index) => {
+            console.log(`字幕[${index}] 详情:`, JSON.stringify(sub, null, 2));
+          });
+        } else {
+          console.log('字幕列表为空');
+        }
+      } else {
+        console.log('响应中不包含字幕数据');
+      }
+    } else {
+      console.log('响应状态码非0，无法获取字幕');
+    }
+    console.log('===== 字幕响应详细数据结束 =====');
 
     if (subtitleInfoData.code !== 0 || !subtitleInfoData.data) {
       console.error('获取字幕信息失败:', subtitleInfoData);
@@ -784,7 +912,6 @@ async function fetchSubtitleWithAid(aid, cid, retryCount = 2) {
 
     console.log('aid方式获取的字幕信息:', JSON.stringify(subtitleInfoData.data.subtitle || {}));
 
-    // 处理字幕信息的逻辑与getBilibiliSubtitle类似
     // 检查是否有字幕
     if (!subtitleInfoData.data.subtitle) {
       return {
@@ -793,17 +920,21 @@ async function fetchSubtitleWithAid(aid, cid, retryCount = 2) {
       };
     }
 
-    const subtitles = subtitleInfoData.data.subtitle.list || [];
+    const subtitles = subtitleInfoData.data.subtitle.subtitles || [];
+
+    console.log('🚀 subtitles:', subtitles, subtitleInfoData.data.subtitle);
     if (subtitles.length === 0) {
       return {
         success: false,
-        message: '该视频没有可用字幕',
+        message: '该视频没有可用字2幕',
       };
     }
 
     // 获取第一个字幕
     const defaultSubtitle = subtitles[0];
+    console.log('🚀 defaultSubtitle:', defaultSubtitle);
     const subtitleUrl = defaultSubtitle.subtitle_url;
+    console.log('🚀 subtitleUrl:', subtitleUrl);
 
     if (!subtitleUrl) {
       // 检查是否是自动生成字幕（AI字幕）
@@ -815,14 +946,33 @@ async function fetchSubtitleWithAid(aid, cid, retryCount = 2) {
           const aiSubtitleUrl = `https://api.bilibili.com/x/player/v2/ai/subtitle/search/stat?aid=${aid}&cid=${cid}`;
           console.log('请求AI字幕URL:', aiSubtitleUrl);
 
+          // 添加详细日志
+          console.log('===== AI字幕URL请求开始 =====');
+          console.log(`请求URL: ${aiSubtitleUrl}`);
+          console.log(`Cookie状态: ${bilibiliCookie ? '已设置' : '未设置'}`);
+          if (bilibiliCookie) {
+            console.log(`Cookie前20字符: ${bilibiliCookie.substring(0, 20)}`);
+          }
+          console.log('===== AI字幕URL请求开始结束 =====');
+
           const aiSubtitleData = await fetchWithHeaders(aiSubtitleUrl);
+
+          // 添加响应详情日志
+          console.log('===== AI字幕URL响应详情 =====');
+          console.log('状态码:', aiSubtitleData.code);
+          console.log('消息:', aiSubtitleData.message);
+          console.log('完整响应:', JSON.stringify(aiSubtitleData, null, 2));
+
+          if (aiSubtitleData.code === 0 && aiSubtitleData.data) {
+            console.log('AI字幕URL:', aiSubtitleData.data.subtitle_url || '未找到');
+          }
+          console.log('===== AI字幕URL响应详情结束 =====');
+
           console.log('AI字幕响应:', aiSubtitleData);
 
           if (aiSubtitleData.code === 0 && aiSubtitleData.data && aiSubtitleData.data.subtitle_url) {
             // 找到了AI字幕的URL
-            const fullAiSubtitleUrl = aiSubtitleData.data.subtitle_url.startsWith('http')
-              ? aiSubtitleData.data.subtitle_url
-              : `https:${aiSubtitleData.data.subtitle_url}`;
+            const fullAiSubtitleUrl = formatSubtitleUrl(aiSubtitleData.data.subtitle_url);
 
             console.log('成功获取AI字幕URL:', fullAiSubtitleUrl);
 
@@ -855,6 +1005,20 @@ async function fetchSubtitleWithAid(aid, cid, retryCount = 2) {
               }
 
               const subtitleData = await subtitleResponse.json();
+
+              // 检查是否是AI字幕格式
+              if (isAISubtitleFormat(subtitleData)) {
+                console.log('检测到AI字幕格式，使用专用处理');
+                const formattedData = formatAISubtitleData(subtitleData);
+                if (formattedData) {
+                  return {
+                    success: true,
+                    metadata: formattedData.metadata,
+                    subtitles: formattedData.subtitles,
+                    subtitleText: formattedData.subtitleText,
+                  };
+                }
+              }
 
               if (!subtitleData || !subtitleData.body) {
                 return {
@@ -918,7 +1082,7 @@ async function fetchSubtitleWithAid(aid, cid, retryCount = 2) {
     }
 
     // 处理URL
-    const fullSubtitleUrl = subtitleUrl.startsWith('http') ? subtitleUrl : `https:${subtitleUrl}`;
+    const fullSubtitleUrl = formatSubtitleUrl(subtitleUrl);
     console.log('字幕内容URL (aid方式):', fullSubtitleUrl);
 
     // 获取字幕内容
@@ -951,6 +1115,20 @@ async function fetchSubtitleWithAid(aid, cid, retryCount = 2) {
 
       const subtitleData = await subtitleResponse.json();
 
+      // 检查是否是AI字幕格式
+      if (isAISubtitleFormat(subtitleData)) {
+        console.log('检测到AI字幕格式，使用专用处理');
+        const formattedData = formatAISubtitleData(subtitleData);
+        if (formattedData) {
+          return {
+            success: true,
+            metadata: formattedData.metadata,
+            subtitles: formattedData.subtitles,
+            subtitleText: formattedData.subtitleText,
+          };
+        }
+      }
+
       if (!subtitleData || !subtitleData.body) {
         return {
           success: false,
@@ -958,7 +1136,9 @@ async function fetchSubtitleWithAid(aid, cid, retryCount = 2) {
         };
       }
 
+      // 如果字幕列表为空
       if (subtitleData.body.length === 0) {
+        console.log('字幕body列表为空');
         return {
           success: false,
           message: '字幕内容为空',
@@ -1012,5 +1192,126 @@ async function fetchSubtitleWithAid(aid, cid, retryCount = 2) {
     }
 
     throw error; // 向上传递错误，让调用者决定如何处理
+  }
+}
+
+// 在文件适当位置添加一个处理字幕URL的辅助函数
+function formatSubtitleUrl(url) {
+  if (!url) return '';
+
+  // 处理以//开头的URL，添加https:
+  if (url.startsWith('//')) {
+    return 'https:' + url;
+  }
+
+  // 处理不带协议头的URL
+  if (!url.startsWith('http://') && !url.startsWith('https://')) {
+    return 'https://' + url;
+  }
+
+  return url;
+}
+
+// 添加一个函数来检查是否是AI字幕格式
+function isAISubtitleFormat(data) {
+  return data && data.type === 'AIsubtitle' && Array.isArray(data.body);
+}
+
+// 添加一个函数处理AI字幕数据
+function formatAISubtitleData(data) {
+  if (!isAISubtitleFormat(data)) {
+    return null;
+  }
+
+  try {
+    // 将字幕内容格式化为文本
+    const subtitleText = data.body
+      .map((item) => {
+        const startTime = formatTime(item.from);
+        const endTime = formatTime(item.to);
+        return `${startTime} --> ${endTime}\n${item.content}\n`;
+      })
+      .join('\n');
+
+    return {
+      metadata: {
+        lan: data.lang || 'zh',
+        lan_doc: '自动生成字幕 (AI)',
+        ai_type: true,
+      },
+      subtitles: data.body,
+      subtitleText: subtitleText,
+    };
+  } catch (error) {
+    console.error('格式化AI字幕数据失败:', error);
+    return null;
+  }
+}
+
+// 添加一个测试WBI接口的函数
+async function testWbiApi(aid, cid) {
+  try {
+    console.log('==== 开始测试WBI接口 ====');
+    console.log(`参数: aid=${aid}, cid=${cid}`);
+
+    // 构建URL
+    const wbiUrl = `https://api.bilibili.com/x/player/wbi/v2?aid=${aid}&cid=${cid}`;
+    console.log(`请求URL: ${wbiUrl}`);
+
+    // 诊断Cookie
+    diagnoseCookie();
+
+    // 创建请求头
+    const headers = {
+      'User-Agent':
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+      Accept: 'application/json, text/plain, */*',
+      'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+      Origin: 'https://www.bilibili.com',
+      Referer: 'https://www.bilibili.com/',
+    };
+
+    // 添加Cookie
+    if (bilibiliCookie && bilibiliCookie.trim() !== '') {
+      headers['Cookie'] = bilibiliCookie;
+      console.log('已添加Cookie到请求头');
+    } else {
+      console.log('未添加Cookie，因为Cookie未设置或为空');
+    }
+
+    console.log('请求头:', JSON.stringify(headers, null, 2));
+
+    // 发送请求
+    console.log('正在发送请求...');
+    const response = await fetch(wbiUrl, {
+      method: 'GET',
+      headers: headers,
+      credentials: 'include',
+    });
+
+    console.log('请求已发送，状态码:', response.status);
+
+    // 获取响应数据
+    const data = await response.json();
+
+    console.log('===== WBI接口测试响应 =====');
+    console.log('状态码:', data.code);
+    console.log('消息:', data.message);
+    console.log('完整响应数据:');
+    console.log(JSON.stringify(data, null, 2));
+    console.log('===== WBI接口测试响应结束 =====');
+
+    return {
+      success: data.code === 0,
+      data: data,
+    };
+  } catch (error) {
+    console.error('WBI接口测试失败:', error);
+    return {
+      success: false,
+      error: error.message || '未知错误',
+    };
+  } finally {
+    console.log('==== 测试WBI接口结束 ====');
   }
 }
