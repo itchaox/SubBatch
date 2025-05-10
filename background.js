@@ -184,72 +184,50 @@ async function fetchWithHeaders(url) {
 // 处理WBI请求的特殊函数
 async function fetchWbiRequest(url, headers) {
   try {
-    // 如果URL中已经包含w_rid和wts参数，直接使用
-    if (url.includes('w_rid=') && url.includes('wts=')) {
-      console.log('使用URL中已有的WBI参数');
-      const response = await fetch(url, {
-        method: 'GET',
-        headers: headers,
-        credentials: 'include', // WBI接口需要包含credentials
-      });
+    const regularUrl = url;
 
-      if (!response.ok) {
-        console.error(`WBI请求失败: ${url}, 状态码: ${response.status}`);
-        throw new Error(`WBI请求失败，状态码: ${response.status}`);
-      }
+    const response = await fetch(regularUrl, {
+      method: 'GET',
+      headers: headers,
+      credentials: 'include', // 改为include以确保Cookie被发送
+    });
 
-      const data = await response.json();
-      console.log('WBI API请求响应:', data);
-      return data;
-    } else {
-      // 如果URL中没有WBI参数，尝试使用普通v2接口替代
-      console.log('缺少WBI签名参数，尝试使用普通v2接口替代');
-      const regularUrl = url.replace('/x/player/wbi/v2', '/x/player/wbi/v2');
-      console.log('替换为普通接口URL:', regularUrl);
-
-      const response = await fetch(regularUrl, {
-        method: 'GET',
-        headers: headers,
-        credentials: 'include', // 改为include以确保Cookie被发送
-      });
-
-      if (!response.ok) {
-        console.error(`普通API请求失败: ${regularUrl}, 状态码: ${response.status}`);
-        throw new Error(`请求失败，状态码: ${response.status}`);
-      }
-
-      const data = await response.json();
-      console.log('普通API请求响应:', data);
-
-      // 如果返回-400错误并且消息中包含'Key:'，很可能是缺少必要参数
-      if (data.code === -400 && data.message && data.message.includes('Key:')) {
-        console.warn('API返回参数错误，可能需要额外参数:', data.message);
-
-        // 尝试添加isGaiaAvoided=false参数后再次请求
-        let retryUrl = regularUrl;
-        if (!retryUrl.includes('isGaiaAvoided=')) {
-          retryUrl += (retryUrl.includes('?') ? '&' : '?') + 'isGaiaAvoided=false';
-          console.log('尝试添加参数后再次请求:', retryUrl);
-
-          const retryResponse = await fetch(retryUrl, {
-            method: 'GET',
-            headers: headers,
-            credentials: 'include',
-          });
-
-          if (!retryResponse.ok) {
-            console.error(`参数补充后请求仍然失败: ${retryUrl}, 状态码: ${retryResponse.status}`);
-            return data; // 返回原始错误
-          }
-
-          const retryData = await retryResponse.json();
-          console.log('参数补充后API响应:', retryData);
-          return retryData;
-        }
-      }
-
-      return data;
+    if (!response.ok) {
+      console.error(`普通API请求失败: ${regularUrl}, 状态码: ${response.status}`);
+      throw new Error(`请求失败，状态码: ${response.status}`);
     }
+
+    const data = await response.json();
+    console.log('普通API请求响应:', data);
+
+    // 如果返回-400错误并且消息中包含'Key:'，很可能是缺少必要参数
+    if (data.code === -400 && data.message && data.message.includes('Key:')) {
+      console.warn('API返回参数错误，可能需要额外参数:', data.message);
+
+      // 尝试添加isGaiaAvoided=false参数后再次请求
+      let retryUrl = regularUrl;
+      if (!retryUrl.includes('isGaiaAvoided=')) {
+        retryUrl += (retryUrl.includes('?') ? '&' : '?') + 'isGaiaAvoided=false';
+        console.log('尝试添加参数后再次请求:', retryUrl);
+
+        const retryResponse = await fetch(retryUrl, {
+          method: 'GET',
+          headers: headers,
+          credentials: 'include',
+        });
+
+        if (!retryResponse.ok) {
+          console.error(`参数补充后请求仍然失败: ${retryUrl}, 状态码: ${retryResponse.status}`);
+          return data; // 返回原始错误
+        }
+
+        const retryData = await retryResponse.json();
+        console.log('参数补充后API响应:', retryData);
+        return retryData;
+      }
+    }
+
+    return data;
   } catch (error) {
     console.error('WBI请求处理出错:', error);
     throw error;
