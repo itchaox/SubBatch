@@ -2,6 +2,8 @@ document.addEventListener('DOMContentLoaded', function () {
   console.log('DOM加载完成，初始化脚本...');
 
   const getUrlBtn = document.querySelector('.get-url-btn');
+  const getCollectBtn = document.querySelector('.get-collect-btn');
+
   const tableUrlInput = document.getElementById('tableUrlInput');
   const clearBtn = document.querySelector('.clear-btn');
   const bilibiliCookieInput = document.getElementById('bilibiliCookie');
@@ -451,6 +453,20 @@ document.addEventListener('DOMContentLoaded', function () {
       const response = await chrome.runtime.sendMessage({ action: 'getTabUrl' });
       if (response?.url) {
         tableUrlInput.value = response.url;
+        resetVideoInfo();
+        showSuccess('已获取当前页面地址');
+      }
+    } catch (error) {
+      console.error('获取URL失败:', error);
+      showError('获取地址失败，请重试');
+    }
+  });
+
+  getCollectBtn.addEventListener('click', async () => {
+    try {
+      const response = await chrome.runtime.sendMessage({ action: 'getTabUrl' });
+      if (response?.url) {
+        favoriteUrlInput.value = response.url;
         resetVideoInfo();
         showSuccess('已获取当前页面地址');
       }

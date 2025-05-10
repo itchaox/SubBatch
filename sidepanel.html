@@ -145,6 +145,44 @@
         fill: currentColor;
       }
 
+      .get-collect-btn {
+        width: 100%;
+        max-width: 400px;
+        margin-bottom: 16px;
+        padding: 10px 20px;
+        background-color: #f9b308; /* 由蓝色#3370ff改为黄色#F9B308 */
+
+        color: white;
+        border: none;
+        border-radius: 8px;
+        font-size: 14px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        box-shadow: 0 2px 8px rgba(249, 179, 8, 0.3); /* 阴影也改为匹配黄色 */
+      }
+
+      .get-collect-btn:hover {
+        background-color: #ffd166; /* hover状态为更亮的黄色 */
+
+        transform: translateY(-1px);
+        box-shadow: 0 4px 12px rgba(249, 179, 8, 0.4);
+      }
+
+      .get-collect-btn:active {
+        transform: translateY(1px);
+      }
+
+      .get-collect-btn svg {
+        width: 16px;
+        height: 16px;
+        fill: currentColor;
+      }
+
       .button-group {
         margin-top: 12px;
         display: flex;
@@ -651,12 +689,21 @@
         关注我
       </button>
     </div>
-    <button class="get-url-btn">
-      <svg viewBox="0 0 24 24">
-        <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
-      </svg>
-      获取当前页面地址
-    </button>
+    <div style="display: flex; gap: 10px; width: 90%">
+      <button class="get-url-btn">
+        <svg viewBox="0 0 24 24">
+          <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
+        </svg>
+        获取视频地址
+      </button>
+
+      <button class="get-collect-btn">
+        <svg viewBox="0 0 24 24">
+          <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
+        </svg>
+        获取收藏夹地址
+      </button>
+    </div>
     <div class="input-container">
       <div class="input-row">
         <label class="input-label">Cookie：</label>
