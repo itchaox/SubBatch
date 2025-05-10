@@ -583,6 +583,110 @@ document.addEventListener('DOMContentLoaded', function () {
     chrome.tabs.create({ url: 'https://space.bilibili.com/521041866' });
   });
 
+  // 获取收藏夹地址输入框和解析按钮
+  const favoriteUrlInput = document.getElementById('favoriteUrlInput');
+  const parseFavoriteUrlBtn = document.getElementById('getFavoriteBtn');
+
+  // 为解析收藏夹地址按钮添加事件监听
+  if (parseFavoriteUrlBtn && favoriteUrlInput) {
+    parseFavoriteUrlBtn.addEventListener('click', async () => {
+      const favoriteUrl = favoriteUrlInput.value.trim();
+      if (!favoriteUrl) {
+        showError('请输入B站收藏夹地址');
+        favoriteUrlInput.focus();
+        return;
+      }
+
+      // 从URL中提取fid参数
+      const fidRegex = /[?&]fid=(\d+)/;
+      const fidMatch = favoriteUrl.match(fidRegex);
+
+      if (!fidMatch || !fidMatch[1]) {
+        showError('无法从URL中提取收藏夹ID (fid参数)');
+        return;
+      }
+
+      const fid = fidMatch[1];
+      console.log('从URL中提取的收藏夹ID:', fid);
+
+      // 禁用按钮并显示加载状态
+      parseFavoriteUrlBtn.disabled = true;
+      parseFavoriteUrlBtn.innerHTML = `
+        <svg viewBox="0 0 24 24" class="spin">
+          <path d="M12 6v3l4-4-4-4v3c-4.42 0-8 3.58-8 8 0 1.57.46 3.03 1.24 4.26L6.7 14.8c-.45-.83-.7-1.79-.7-2.8 0-3.31 2.69-6 6-6zm6.76 1.74L17.3 9.2c.44.84.7 1.79.7 2.8 0 3.31-2.69 6-6 6v-3l-4 4 4 4v-3c4.42 0 8-3.58 8-8 0-1.57-.46-3.03-1.24-4.26z"/>
+        </svg>
+        获取中...
+      `;
+
+      // 显示正在处理的提示
+      showSuccess('正在获取收藏夹内容，请稍候...');
+
+      // 构建API请求参数
+      const page = 1; // 默认第1页
+      const pageSize = 20; // 默认每页20条
+
+      try {
+        // 使用Promise包装chrome.runtime.sendMessage调用
+        const response = await new Promise((resolve, reject) => {
+          // 设置超时处理
+          const timeoutId = setTimeout(() => {
+            reject(new Error('请求超时，background.js没有及时响应'));
+          }, 15000); // 15秒超时
+
+          chrome.runtime.sendMessage(
+            {
+              action: 'fetchFavoriteList',
+              mediaId: fid,
+              page: page,
+              pageSize: pageSize,
+            },
+            (response) => {
+              clearTimeout(timeoutId); // 清除超时计时器
+
+              // 检查是否有错误
+              const error = chrome.runtime.lastError;
+              if (error) {
+                console.error('发送消息时出错:', error);
+                reject(error);
+                return;
+              }
+
+              resolve(response);
+            },
+          );
+        });
+
+        // 处理响应
+        if (response && response.success) {
+          showSuccess('成功获取收藏夹内容');
+          console.log('收藏夹API响应:', response);
+
+          // 如果需要，在这里处理收藏夹内容数据
+          if (response.data && response.data.medias && response.data.medias.length > 0) {
+            const videos = response.data.medias;
+            console.log(`收藏夹中有${videos.length}个视频`);
+          }
+        } else {
+          const errorMsg = response?.message || '获取收藏夹内容失败';
+          showError(errorMsg);
+          console.error('获取收藏夹失败:', response);
+        }
+      } catch (error) {
+        console.error('获取收藏夹出错:', error);
+        showError('获取收藏夹内容失败: ' + (error.message || '未知错误'));
+      } finally {
+        // 恢复按钮状态
+        parseFavoriteUrlBtn.disabled = false;
+        parseFavoriteUrlBtn.innerHTML = `
+          <svg viewBox="0 0 24 24">
+            <path d="M17 3H7c-1.1 0-1.99.9-1.99 2L5 21l7-3 7 3V5c0-1.1-.9-2-2-2z"/>
+          </svg>
+          获取收藏夹的视频
+        `;
+      }
+    });
+  }
+
   // 添加视频到表格
   function addVideoToTable(videoInfo) {
     if (!videoInfo || !videoInfo.title) {

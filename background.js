@@ -855,6 +855,129 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     return true; // 保持消息通道开启，等待异步响应
   }
+
+  // 处理获取收藏夹列表的消息
+  if (message.action === 'fetchFavoriteList') {
+    console.log('收到获取收藏夹列表请求:', message);
+
+    if (!message.mediaId) {
+      console.error('获取收藏夹请求缺少必要参数 mediaId');
+      sendResponse({
+        success: false,
+        message: '缺少必要参数mediaId，请确保已提取收藏夹ID',
+      });
+      return true;
+    }
+
+    const page = message.page || 1;
+    const pageSize = message.pageSize || 20;
+
+    // 为确保在任何情况下都能返回响应，保存sendResponse引用
+    const responseSender = sendResponse;
+
+    try {
+      // 构建收藏夹API URL - 添加平台参数和时间戳减少缓存问题
+      const favoriteUrl = `https://api.bilibili.com/x/v3/fav/resource/list?media_id=${
+        message.mediaId
+      }&pn=${page}&ps=${pageSize}&platform=web&t=${Date.now()}`;
+      console.log('收藏夹API请求URL:', favoriteUrl);
+
+      // 检查Cookie状态
+      console.log('收藏夹请求前Cookie状态:');
+      logCookieStatus();
+      diagnoseCookie();
+
+      // 创建请求头
+      const headers = {
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+        Accept: 'application/json, text/plain, */*',
+        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+        Origin: 'https://www.bilibili.com',
+        Referer: 'https://space.bilibili.com/',
+      };
+
+      // 如果有Cookie，添加到请求头中
+      if (bilibiliCookie && bilibiliCookie.trim() !== '') {
+        headers['Cookie'] = bilibiliCookie;
+        console.log('收藏夹请求已添加Cookie (部分显示):', bilibiliCookie.substring(0, 20) + '...');
+      } else {
+        console.log('收藏夹请求未添加Cookie，因为Cookie未设置或为空');
+      }
+
+      // 使用setTimeout确保在单独的任务中执行网络请求，避免消息端口提前关闭
+      setTimeout(() => {
+        fetch(favoriteUrl, {
+          method: 'GET',
+          headers: headers,
+          credentials: 'include',
+        })
+          .then((response) => {
+            console.log('收藏夹API响应状态:', response.status);
+
+            if (!response.ok) {
+              throw new Error(`HTTP请求失败，状态码: ${response.status}`);
+            }
+
+            return response.json();
+          })
+          .then((result) => {
+            console.log('收藏夹API响应:', result);
+
+            try {
+              if (result.code === 0 && result.data) {
+                responseSender({
+                  success: true,
+                  data: result.data,
+                  message: '获取收藏夹内容成功',
+                });
+              } else {
+                responseSender({
+                  success: false,
+                  message: result.message || '获取收藏夹内容失败',
+                  code: result.code,
+                });
+              }
+            } catch (sendError) {
+              console.error('发送响应时出错:', sendError);
+              // 尝试再次发送响应
+              try {
+                responseSender({
+                  success: false,
+                  message: '发送响应时出错: ' + sendError.message,
+                });
+              } catch (finalError) {
+                console.error('最终尝试发送响应也失败:', finalError);
+              }
+            }
+          })
+          .catch((error) => {
+            console.error('获取收藏夹内容出错:', error);
+
+            try {
+              responseSender({
+                success: false,
+                message: error.message || '网络请求错误',
+              });
+            } catch (sendError) {
+              console.error('发送错误响应时出错:', sendError);
+            }
+          });
+      }, 0);
+    } catch (error) {
+      console.error('准备收藏夹请求时出错:', error);
+      try {
+        responseSender({
+          success: false,
+          message: '准备请求时出错: ' + error.message,
+        });
+      } catch (sendError) {
+        console.error('发送错误响应时出错:', sendError);
+      }
+    }
+
+    return true; // 保持消息通道开启，等待异步响应
+  }
 });
 
 // 使用aid+cid方式获取字幕
