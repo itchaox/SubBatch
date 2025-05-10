@@ -614,6 +614,7 @@
       table {
         width: 100%;
         border-collapse: collapse;
+        table-layout: fixed;
       }
 
       th,
@@ -621,6 +622,37 @@
         padding: 12px;
         text-align: left;
         border-bottom: 1px solid #eee;
+        /* overflow: hidden; */
+        /* text-overflow: ellipsis; */
+        /* white-space: nowrap; */
+      }
+
+      th:nth-child(1),
+      td:nth-child(1) {
+        width: 30px;
+      }
+
+      th:nth-child(2),
+      td:nth-child(2) {
+        width: auto;
+        min-width: 100px;
+      }
+
+      th:nth-child(3),
+      td:nth-child(3) {
+        width: 100px;
+      }
+
+      th:nth-child(4),
+      td:nth-child(4) {
+        width: 80px;
+        text-align: center;
+      }
+
+      th:nth-child(5),
+      td:nth-child(5) {
+        width: 50px;
+        text-align: center;
       }
 
       th {
@@ -888,6 +920,12 @@
     <div
       id="successToast"
       class="success-toast"
+      style="
+        border-radius: 10px;
+        box-shadow: 0 6px 16px rgba(0, 0, 0, 0.1);
+        backdrop-filter: blur(8px);
+        background-color: rgba(255, 255, 255, 0.95);
+      "
     >
       <svg
         class="success-toast-icon"
