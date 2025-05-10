@@ -1,13 +1,13 @@
 document.addEventListener('DOMContentLoaded', function () {
   const getUrlBtn = document.querySelector('.get-url-btn');
-  const tableUrlInput = document.getElementById('tableUrl');
+  const tableUrlInput = document.getElementById('tableUrlInput');
   const clearBtn = document.querySelector('.clear-btn');
   const bilibiliCookieInput = document.getElementById('bilibiliCookie');
   const cookieClearBtn = document.querySelector('.cookie-clear-btn');
   const applyCookieBtn = document.getElementById('applyCookieBtn');
   const errorToast = document.getElementById('errorToast');
   const successToast = document.getElementById('successToast');
-  const generateUrlBtn = document.getElementById('generateUrlBtn');
+  const getVideoInfoBtn = document.getElementById('getVideoInfoBtn');
   const previewBtn = document.getElementById('previewBtn');
   const copyBtn = document.getElementById('copyBtn');
   const sponsorBtn = document.getElementById('sponsorBtn');
@@ -26,9 +26,16 @@ document.addEventListener('DOMContentLoaded', function () {
   const downloadVideoBtn = document.getElementById('downloadVideoBtn');
   const transcribeAudioBtn = document.getElementById('transcribeAudioBtn');
 
+  // 表格相关元素
+  const videoTableBody = document.getElementById('videoTableBody');
+  const exportTableBtn = document.getElementById('exportTableBtn');
+  const clearTableBtn = document.getElementById('clearTableBtn');
+
   let generatedUrl = '';
   let currentVideoInfo = null;
   let currentSubtitleData = null;
+  // 视频列表数组，用于存储添加到表格的视频
+  let videoList = [];
 
   // 显示错误提示
   function showError(message) {
@@ -489,8 +496,8 @@ document.addEventListener('DOMContentLoaded', function () {
     showSuccess('Cookie已应用');
   });
 
-  // 监听获取视频信息前先设置Cookie
-  generateUrlBtn.addEventListener('click', async () => {
+  // 修改获取视频信息按钮的事件监听
+  getVideoInfoBtn.addEventListener('click', async () => {
     // 先设置Cookie
     setCookie();
 
@@ -503,12 +510,16 @@ document.addEventListener('DOMContentLoaded', function () {
 
       // 如果是B站视频链接，获取视频信息
       if (isBilibiliUrl(generatedUrl)) {
-        await fetchBilibiliVideoInfo(generatedUrl);
+        const videoInfo = await fetchBilibiliVideoInfo(generatedUrl);
+        if (videoInfo && videoInfo.success) {
+          // 添加到表格
+          addVideoToTable(videoInfo);
+        }
       } else {
         videoTitleElement.textContent = '不是B站视频链接，无法获取标题';
         videoInfoContainer.style.display = 'none';
         subtitleContainer.style.display = 'none';
-        showSuccess('已生成新地址');
+        showError('不是B站视频链接，无法添加');
       }
     }
   });
@@ -619,4 +630,204 @@ document.addEventListener('DOMContentLoaded', function () {
     chrome.tabs.create({ url: `https://www.bilibili.com/video/${currentVideoInfo.bvid}` });
     showSuccess('已打开视频页面，请使用第三方工具下载');
   });
+
+  // 添加视频到表格
+  function addVideoToTable(videoInfo) {
+    if (!videoInfo || !videoInfo.title) {
+      showError('视频信息不完整，无法添加到表格');
+      return;
+    }
+
+    // 检查是否已经存在相同bvid的视频
+    const existingVideo = videoList.find((v) => v.bvid === videoInfo.bvid);
+    if (existingVideo) {
+      showError('该视频已在表格中');
+      return;
+    }
+
+    // 创建一个包含所需信息的视频对象
+    const video = {
+      id: videoInfo.bvid || videoInfo.aid || Date.now().toString(),
+      bvid: videoInfo.bvid,
+      aid: videoInfo.aid,
+      cid: videoInfo.cid,
+      title: videoInfo.title,
+      author: videoInfo.author,
+      subtitleStatus: '未获取',
+      subtitleText: null,
+      view_count: videoInfo.view_count,
+      like_count: videoInfo.like_count,
+    };
+
+    // 添加到视频列表
+    videoList.push(video);
+
+    // 更新表格UI
+    updateVideoTable();
+
+    showSuccess('已添加到表格');
+  }
+
+  // 更新视频表格
+  function updateVideoTable() {
+    // 清空表格内容
+    videoTableBody.innerHTML = '';
+
+    // 如果没有视频，显示空状态
+    if (videoList.length === 0) {
+      const emptyRow = document.createElement('tr');
+      emptyRow.innerHTML = `<td colspan="5" style="text-align: center; padding: 20px;">暂无视频，请添加视频</td>`;
+      videoTableBody.appendChild(emptyRow);
+      return;
+    }
+
+    // 遍历视频列表，为每个视频创建表格行
+    videoList.forEach((video, index) => {
+      const row = document.createElement('tr');
+      row.innerHTML = `
+        <td>${index + 1}</td>
+        <td>${video.title}</td>
+        <td>${video.author}</td>
+        <td>${video.subtitleStatus}</td>
+        <td>
+          <button class="table-action-btn get-subtitle-row-btn" data-index="${index}">
+            获取字幕
+          </button>
+          <button class="table-action-btn remove-row-btn" data-index="${index}">
+            移除
+          </button>
+        </td>
+      `;
+      videoTableBody.appendChild(row);
+    });
+
+    // 为表格中的按钮添加事件监听
+    addTableButtonListeners();
+  }
+
+  // 为表格中的按钮添加事件监听
+  function addTableButtonListeners() {
+    // 为获取字幕按钮添加事件监听
+    document.querySelectorAll('.get-subtitle-row-btn').forEach((btn) => {
+      btn.addEventListener('click', async function () {
+        const index = parseInt(this.getAttribute('data-index'));
+        if (isNaN(index) || index < 0 || index >= videoList.length) {
+          showError('无效的视频索引');
+          return;
+        }
+
+        const video = videoList[index];
+
+        // 设置当前视频信息，以便获取字幕
+        currentVideoInfo = {
+          bvid: video.bvid,
+          aid: video.aid,
+          cid: video.cid,
+          title: video.title,
+        };
+
+        // 更新状态
+        videoList[index].subtitleStatus = '获取中...';
+        updateVideoTable();
+
+        // 获取字幕
+        const subtitleData = await fetchBilibiliSubtitle();
+
+        if (subtitleData && subtitleData.success) {
+          // 更新字幕状态和内容
+          videoList[index].subtitleStatus = '已获取';
+          videoList[index].subtitleText = subtitleData.subtitleText;
+        } else {
+          // 获取失败
+          videoList[index].subtitleStatus = '获取失败';
+        }
+
+        // 更新表格
+        updateVideoTable();
+      });
+    });
+
+    // 为移除按钮添加事件监听
+    document.querySelectorAll('.remove-row-btn').forEach((btn) => {
+      btn.addEventListener('click', function () {
+        const index = parseInt(this.getAttribute('data-index'));
+        if (isNaN(index) || index < 0 || index >= videoList.length) {
+          showError('无效的视频索引');
+          return;
+        }
+
+        // 移除视频
+        videoList.splice(index, 1);
+
+        // 更新表格
+        updateVideoTable();
+        showSuccess('已从表格中移除');
+      });
+    });
+  }
+
+  // 导出表格数据为CSV文件
+  function exportTableToCSV() {
+    if (videoList.length === 0) {
+      showError('表格为空，无法导出');
+      return;
+    }
+
+    try {
+      // 创建CSV内容
+      let csvContent = '序号,视频标题,作者,字幕状态,视频地址,字幕内容\n';
+
+      videoList.forEach((video, index) => {
+        // 处理字幕内容，去除换行符等特殊字符
+        const subtitleText = video.subtitleText ? video.subtitleText.replace(/\n/g, ' ').replace(/"/g, '""') : '';
+
+        // 创建CSV行
+        csvContent += `${index + 1},"${video.title}","${video.author}","${
+          video.subtitleStatus
+        }","https://www.bilibili.com/video/${video.bvid}","${subtitleText}"\n`;
+      });
+
+      // 创建Blob对象
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+
+      // 创建下载链接
+      const downloadLink = document.createElement('a');
+      downloadLink.href = url;
+      downloadLink.download = `B站视频字幕列表_${new Date().toISOString().slice(0, 10)}.csv`;
+
+      // 添加到文档并点击
+      document.body.appendChild(downloadLink);
+      downloadLink.click();
+
+      // 清理
+      document.body.removeChild(downloadLink);
+      URL.revokeObjectURL(url);
+
+      showSuccess('表格导出成功');
+    } catch (error) {
+      console.error('导出表格错误:', error);
+      showError('导出表格失败: ' + (error.message || '未知错误'));
+    }
+  }
+
+  // 清空表格
+  function clearTable() {
+    videoList = [];
+    updateVideoTable();
+    showSuccess('表格已清空');
+  }
+
+  // 为导出表格按钮添加事件监听
+  exportTableBtn.addEventListener('click', () => {
+    exportTableToCSV();
+  });
+
+  // 为清空表格按钮添加事件监听
+  clearTableBtn.addEventListener('click', () => {
+    clearTable();
+  });
+
+  // 初始化表格
+  updateVideoTable();
 });

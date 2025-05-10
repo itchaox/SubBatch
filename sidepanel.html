@@ -539,6 +539,56 @@
         color: #666;
         flex: 1;
       }
+
+      /* 批量视频表格样式 */
+      .video-table-container {
+        margin-top: 20px;
+        padding: 20px;
+        background-color: white;
+        border-radius: 8px;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+      }
+
+      .table-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 16px;
+      }
+
+      .table-header h3 {
+        font-size: 18px;
+        font-weight: 500;
+      }
+
+      .table-actions {
+        display: flex;
+        gap: 12px;
+      }
+
+      .table-container {
+        overflow-x: auto;
+      }
+
+      table {
+        width: 100%;
+        border-collapse: collapse;
+      }
+
+      th,
+      td {
+        padding: 12px;
+        text-align: left;
+        border-bottom: 1px solid #eee;
+      }
+
+      th {
+        background-color: #f8f9fa;
+      }
+
+      tbody tr:hover {
+        background-color: #f0f2f5;
+      }
     </style>
   </head>
   <body>
@@ -606,41 +656,48 @@
         <span class="cookie-tip">在每次请求前Cookie会自动应用</span>
       </div>
 
-      <div class="input-row">
-        <label
-          class="input-label"
-          for="tableUrl"
-          >视频地址</label
-        >
-        <div class="input-wrapper">
+      <!-- 视频地址输入框 -->
+      <div class="input-group">
+        <div class="input-label">视频地址</div>
+        <div class="input-container">
           <input
+            id="tableUrlInput"
             type="text"
-            id="tableUrl"
-            class="input-field"
-            placeholder="请输入B站视频地址"
+            placeholder="输入B站视频地址"
           />
           <button
-            class="clear-btn"
-            title="清空输入"
+            id="getVideoInfoBtn"
+            class="action-btn primary-btn"
           >
-            <svg viewBox="0 0 24 24">
-              <path
-                d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"
-              />
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+            >
+              <circle
+                cx="12"
+                cy="12"
+                r="10"
+              ></circle>
+              <line
+                x1="12"
+                y1="8"
+                x2="12"
+                y2="16"
+              ></line>
+              <line
+                x1="8"
+                y1="12"
+                x2="16"
+                y2="12"
+              ></line>
             </svg>
+            添加到表格
           </button>
         </div>
-      </div>
-      <div class="button-group">
-        <button
-          id="generateUrlBtn"
-          class="action-btn primary-btn"
-        >
-          <svg viewBox="0 0 24 24">
-            <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
-          </svg>
-          获取视频标题
-        </button>
       </div>
 
       <!-- 视频标题显示区域 -->
@@ -756,6 +813,53 @@
         </div>
       </div>
     </div>
+
+    <!-- 批量视频表格 -->
+    <div
+      id="videoTableContainer"
+      class="video-table-container"
+    >
+      <div class="table-header">
+        <h3>批量视频列表</h3>
+        <div class="table-actions">
+          <button
+            id="exportTableBtn"
+            class="action-btn secondary-btn"
+          >
+            <svg viewBox="0 0 24 24">
+              <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" />
+            </svg>
+            导出表格
+          </button>
+          <button
+            id="clearTableBtn"
+            class="action-btn secondary-btn"
+          >
+            <svg viewBox="0 0 24 24">
+              <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z" />
+            </svg>
+            清空表格
+          </button>
+        </div>
+      </div>
+      <div class="table-container">
+        <table id="videoTable">
+          <thead>
+            <tr>
+              <th>序号</th>
+              <th>视频标题</th>
+              <th>作者</th>
+              <th>字幕状态</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="videoTableBody">
+            <!-- 表格内容将通过JavaScript动态添加 -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+
     <!-- Toast通知 -->
     <div
       id="errorToast"
