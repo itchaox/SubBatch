@@ -895,74 +895,121 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   }
 
-  // 导出表格数据为CSV文件
-  function exportTableToCSV() {
+  // 批量导出字幕为独立的TXT文件
+  async function batchExportSubtitles() {
     if (videoList.length === 0) {
       showError('表格为空，无法导出');
       return;
     }
 
+    // 筛选出已获取字幕的视频
+    const videosWithSubtitle = videoList.filter(
+      (video) => video.subtitleStatus === '已获取' && video.subtitleText && video.subtitleText.trim() !== '',
+    );
+
+    if (videosWithSubtitle.length === 0) {
+      showError('没有可导出的字幕，请先获取字幕');
+      return;
+    }
+
     try {
-      // 创建CSV内容
-      let csvContent = '序号,视频标题,作者,字幕状态,视频地址,字幕内容\n';
+      // 获取并禁用导出按钮，显示处理状态
+      const exportTableBtn = document.getElementById('exportTableBtn');
+      if (exportTableBtn) {
+        exportTableBtn.disabled = true;
+        exportTableBtn.innerHTML = `
+          <svg viewBox="0 0 24 24" class="spin">
+            <path d="M12 6v3l4-4-4-4v3c-4.42 0-8 3.58-8 8 0 1.57.46 3.03 1.24 4.26L6.7 14.8c-.45-.83-.7-1.79-.7-2.8 0-3.31 2.69-6 6-6zm6.76 1.74L17.3 9.2c.44.84.7 1.79.7 2.8 0 3.31-2.69 6-6 6v-3l-4 4 4 4v-3c4.42 0 8-3.58 8-8 0-1.57-.46-3.03-1.24-4.26z"/>
+          </svg>
+          导出中...
+        `;
+      }
 
-      videoList.forEach((video, index) => {
-        // 处理字幕内容，转换为时间码+字幕文本的格式，便于阅读
-        let processedSubtitleText = '';
+      showSuccess(`开始批量导出字幕，共 ${videosWithSubtitle.length} 个文件`);
 
-        if (video.subtitleText) {
-          // 将字幕文本按行分割，提取时间码和文本
-          const lines = video.subtitleText.split('\n');
-          const subtitleLines = [];
+      let exportedCount = 0;
+      let errorCount = 0;
 
-          for (let i = 0; i < lines.length; i += 3) {
-            if (i + 1 < lines.length) {
-              const timecode = lines[i].trim();
-              const content = lines[i + 1].trim();
-              if (timecode && content) {
-                subtitleLines.push(`${timecode} ${content}`);
-              }
-            }
-          }
+      // 添加一个文本区域，用于给用户提供所有字幕文件的下载链接
+      const downloadLinksContainer = document.createElement('div');
+      downloadLinksContainer.style.display = 'none';
+      document.body.appendChild(downloadLinksContainer);
 
-          // 合并处理后的字幕行，并确保CSV格式正确
-          processedSubtitleText = subtitleLines.join(' || ').replace(/"/g, '""');
+      // 依次导出每个视频的字幕
+      for (const video of videosWithSubtitle) {
+        try {
+          // 创建文件名，移除不合法的文件名字符
+          const safeTitle = video.title.replace(/[\\/:*?"<>|]/g, '_');
+          const fileName = `${safeTitle}.txt`;
+
+          // 创建blob对象
+          const blob = new Blob([video.subtitleText], { type: 'text/plain;charset=utf-8' });
+
+          // 创建下载链接
+          const url = URL.createObjectURL(blob);
+          const downloadLink = document.createElement('a');
+          downloadLink.href = url;
+          downloadLink.download = fileName;
+
+          // 触发下载
+          downloadLink.style.display = 'none';
+          document.body.appendChild(downloadLink);
+          downloadLink.click();
+
+          // 稍后清理
+          setTimeout(() => {
+            document.body.removeChild(downloadLink);
+            URL.revokeObjectURL(url);
+          }, 100);
+
+          exportedCount++;
+
+          // 每导出一个更新一次状态
+          showSuccess(`已导出 ${exportedCount}/${videosWithSubtitle.length} 个字幕`);
+
+          // 添加延时，避免浏览器阻止多个下载
+          await new Promise((resolve) => setTimeout(resolve, 300));
+        } catch (videoError) {
+          console.error(`导出视频 "${video.title}" 的字幕失败:`, videoError);
+          errorCount++;
         }
+      }
 
-        // 视频地址
-        const videoUrl = video.bvid
-          ? `https://www.bilibili.com/video/${video.bvid}`
-          : video.aid
-          ? `https://www.bilibili.com/video/av${video.aid}`
-          : '';
+      // 清理容器
+      document.body.removeChild(downloadLinksContainer);
 
-        // 创建CSV行，保证所有内容都正确转义并包含在双引号中
-        csvContent += `${index + 1},"${video.title.replace(/"/g, '""')}","${video.author.replace(/"/g, '""')}","${
-          video.subtitleStatus
-        }","${videoUrl}","${processedSubtitleText}"\n`;
-      });
+      // 恢复按钮状态
+      if (exportTableBtn) {
+        exportTableBtn.disabled = false;
+        exportTableBtn.innerHTML = `
+          <svg viewBox="0 0 24 24">
+            <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" />
+          </svg>
+          批量导出字幕
+        `;
+      }
 
-      // 创建Blob对象，设置正确的编码 (添加BOM标记确保Excel正确识别UTF-8)
-      const blob = new Blob(['\ufeff' + csvContent], { type: 'text/csv;charset=utf-8;' });
-      const url = URL.createObjectURL(blob);
-
-      // 创建下载链接
-      const downloadLink = document.createElement('a');
-      downloadLink.href = url;
-      downloadLink.download = `B站视频字幕列表_${new Date().toISOString().slice(0, 10)}.csv`;
-
-      // 添加到文档并点击
-      document.body.appendChild(downloadLink);
-      downloadLink.click();
-
-      // 清理
-      document.body.removeChild(downloadLink);
-      URL.revokeObjectURL(url);
-
-      showSuccess('表格导出成功');
+      // 显示结果
+      if (errorCount === 0) {
+        showSuccess(`成功导出 ${exportedCount} 个字幕文件`);
+      } else {
+        showSuccess(`导出完成，成功: ${exportedCount}，失败: ${errorCount}`);
+      }
     } catch (error) {
-      console.error('导出表格错误:', error);
-      showError('导出表格失败: ' + (error.message || '未知错误'));
+      console.error('批量导出字幕错误:', error);
+      showError('批量导出字幕失败: ' + (error.message || '未知错误'));
+
+      // 恢复按钮状态
+      const exportTableBtn = document.getElementById('exportTableBtn');
+      if (exportTableBtn) {
+        exportTableBtn.disabled = false;
+        exportTableBtn.innerHTML = `
+          <svg viewBox="0 0 24 24">
+            <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" />
+          </svg>
+          批量导出字幕
+        `;
+      }
     }
   }
 
@@ -975,7 +1022,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
   // 为导出表格按钮添加事件监听
   if (exportTableBtn) {
-    exportTableBtn.addEventListener('click', exportTableToCSV);
+    exportTableBtn.addEventListener('click', batchExportSubtitles);
   }
 
   // 为清空表格按钮添加事件监听
