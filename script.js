@@ -10,7 +10,6 @@ document.addEventListener('DOMContentLoaded', function () {
   const generateUrlBtn = document.getElementById('generateUrlBtn');
   const previewBtn = document.getElementById('previewBtn');
   const copyBtn = document.getElementById('copyBtn');
-  const previewCopyGroup = document.querySelector('.preview-copy-group');
   const sponsorBtn = document.getElementById('sponsorBtn');
   const followBtn = document.getElementById('followBtn');
   const videoTitleElement = document.getElementById('videoTitle');
@@ -424,7 +423,6 @@ document.addEventListener('DOMContentLoaded', function () {
   // 事件监听器
   clearBtn.addEventListener('click', () => {
     tableUrlInput.value = '';
-    previewCopyGroup.classList.remove('show');
     resetVideoInfo();
     // 清空后自动聚焦输入框
     tableUrlInput.focus();
@@ -435,7 +433,6 @@ document.addEventListener('DOMContentLoaded', function () {
       const response = await chrome.runtime.sendMessage({ action: 'getTabUrl' });
       if (response?.url) {
         tableUrlInput.value = response.url;
-        previewCopyGroup.classList.remove('show');
         resetVideoInfo();
         showSuccess('已获取当前页面地址');
       }
@@ -500,8 +497,6 @@ document.addEventListener('DOMContentLoaded', function () {
     // 然后继续原有逻辑
     generatedUrl = generateUrl();
     if (generatedUrl) {
-      previewCopyGroup.classList.add('show');
-
       // 重置当前视频信息和字幕数据
       currentVideoInfo = null;
       currentSubtitleData = null;
@@ -585,23 +580,6 @@ document.addEventListener('DOMContentLoaded', function () {
       console.error('字幕操作区域不存在，无法添加测试按钮');
       return;
     }
-
-    // 创建测试按钮
-    const testApiBtn = document.createElement('button');
-    testApiBtn.id = 'testWbiApiBtn';
-    testApiBtn.className = 'action-btn secondary-btn';
-    testApiBtn.style.marginLeft = '10px';
-    testApiBtn.innerHTML = '<svg viewBox="0 0 24 24"><path d="M12 8V4l8 8-8 8v-4H4V8z"/></svg>测试WBI接口';
-
-    // 添加按钮到操作区域
-    subtitleActions.appendChild(testApiBtn);
-
-    // 添加点击事件
-    testApiBtn.addEventListener('click', () => {
-      testWbiApi();
-    });
-
-    console.log('测试WBI接口按钮已添加');
   }
 
   previewBtn.addEventListener('click', () => {
@@ -614,10 +592,6 @@ document.addEventListener('DOMContentLoaded', function () {
     if (generatedUrl) {
       copyToClipboard(generatedUrl);
     }
-  });
-
-  tableUrlInput.addEventListener('input', () => {
-    previewCopyGroup.classList.remove('show');
   });
 
   sponsorBtn.addEventListener('click', () => {
