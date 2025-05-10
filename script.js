@@ -1089,7 +1089,18 @@ document.addEventListener('DOMContentLoaded', function () {
         const url = URL.createObjectURL(zipBlob);
         const downloadLink = document.createElement('a');
         downloadLink.href = url;
-        downloadLink.download = `B站视频字幕_${new Date().toISOString().slice(0, 10)}.zip`;
+
+        // 格式化当前日期时间为 'SubBatch_年-月-日-时-分-秒' 格式
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const day = String(now.getDate()).padStart(2, '0');
+        const hours = String(now.getHours()).padStart(2, '0');
+        const minutes = String(now.getMinutes()).padStart(2, '0');
+        const seconds = String(now.getSeconds()).padStart(2, '0');
+        const formattedDateTime = `SubBatch_${year}-${month}-${day}-${hours}-${minutes}-${seconds}`;
+
+        downloadLink.download = `${formattedDateTime}.zip`;
 
         // 触发下载
         document.body.appendChild(downloadLink);
