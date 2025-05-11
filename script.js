@@ -1147,130 +1147,364 @@ document.addEventListener('DOMContentLoaded', function () {
         return;
       }
 
-      try {
-        // 获取并禁用导出按钮，显示处理状态
-        const exportTableBtn = document.getElementById('exportTableBtn');
-        if (exportTableBtn) {
-          exportTableBtn.disabled = true;
-          exportTableBtn.innerHTML = `
-            <svg viewBox="0 0 24 24" class="spin">
-              <path d="M12 6v3l4-4-4-4v3c-4.42 0-8 3.58-8 8 0 1.57.46 3.03 1.24 4.26L6.7 14.8c-.45-.83-.7-1.79-.7-2.8 0-3.31 2.69-6 6-6zm6.76 1.74L17.3 9.2c.44.84.7 1.79.7 2.8 0 3.31-2.69 6-6 6v-3l-4 4 4 4v-3c4.42 0 8-3.58 8-8 0-1.57-.46-3.03-1.24-4.26z"/>
-            </svg>
-            导出中...
-          `;
+      // 创建格式选择弹窗
+      showFormatSelectionDialog((selectedFormat) => {
+        if (!selectedFormat) {
+          return; // 用户取消了选择
         }
 
-        // 显示进度条
-        showProgress(true);
-        updateProgress(0, '准备导出字幕...');
+        console.log(`选择了导出格式: ${selectedFormat}`);
 
-        showSuccess(`开始批量导出字幕，共 ${videosWithSubtitle.length} 个文件`);
-
-        // 创建一个临时的zip文件夹
-        const zipContent = new JSZip();
-        let exportedCount = 0;
-        let errorCount = 0;
-
-        // 依次导出每个视频的字幕
-        for (const [index, video] of videosWithSubtitle.entries()) {
-          try {
-            // 创建文件名，移除不合法的文件名字符
-            const safeTitle = video.title.replace(/[\\/:*?"<>|]/g, '_');
-            const fileName = `${safeTitle}.txt`;
-
-            // 将字幕内容添加到zip文件
-            zipContent.file(fileName, video.subtitleText);
-            exportedCount++;
-
-            // 更新进度条
-            const percent = Math.floor(((index + 1) / videosWithSubtitle.length) * 100);
-            updateProgress(percent, `已处理 ${exportedCount}/${videosWithSubtitle.length} 个字幕`);
-
-            // 每添加一个更新一次状态
-            showSuccess(`已处理 ${exportedCount}/${videosWithSubtitle.length} 个字幕`);
-          } catch (videoError) {
-            console.error(`导出视频 "${video.title}" 的字幕失败:`, videoError);
-            errorCount++;
-          }
-        }
-
-        // 更新进度为100%
-        updateProgress(100, '压缩文件中...');
-
-        // 生成zip文件
-        const zipBlob = await zipContent.generateAsync({ type: 'blob' });
-
-        // 创建下载链接
-        const url = URL.createObjectURL(zipBlob);
-        const downloadLink = document.createElement('a');
-        downloadLink.href = url;
-
-        // 格式化当前日期时间为 'SubBatch_年-月-日-时-分-秒' 格式
-        const now = new Date();
-        const year = now.getFullYear();
-        const month = String(now.getMonth() + 1).padStart(2, '0');
-        const day = String(now.getDate()).padStart(2, '0');
-        const hours = String(now.getHours()).padStart(2, '0');
-        const minutes = String(now.getMinutes()).padStart(2, '0');
-        const seconds = String(now.getSeconds()).padStart(2, '0');
-        const formattedDateTime = `SubBatch_${year}-${month}-${day}-${hours}-${minutes}-${seconds}`;
-
-        downloadLink.download = `${formattedDateTime}.zip`;
-
-        // 触发下载
-        document.body.appendChild(downloadLink);
-        downloadLink.click();
-
-        // 清理
-        document.body.removeChild(downloadLink);
-        URL.revokeObjectURL(url);
-
-        // 短暂延迟后隐藏进度条
-        setTimeout(() => {
-          showProgress(false);
-        }, 1500);
-
-        // 恢复按钮状态
-        if (exportTableBtn) {
-          exportTableBtn.disabled = false;
-          exportTableBtn.innerHTML = `
-            <svg viewBox="0 0 24 24">
-              <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" />
-            </svg>
-            导出字幕
-          `;
-        }
-
-        // 显示结果
-        if (errorCount === 0) {
-          showSuccess(`成功导出 ${exportedCount} 个字幕文件到zip压缩包`);
-        } else {
-          showSuccess(`导出完成，成功: ${exportedCount}，失败: ${errorCount}`);
-        }
-      } catch (error) {
-        console.error('批量导出字幕错误:', error);
-        showError('批量导出字幕失败: ' + (error.message || '未知错误'));
-
-        // 隐藏进度条
-        showProgress(false);
-
-        // 恢复按钮状态
-        const exportTableBtn = document.getElementById('exportTableBtn');
-        if (exportTableBtn) {
-          exportTableBtn.disabled = false;
-          exportTableBtn.innerHTML = `
-            <svg viewBox="0 0 24 24">
-              <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" />
-            </svg>
-            导出字幕
-          `;
-        }
-      }
+        // 继续执行导出流程，并传入所选格式
+        executeExport(videosWithSubtitle, selectedFormat);
+      });
     } catch (error) {
       console.error('批量导出字幕外层错误:', error);
       showError('批量导出字幕失败: ' + (error.message || '未知错误'));
       showProgress(false);
     }
+  }
+
+  // 显示格式选择弹窗
+  function showFormatSelectionDialog(callback) {
+    // 创建弹窗背景
+    const dialogOverlay = document.createElement('div');
+    dialogOverlay.style.position = 'fixed';
+    dialogOverlay.style.top = '0';
+    dialogOverlay.style.left = '0';
+    dialogOverlay.style.width = '100%';
+    dialogOverlay.style.height = '100%';
+    dialogOverlay.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
+    dialogOverlay.style.display = 'flex';
+    dialogOverlay.style.justifyContent = 'center';
+    dialogOverlay.style.alignItems = 'center';
+    dialogOverlay.style.zIndex = '2000';
+    dialogOverlay.style.backdropFilter = 'blur(3px)';
+
+    // 创建弹窗内容
+    const dialogContent = document.createElement('div');
+    dialogContent.style.backgroundColor = 'white';
+    dialogContent.style.borderRadius = '12px';
+    dialogContent.style.padding = '20px';
+    dialogContent.style.width = '360px';
+    dialogContent.style.maxWidth = '90%';
+    dialogContent.style.boxShadow = '0 10px 25px rgba(0, 0, 0, 0.15)';
+    dialogContent.style.textAlign = 'center';
+
+    // 标题
+    const title = document.createElement('h3');
+    title.textContent = '选择导出格式';
+    title.style.margin = '0 0 16px 0';
+    title.style.color = '#333';
+    title.style.fontSize = '18px';
+
+    // 描述
+    const description = document.createElement('p');
+    description.textContent = '请选择要导出的字幕文件格式:';
+    description.style.margin = '0 0 20px 0';
+    description.style.color = '#666';
+    description.style.fontSize = '14px';
+
+    // 格式对比表
+    const formatTable = document.createElement('div');
+    formatTable.style.margin = '0 0 20px 0';
+    formatTable.style.border = '1px solid #eee';
+    formatTable.style.borderRadius = '8px';
+    formatTable.style.overflow = 'hidden';
+    formatTable.style.fontSize = '13px';
+    formatTable.style.textAlign = 'left';
+
+    formatTable.innerHTML = `
+      <table style="width:100%; border-collapse:collapse; margin-bottom:20px;">
+        <tr style="background-color:#f8f9fa">
+          <th style="padding:8px 12px; border-bottom:1px solid #eee;">格式</th>
+          <th style="padding:8px 12px; border-bottom:1px solid #eee;">特点</th>
+        </tr>
+        <tr>
+          <td style="padding:8px 12px; border-bottom:1px solid #eee;"><b>SRT</b></td>
+          <td style="padding:8px 12px; border-bottom:1px solid #eee;">包含时间戳，支持播放器同步显示</td>
+        </tr>
+        <tr>
+          <td style="padding:8px 12px;"><b>TXT</b></td>
+          <td style="padding:8px 12px;">纯文本内容，适合阅读和AI知识库</td>
+        </tr>
+      </table>
+    `;
+
+    // 按钮容器
+    const buttonContainer = document.createElement('div');
+    buttonContainer.style.display = 'flex';
+    buttonContainer.style.justifyContent = 'center';
+    buttonContainer.style.gap = '16px';
+    buttonContainer.style.marginTop = '8px';
+
+    // SRT按钮
+    const srtButton = document.createElement('button');
+    srtButton.textContent = '导出SRT格式';
+    srtButton.style.padding = '10px 16px';
+    srtButton.style.backgroundColor = '#3370ff';
+    srtButton.style.color = 'white';
+    srtButton.style.border = 'none';
+    srtButton.style.borderRadius = '6px';
+    srtButton.style.cursor = 'pointer';
+    srtButton.style.fontWeight = '500';
+    srtButton.style.flex = '1';
+    srtButton.style.maxWidth = '140px';
+    srtButton.style.transition = 'all 0.3s ease';
+
+    // TXT按钮
+    const txtButton = document.createElement('button');
+    txtButton.textContent = '导出TXT格式';
+    txtButton.style.padding = '10px 16px';
+    txtButton.style.backgroundColor = '#f0f2f5';
+    txtButton.style.color = '#333';
+    txtButton.style.border = 'none';
+    txtButton.style.borderRadius = '6px';
+    txtButton.style.cursor = 'pointer';
+    txtButton.style.fontWeight = '500';
+    txtButton.style.flex = '1';
+    txtButton.style.maxWidth = '140px';
+    txtButton.style.transition = 'all 0.3s ease';
+
+    // 按钮悬停效果
+    srtButton.onmouseover = function () {
+      this.style.backgroundColor = '#2860e1';
+      this.style.transform = 'translateY(-2px)';
+      this.style.boxShadow = '0 4px 12px rgba(51, 112, 255, 0.3)';
+    };
+    srtButton.onmouseout = function () {
+      this.style.backgroundColor = '#3370ff';
+      this.style.transform = 'translateY(0)';
+      this.style.boxShadow = 'none';
+    };
+
+    txtButton.onmouseover = function () {
+      this.style.backgroundColor = '#e4e6e8';
+      this.style.transform = 'translateY(-2px)';
+      this.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.1)';
+    };
+    txtButton.onmouseout = function () {
+      this.style.backgroundColor = '#f0f2f5';
+      this.style.transform = 'translateY(0)';
+      this.style.boxShadow = 'none';
+    };
+
+    // 取消按钮
+    const cancelButton = document.createElement('button');
+    cancelButton.textContent = '取消';
+    cancelButton.style.marginTop = '16px';
+    cancelButton.style.padding = '8px 16px';
+    cancelButton.style.backgroundColor = 'transparent';
+    cancelButton.style.color = '#666';
+    cancelButton.style.border = 'none';
+    cancelButton.style.borderRadius = '6px';
+    cancelButton.style.cursor = 'pointer';
+    cancelButton.style.fontSize = '13px';
+
+    cancelButton.onmouseover = function () {
+      this.style.backgroundColor = '#f0f2f5';
+    };
+    cancelButton.onmouseout = function () {
+      this.style.backgroundColor = 'transparent';
+    };
+
+    // 添加事件监听
+    srtButton.addEventListener('click', () => {
+      document.body.removeChild(dialogOverlay);
+      callback('srt');
+    });
+
+    txtButton.addEventListener('click', () => {
+      document.body.removeChild(dialogOverlay);
+      callback('txt');
+    });
+
+    cancelButton.addEventListener('click', () => {
+      document.body.removeChild(dialogOverlay);
+      callback(null);
+    });
+
+    // 组装弹窗
+    buttonContainer.appendChild(srtButton);
+    buttonContainer.appendChild(txtButton);
+    dialogContent.appendChild(title);
+    dialogContent.appendChild(description);
+    dialogContent.appendChild(formatTable);
+    dialogContent.appendChild(buttonContainer);
+    dialogContent.appendChild(cancelButton);
+    dialogOverlay.appendChild(dialogContent);
+
+    // 显示弹窗
+    document.body.appendChild(dialogOverlay);
+  }
+
+  // 执行导出流程
+  async function executeExport(videosWithSubtitle, format) {
+    try {
+      // 获取并禁用导出按钮，显示处理状态
+      const exportTableBtn = document.getElementById('exportTableBtn');
+      if (exportTableBtn) {
+        exportTableBtn.disabled = true;
+        exportTableBtn.innerHTML = `
+          <svg viewBox="0 0 24 24" class="spin">
+            <path d="M12 6v3l4-4-4-4v3c-4.42 0-8 3.58-8 8 0 1.57.46 3.03 1.24 4.26L6.7 14.8c-.45-.83-.7-1.79-.7-2.8 0-3.31 2.69-6 6-6zm6.76 1.74L17.3 9.2c.44.84.7 1.79.7 2.8 0 3.31-2.69 6-6 6v-3l-4 4 4 4v-3c4.42 0 8-3.58 8-8 0-1.57-.46-3.03-1.24-4.26z"/>
+          </svg>
+          导出中...
+        `;
+      }
+
+      // 显示进度条
+      showProgress(true);
+      updateProgress(0, '准备导出字幕...');
+
+      showSuccess(`开始批量导出${format.toUpperCase()}字幕，共 ${videosWithSubtitle.length} 个文件`);
+
+      // 创建一个临时的zip文件夹
+      const zipContent = new JSZip();
+      let exportedCount = 0;
+      let errorCount = 0;
+
+      // 依次导出每个视频的字幕
+      for (const [index, video] of videosWithSubtitle.entries()) {
+        try {
+          // 创建文件名，移除不合法的文件名字符
+          const safeTitle = video.title.replace(/[\\/:*?"<>|]/g, '_');
+          const fileName = `${safeTitle}.${format}`;
+
+          // 根据选择的格式处理字幕内容
+          let subtitleContent;
+          if (format === 'srt') {
+            subtitleContent = convertToSrtFormat(video.subtitleText);
+          } else {
+            subtitleContent = convertToTxtFormat(video.subtitleText);
+          }
+
+          // 将字幕内容添加到zip文件
+          zipContent.file(fileName, subtitleContent);
+          exportedCount++;
+
+          // 更新进度条
+          const percent = Math.floor(((index + 1) / videosWithSubtitle.length) * 100);
+          updateProgress(percent, `已处理 ${exportedCount}/${videosWithSubtitle.length} 个字幕`);
+
+          // 每添加一个更新一次状态
+          showSuccess(`已处理 ${exportedCount}/${videosWithSubtitle.length} 个字幕`);
+        } catch (videoError) {
+          console.error(`导出视频 "${video.title}" 的字幕失败:`, videoError);
+          errorCount++;
+        }
+      }
+
+      // 更新进度为100%
+      updateProgress(100, '压缩文件中...');
+
+      // 生成zip文件
+      const zipBlob = await zipContent.generateAsync({ type: 'blob' });
+
+      // 创建下载链接
+      const url = URL.createObjectURL(zipBlob);
+      const downloadLink = document.createElement('a');
+      downloadLink.href = url;
+
+      // 格式化当前日期时间为 'SubBatch_年-月-日-时-分-秒_格式' 格式
+      const now = new Date();
+      const year = now.getFullYear();
+      const month = String(now.getMonth() + 1).padStart(2, '0');
+      const day = String(now.getDate()).padStart(2, '0');
+      const hours = String(now.getHours()).padStart(2, '0');
+      const minutes = String(now.getMinutes()).padStart(2, '0');
+      const seconds = String(now.getSeconds()).padStart(2, '0');
+      const formattedDateTime = `SubBatch_${year}-${month}-${day}-${hours}-${minutes}-${seconds}_${format.toUpperCase()}`;
+
+      downloadLink.download = `${formattedDateTime}.zip`;
+
+      // 触发下载
+      document.body.appendChild(downloadLink);
+      downloadLink.click();
+
+      // 清理
+      document.body.removeChild(downloadLink);
+      URL.revokeObjectURL(url);
+
+      // 短暂延迟后隐藏进度条
+      setTimeout(() => {
+        showProgress(false);
+      }, 1500);
+
+      // 恢复按钮状态
+      if (exportTableBtn) {
+        exportTableBtn.disabled = false;
+        exportTableBtn.innerHTML = `
+          <svg viewBox="0 0 24 24">
+            <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" />
+          </svg>
+          导出字幕
+        `;
+      }
+
+      // 显示结果
+      if (errorCount === 0) {
+        showSuccess(`成功导出 ${exportedCount} 个${format.toUpperCase()}字幕文件到zip压缩包`);
+      } else {
+        showSuccess(`导出完成，成功: ${exportedCount}，失败: ${errorCount}`);
+      }
+    } catch (error) {
+      console.error('批量导出字幕错误:', error);
+      showError('批量导出字幕失败: ' + (error.message || '未知错误'));
+
+      // 隐藏进度条
+      showProgress(false);
+
+      // 恢复按钮状态
+      const exportTableBtn = document.getElementById('exportTableBtn');
+      if (exportTableBtn) {
+        exportTableBtn.disabled = false;
+        exportTableBtn.innerHTML = `
+          <svg viewBox="0 0 24 24">
+            <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" />
+          </svg>
+          导出字幕
+        `;
+      }
+    }
+  }
+
+  // 将字幕内容转换为SRT格式
+  function convertToSrtFormat(subtitleText) {
+    // 已经是SRT格式，直接返回
+    return subtitleText;
+  }
+
+  // 将字幕内容转换为纯文本格式（去除时间戳和序号）
+  function convertToTxtFormat(subtitleText) {
+    if (!subtitleText) return '';
+
+    // 将字幕文本按行分割
+    const lines = subtitleText.split('\n');
+    let txtContent = '';
+    let contentLine = '';
+
+    // 遍历每一行，提取内容文本
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+
+      // 跳过空行
+      if (line === '') continue;
+
+      // 跳过序号行（纯数字）
+      if (/^\d+$/.test(line)) continue;
+
+      // 跳过时间轴行（含 --> 格式的行）
+      if (line.includes(' --> ')) continue;
+
+      // 其余行都是内容，添加到结果中
+      contentLine = line;
+      if (contentLine) {
+        txtContent += contentLine + '\n';
+      }
+    }
+
+    return txtContent;
   }
 
   // 清空表格
