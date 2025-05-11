@@ -1607,4 +1607,24 @@ document.addEventListener('DOMContentLoaded', function () {
 
   // 初始化表格
   updateVideoTable();
+
+  // 为使用文档和反馈问题按钮添加事件监听器
+  const docBtn = document.getElementById('docBtn');
+  const feedbackBtn = document.getElementById('feedbackBtn');
+
+  // 使用文档按钮点击事件
+  if (docBtn) {
+    docBtn.addEventListener('click', () => {
+      showSuccess('正在打开使用文档...');
+      chrome.tabs.create({ url: 'https://github.com/wangchao2000/SubBatch/blob/main/README.md' });
+    });
+  }
+
+  // 反馈问题按钮点击事件
+  if (feedbackBtn) {
+    feedbackBtn.addEventListener('click', () => {
+      showSuccess('正在前往反馈页面...');
+      chrome.tabs.create({ url: 'https://github.com/wangchao2000/SubBatch/issues' });
+    });
+  }
 });

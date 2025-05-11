@@ -151,8 +151,7 @@
         max-width: 400px;
         margin-bottom: 16px;
         padding: 10px 20px;
-        /* background-color: #f9b308; 由蓝色#3370ff改为黄色#F9B308 */
-        background: linear-gradient(to right, #ffb300, #ffb300);
+        background-color: #3370ff;
 
         color: white;
         border: none;
@@ -168,11 +167,16 @@
         box-shadow: 0 2px 8px rgba(249, 179, 8, 0.3); /* 阴影也改为匹配黄色 */
       }
 
-      .get-collect-btn:hover {
-        background-color: #ffd166; /* hover状态为更亮的黄色 */
-
+      .help:hover {
         transform: translateY(-1px);
-        box-shadow: 0 4px 12px rgba(249, 179, 8, 0.4);
+      }
+
+      .help:active {
+        transform: translateY(1px);
+      }
+
+      .get-collect-btn:hover {
+        transform: translateY(-1px);
       }
 
       .get-collect-btn:active {
@@ -857,33 +861,142 @@
         开发者不对因使用本工具所产生的任何直接或间接后果承担责任。
       </p>
     </div>
-    <div class="sponsor-container">
+    <!-- 使用文档和反馈问题按钮 -->
+    <div style="display: flex; gap: 8px; width: 95%; margin-bottom: 10px">
+      <button
+        id="docBtn"
+        class="help"
+        style="
+          flex: 1;
+          padding: 6px 12px;
+          background-color: #3370ff;
+          color: #fff;
+          border: none;
+          border-radius: 8px;
+          font-size: 13px;
+          font-weight: 500;
+          cursor: pointer;
+          transition: all 0.3s ease;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 6px;
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+        "
+      >
+        <svg
+          viewBox="0 0 24 24"
+          style="width: 16px; height: 16px; fill: currentColor"
+        >
+          <path
+            d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"
+          />
+        </svg>
+        使用文档
+      </button>
+      <button
+        id="feedbackBtn"
+        class="help"
+        style="
+          flex: 1;
+          padding: 6px 12px;
+          background-color: #3370ff;
+          color: #fff;
+          border: none;
+          border-radius: 8px;
+          font-size: 13px;
+          font-weight: 500;
+          cursor: pointer;
+          transition: all 0.3s ease;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 6px;
+          box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+        "
+      >
+        <svg
+          viewBox="0 0 24 24"
+          style="width: 16px; height: 16px; fill: currentColor"
+        >
+          <path
+            d="M20 2H4c-1.1 0-1.99.9-1.99 2L2 22l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-7 12h-2v-2h2v2zm0-4h-2V6h2v4z"
+          />
+        </svg>
+        反馈问题
+      </button>
       <button
         id="sponsorBtn"
         class="sponsor-btn"
+        style="
+          flex: 1;
+          padding: 6px 12px;
+          background: linear-gradient(to right, #e36a64, #e36a64);
+          color: #fff;
+          border: none;
+          border-radius: 8px;
+          font-size: 13px;
+          font-weight: 500;
+          cursor: pointer;
+          transition: all 0.3s ease;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 6px;
+          box-shadow: 0 2px 8px rgba(255, 77, 156, 0.3);
+        "
       >
         ❤️️ 赞助我
       </button>
-      <button
-        id="followBtn"
-        class="follow-btn"
-      >
-        🌟 关注我
-      </button>
     </div>
-    <div style="display: flex; gap: 10px; width: 95%">
-      <button class="get-url-btn">
-        <svg viewBox="0 0 24 24">
+    <div style="display: flex; gap: 8px; width: 95%; margin-bottom: 10px">
+      <button
+        class="get-url-btn"
+        style="flex: 1; padding: 6px 12px; font-size: 13px; margin: 0"
+      >
+        <svg
+          viewBox="0 0 24 24"
+          style="width: 16px; height: 16px"
+        >
           <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
         </svg>
         获取视频地址
       </button>
-
-      <button class="get-collect-btn">
-        <svg viewBox="0 0 24 24">
+      <button
+        class="get-collect-btn"
+        style="flex: 1; padding: 6px 12px; font-size: 13px; margin: 0"
+      >
+        <svg
+          viewBox="0 0 24 24"
+          style="width: 16px; height: 16px"
+        >
           <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
         </svg>
-        获取收藏夹地址
+        获取收藏夹
+      </button>
+
+      <button
+        id="followBtn"
+        class="follow-btn"
+        style="
+          flex: 1;
+          padding: 6px 12px;
+          background: linear-gradient(to right, #e36a64, #e36a64);
+          color: white;
+          border: none;
+          border-radius: 8px;
+          font-size: 13px;
+          font-weight: 500;
+          cursor: pointer;
+          transition: all 0.3s ease;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          gap: 6px;
+          box-shadow: 0 2px 8px rgba(255, 77, 156, 0.3);
+        "
+      >
+        🌟 关注我
       </button>
     </div>
     <div class="input-container">
