@@ -22,6 +22,43 @@ document.addEventListener('DOMContentLoaded', function () {
   const clearTableBtn = document.getElementById('clearTableBtn');
   const batchGetSubtitleBtn = document.getElementById('batchGetSubtitleBtn');
 
+  // 进度条相关元素
+  const progressContainer = document.getElementById('progressContainer');
+  const progressCircleValue = document.getElementById('progressCircleValue');
+  const progressText = document.getElementById('progressText');
+  const progressSubText = document.getElementById('progressSubText');
+
+  // 显示和更新进度条函数
+  function showProgress(show = true) {
+    if (show) {
+      progressContainer.classList.add('show');
+    } else {
+      progressContainer.classList.remove('show');
+    }
+  }
+
+  function updateProgress(percent, text = '获取字幕中...') {
+    // 确保百分比为整数和限制范围在0-100
+    percent = Math.max(0, Math.min(100, Math.floor(percent)));
+
+    // 更新进度文字
+    progressText.textContent = `${percent}%`;
+    progressSubText.textContent = text;
+
+    // 获取进度圆环SVG元素
+    const circle = document.getElementById('progressCircleValue');
+
+    // 计算圆周长
+    const radius = circle.getAttribute('r');
+    const circumference = 2 * Math.PI * radius;
+
+    // 根据百分比计算stroke-dashoffset
+    const offset = circumference - (percent / 100) * circumference;
+
+    // 设置stroke-dashoffset
+    circle.style.strokeDashoffset = offset;
+  }
+
   // 检查批量获取字幕按钮是否存在
   if (batchGetSubtitleBtn) {
     console.log('批量获取字幕按钮已找到，绑定事件');
@@ -952,8 +989,14 @@ document.addEventListener('DOMContentLoaded', function () {
       console.error('找不到批量获取字幕按钮元素');
     }
 
+    // 显示进度条并初始化为0%
+    showProgress(true);
+    updateProgress(0, '准备获取字幕...');
+
     let successCount = 0;
     let failCount = 0;
+    const totalVideos = videoList.length;
+    const needProcessVideos = videoList.filter((v) => v.subtitleStatus !== '已获取').length;
 
     showSuccess('开始批量获取字幕，请稍候...');
 
@@ -961,6 +1004,10 @@ document.addEventListener('DOMContentLoaded', function () {
     for (let i = 0; i < videoList.length; i++) {
       const video = videoList[i];
       console.log(`处理第 ${i + 1}/${videoList.length} 个视频: ${video.title}`);
+
+      // 计算当前进度百分比
+      const currentPercent = Math.floor((i / totalVideos) * 100);
+      updateProgress(currentPercent, `处理第 ${i + 1}/${totalVideos} 个视频...`);
 
       // 如果已经成功获取过字幕，跳过
       if (video.subtitleStatus === '已获取' && video.subtitleText) {
@@ -993,6 +1040,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
         // 获取字幕，使用批量模式参数
         console.log(`正在获取第 ${i + 1}/${videoList.length} 个视频的字幕: ${video.title}`);
+        updateProgress(currentPercent, `获取字幕中...`);
 
         // 调用chrome.runtime.sendMessage直接获取字幕，而不是通过fetchBilibiliSubtitle函数
         const response = await chrome.runtime.sendMessage({
@@ -1031,6 +1079,14 @@ document.addEventListener('DOMContentLoaded', function () {
       }
     }
 
+    // 完成所有处理后，显示100%
+    updateProgress(100, '处理完成!');
+
+    // 短暂延迟后隐藏进度条
+    setTimeout(() => {
+      showProgress(false);
+    }, 1500);
+
     // 恢复按钮状态
     if (batchGetSubtitleBtn) {
       console.log('恢复批量获取字幕按钮状态');
@@ -1039,7 +1095,7 @@ document.addEventListener('DOMContentLoaded', function () {
         <svg viewBox="0 0 24 24">
           <path d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4zM14 13h-3v3H9v-3H6v-2h3V8h2v3h3v2z"/>
         </svg>
-        批量获取字幕
+        获取字幕
       `;
     }
 
@@ -1104,6 +1160,10 @@ document.addEventListener('DOMContentLoaded', function () {
           `;
         }
 
+        // 显示进度条
+        showProgress(true);
+        updateProgress(0, '准备导出字幕...');
+
         showSuccess(`开始批量导出字幕，共 ${videosWithSubtitle.length} 个文件`);
 
         // 创建一个临时的zip文件夹
@@ -1112,7 +1172,7 @@ document.addEventListener('DOMContentLoaded', function () {
         let errorCount = 0;
 
         // 依次导出每个视频的字幕
-        for (const video of videosWithSubtitle) {
+        for (const [index, video] of videosWithSubtitle.entries()) {
           try {
             // 创建文件名，移除不合法的文件名字符
             const safeTitle = video.title.replace(/[\\/:*?"<>|]/g, '_');
@@ -1122,6 +1182,10 @@ document.addEventListener('DOMContentLoaded', function () {
             zipContent.file(fileName, video.subtitleText);
             exportedCount++;
 
+            // 更新进度条
+            const percent = Math.floor(((index + 1) / videosWithSubtitle.length) * 100);
+            updateProgress(percent, `已处理 ${exportedCount}/${videosWithSubtitle.length} 个字幕`);
+
             // 每添加一个更新一次状态
             showSuccess(`已处理 ${exportedCount}/${videosWithSubtitle.length} 个字幕`);
           } catch (videoError) {
@@ -1129,6 +1193,9 @@ document.addEventListener('DOMContentLoaded', function () {
             errorCount++;
           }
         }
+
+        // 更新进度为100%
+        updateProgress(100, '压缩文件中...');
 
         // 生成zip文件
         const zipBlob = await zipContent.generateAsync({ type: 'blob' });
@@ -1158,6 +1225,11 @@ document.addEventListener('DOMContentLoaded', function () {
         document.body.removeChild(downloadLink);
         URL.revokeObjectURL(url);
 
+        // 短暂延迟后隐藏进度条
+        setTimeout(() => {
+          showProgress(false);
+        }, 1500);
+
         // 恢复按钮状态
         if (exportTableBtn) {
           exportTableBtn.disabled = false;
@@ -1165,7 +1237,7 @@ document.addEventListener('DOMContentLoaded', function () {
             <svg viewBox="0 0 24 24">
               <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" />
             </svg>
-            批量导出字幕
+            导出字幕
           `;
         }
 
@@ -1179,6 +1251,9 @@ document.addEventListener('DOMContentLoaded', function () {
         console.error('批量导出字幕错误:', error);
         showError('批量导出字幕失败: ' + (error.message || '未知错误'));
 
+        // 隐藏进度条
+        showProgress(false);
+
         // 恢复按钮状态
         const exportTableBtn = document.getElementById('exportTableBtn');
         if (exportTableBtn) {
@@ -1187,13 +1262,14 @@ document.addEventListener('DOMContentLoaded', function () {
             <svg viewBox="0 0 24 24">
               <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" />
             </svg>
-            批量导出字幕
+            导出字幕
           `;
         }
       }
     } catch (error) {
       console.error('批量导出字幕外层错误:', error);
       showError('批量导出字幕失败: ' + (error.message || '未知错误'));
+      showProgress(false);
     }
   }
 
