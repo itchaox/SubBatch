@@ -1616,7 +1616,9 @@ document.addEventListener('DOMContentLoaded', function () {
   if (docBtn) {
     docBtn.addEventListener('click', () => {
       showSuccess('正在打开使用文档...');
-      chrome.tabs.create({ url: 'https://github.com/wangchao2000/SubBatch/blob/main/README.md' });
+      chrome.tabs.create({
+        url: 'https://bcmcjimpjd.feishu.cn/wiki/OSOKwYcf4iBZvPkajz7cpF8nnzg?fromScene=spaceOverview',
+      });
     });
   }
 
@@ -1624,7 +1626,7 @@ document.addEventListener('DOMContentLoaded', function () {
   if (feedbackBtn) {
     feedbackBtn.addEventListener('click', () => {
       showSuccess('正在前往反馈页面...');
-      chrome.tabs.create({ url: 'https://github.com/wangchao2000/SubBatch/issues' });
+      chrome.tabs.create({ url: 'https://bcmcjimpjd.feishu.cn/share/base/form/shrcn5zSNoOWSWVjI7y639o3Lyc' });
     });
   }
 });
