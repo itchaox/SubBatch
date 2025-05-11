@@ -545,6 +545,14 @@ document.addEventListener('DOMContentLoaded', function () {
     tableUrlInput.focus();
   });
 
+  // 为收藏夹地址输入框的清除按钮添加事件监听
+  document.querySelector('#favoriteUrlInput + .clear-btn').addEventListener('click', () => {
+    favoriteUrlInput.value = '';
+    // 清空后自动聚焦输入框
+    favoriteUrlInput.focus();
+    console.log('已清空收藏夹地址输入框');
+  });
+
   getUrlBtn.addEventListener('click', async () => {
     try {
       const response = await chrome.runtime.sendMessage({ action: 'getTabUrl' });
