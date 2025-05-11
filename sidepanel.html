@@ -234,8 +234,8 @@
 
       .action-btn svg {
         width: 20px;
-        min-width: 20px;
         height: 20px;
+        min-width: 20px;
         min-height: 20px;
         fill: currentColor;
       }
@@ -674,13 +674,22 @@
 
       th:nth-child(1),
       td:nth-child(1) {
-        width: 30px;
+        width: 40px;
+        min-width: 40px;
+        max-width: 40px;
+        text-align: center;
       }
 
       th:nth-child(2),
       td:nth-child(2) {
         width: auto;
-        min-width: 100px;
+        min-width: 80px; /* 确保标题列有足够的最小宽度 */
+        white-space: normal; /* 允许标题换行 */
+        word-break: break-word; /* 在单词中间断行 */
+      }
+
+      td:nth-child(2) {
+        padding-left: 12px; /* 减少左侧填充，使内容更靠左显示 */
       }
 
       th:nth-child(3),
@@ -926,22 +935,31 @@
       </div>
 
       <!-- 表格容器 -->
-      <div style="width: 100%; overflow: hidden; border: 1px solid #eee; border-radius: 4px">
-        <!-- 表头容器 - 不滚动 -->
-        <div style="width: 100%; overflow: hidden">
-          <table style="width: 100%; table-layout: fixed; border-collapse: collapse; margin: 0">
+      <div
+        class="table-container"
+        style="width: 100%; overflow: hidden"
+      >
+        <!-- 表头部分（不滚动） -->
+        <div style="width: 100%">
+          <table style="width: 100%; table-layout: fixed; border-collapse: collapse; margin-bottom: 0">
             <colgroup>
-              <col style="width: 50px" />
-              <col style="width: auto" />
-              <col style="width: 100px" />
-              <col style="width: 80px" />
-              <col style="width: 50px" />
+              <col style="width: 40px; min-width: 40px" />
+              <col style="width: auto; min-width: 80px" />
+              <col style="width: 100px; min-width: 100px" />
+              <col style="width: 80px; min-width: 80px" />
+              <col style="width: 50px; min-width: 50px" />
             </colgroup>
             <thead>
               <tr>
-                <th style="background-color: #f8f9fa; border-bottom: 2px solid #ddd; padding: 12px">序号</th>
-                <th style="background-color: #f8f9fa; border-bottom: 2px solid #ddd; padding: 12px">视频标题</th>
-                <th style="background-color: #f8f9fa; border-bottom: 2px solid #ddd; padding: 12px">作者</th>
+                <th style="background-color: #f8f9fa; border-bottom: 2px solid #ddd; padding: 12px; text-align: left">
+                  序号
+                </th>
+                <th style="background-color: #f8f9fa; border-bottom: 2px solid #ddd; padding: 12px; text-align: left">
+                  视频标题
+                </th>
+                <th style="background-color: #f8f9fa; border-bottom: 2px solid #ddd; padding: 12px; text-align: left">
+                  作者
+                </th>
                 <th style="background-color: #f8f9fa; border-bottom: 2px solid #ddd; padding: 12px; text-align: center">
                   字幕状态
                 </th>
@@ -953,18 +971,18 @@
           </table>
         </div>
 
-        <!-- 表体容器 - 可滚动 -->
+        <!-- 表体部分（可滚动） -->
         <div style="max-height: 400px; overflow-y: auto; width: 100%">
           <table
             id="videoTable"
-            style="width: 100%; table-layout: fixed; border-collapse: collapse; margin: 0"
+            style="width: 100%; table-layout: fixed; border-collapse: collapse; margin-top: 0"
           >
             <colgroup>
-              <col style="width: 50px" />
-              <col style="width: auto" />
-              <col style="width: 100px" />
-              <col style="width: 80px" />
-              <col style="width: 50px" />
+              <col style="width: 40px; min-width: 40px; max-width: 40px" />
+              <col style="width: auto; min-width: 180px" />
+              <col style="width: 100px; min-width: 100px" />
+              <col style="width: 80px; min-width: 80px" />
+              <col style="width: 50px; min-width: 50px" />
             </colgroup>
             <tbody id="videoTableBody">
               <!-- 表格内容将通过JavaScript动态添加 -->
