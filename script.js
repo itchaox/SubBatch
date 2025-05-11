@@ -1193,17 +1193,10 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // 标题
     const title = document.createElement('h3');
-    title.textContent = '选择导出格式';
+    title.textContent = '选择字幕导出格式';
     title.style.margin = '0 0 16px 0';
     title.style.color = '#333';
     title.style.fontSize = '18px';
-
-    // 描述
-    const description = document.createElement('p');
-    description.textContent = '请选择要导出的字幕文件格式:';
-    description.style.margin = '0 0 20px 0';
-    description.style.color = '#666';
-    description.style.fontSize = '14px';
 
     // 格式对比表
     const formatTable = document.createElement('div');
@@ -1226,7 +1219,7 @@ document.addEventListener('DOMContentLoaded', function () {
         </tr>
         <tr>
           <td style="padding:8px 12px;"><b>TXT</b></td>
-          <td style="padding:8px 12px;">纯文本内容，适合阅读和AI知识库</td>
+          <td style="padding:8px 12px;">纯文本内容，适合阅读和 AI 知识库</td>
         </tr>
       </table>
     `;
@@ -1240,7 +1233,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // SRT按钮
     const srtButton = document.createElement('button');
-    srtButton.textContent = '导出SRT格式';
+    srtButton.textContent = '导出 SRT 格式';
     srtButton.style.padding = '10px 16px';
     srtButton.style.backgroundColor = '#3370ff';
     srtButton.style.color = 'white';
@@ -1254,7 +1247,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // TXT按钮
     const txtButton = document.createElement('button');
-    txtButton.textContent = '导出TXT格式';
+    txtButton.textContent = '导出 TXT 格式';
     txtButton.style.padding = '10px 16px';
     txtButton.style.backgroundColor = '#f0f2f5';
     txtButton.style.color = '#333';
@@ -1328,7 +1321,6 @@ document.addEventListener('DOMContentLoaded', function () {
     buttonContainer.appendChild(srtButton);
     buttonContainer.appendChild(txtButton);
     dialogContent.appendChild(title);
-    dialogContent.appendChild(description);
     dialogContent.appendChild(formatTable);
     dialogContent.appendChild(buttonContainer);
     dialogContent.appendChild(cancelButton);
