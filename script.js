@@ -57,6 +57,27 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // 设置stroke-dashoffset
     circle.style.strokeDashoffset = offset;
+
+    // 根据进度情况设置颜色
+    if (percent === 100) {
+      // 完成时显示绿色
+      circle.style.stroke = '#52C41A';
+      progressText.style.color = '#52C41A';
+      // 如果有成功文本显示，添加绿色背景
+      if (text.includes('完成') || text.includes('成功')) {
+        progressSubText.style.color = '#52C41A';
+      }
+    } else if (text.includes('失败') || text.includes('错误')) {
+      // 失败时显示黄色警告
+      circle.style.stroke = '#FAAD14';
+      progressText.style.color = '#FAAD14';
+      progressSubText.style.color = '#FAAD14';
+    } else {
+      // 处理中显示紫色（保持原有颜色）
+      circle.style.stroke = '#8e44ad';
+      progressText.style.color = '#333';
+      progressSubText.style.color = '#666';
+    }
   }
 
   // 检查批量获取字幕按钮是否存在
@@ -90,9 +111,22 @@ document.addEventListener('DOMContentLoaded', function () {
   function showError(message) {
     const messageElement = errorToast.querySelector('.error-toast-message');
     const closeButton = errorToast.querySelector('.error-toast-close');
+    const iconElement = errorToast.querySelector('.error-toast-icon');
+
+    // 修改图标为黄色感叹号
+    iconElement.innerHTML = `
+      <svg viewBox="0 0 24 24" fill="#FAAD14">
+        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 15h2v-2h-2v2zm0-4h2V7h-2v6z" />
+      </svg>
+    `;
 
     messageElement.textContent = message;
     errorToast.classList.add('show');
+
+    // 修改为黄色背景样式
+    errorToast.style.backgroundColor = '#FFF9E6';
+    errorToast.style.borderLeft = '4px solid #FAAD14';
+    errorToast.querySelector('.error-toast-icon').style.color = '#FAAD14';
 
     // 点击关闭按钮关闭提示
     const closeToast = () => {
@@ -110,9 +144,22 @@ document.addEventListener('DOMContentLoaded', function () {
   function showSuccess(message) {
     const messageElement = successToast.querySelector('.success-toast-message');
     const closeButton = successToast.querySelector('.success-toast-close');
+    const iconElement = successToast.querySelector('.success-toast-icon');
+
+    // 修改图标为绿色勾勾
+    iconElement.innerHTML = `
+      <svg viewBox="0 0 24 24" fill="#52C41A">
+        <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />
+      </svg>
+    `;
 
     messageElement.textContent = message;
     successToast.classList.add('show');
+
+    // 修改为绿色背景样式
+    successToast.style.backgroundColor = '#F6FFED';
+    successToast.style.borderLeft = '4px solid #52C41A';
+    successToast.querySelector('.success-toast-icon').style.color = '#52C41A';
 
     // 点击关闭按钮关闭提示
     const closeToast = () => {
