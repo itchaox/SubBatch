@@ -1463,8 +1463,42 @@ document.addEventListener('DOMContentLoaded', function () {
 
   // 将字幕内容转换为SRT格式
   function convertToSrtFormat(subtitleText) {
-    // 已经是SRT格式，直接返回
-    return subtitleText;
+    if (!subtitleText) return '';
+
+    // 将字幕文本按行分割
+    const lines = subtitleText.split('\n');
+    let srtContent = '';
+    let entryNumber = 1; // 序号从1开始
+
+    // 遍历每一行，重新构建标准SRT格式
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+
+      // 如果当前行是时间轴（含 --> 格式的行）
+      if (line.includes(' --> ')) {
+        // 添加序号和时间轴
+        srtContent += entryNumber + '\n' + line + '\n';
+
+        // 查找后续的内容行，一直到遇到空行或下一个时间轴
+        let contentLines = [];
+        for (let j = i + 1; j < lines.length; j++) {
+          const contentLine = lines[j].trim();
+          if (contentLine === '' || contentLine.includes(' --> ') || /^\d+$/.test(contentLine)) {
+            break; // 遇到空行、时间轴或序号行，结束内容收集
+          }
+          contentLines.push(contentLine);
+          i = j; // 更新外层循环索引
+        }
+
+        // 添加内容行
+        if (contentLines.length > 0) {
+          srtContent += contentLines.join('\n') + '\n\n'; // 内容后添加空行
+          entryNumber++; // 更新序号
+        }
+      }
+    }
+
+    return srtContent.trim();
   }
 
   // 将字幕内容转换为纯文本格式（去除时间戳和序号）
