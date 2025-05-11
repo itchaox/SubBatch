@@ -672,23 +672,26 @@
         /* white-space: nowrap; */
       }
 
+      /* 表格列宽样式 */
       th:nth-child(1),
       td:nth-child(1) {
-        width: 50px;
-        min-width: 50px;
+        width: 40px;
+        min-width: 40px;
+        max-width: 40px;
         text-align: center;
       }
 
       th:nth-child(2),
       td:nth-child(2) {
         width: auto;
-        min-width: 80px; /* 确保标题列有足够的最小宽度 */
-        white-space: normal; /* 允许标题换行 */
-        word-break: break-word; /* 在单词中间断行 */
+        min-width: 180px;
+        white-space: normal;
+        word-break: break-word;
+        padding-left: 12px;
       }
 
       td:nth-child(2) {
-        padding-left: 12px; /* 减少左侧填充，使内容更靠左显示 */
+        padding-left: 12px;
       }
 
       th:nth-child(3),
@@ -938,19 +941,23 @@
         class="table-container"
         style="width: 100%; overflow: hidden"
       >
-        <!-- 表头部分（不滚动） -->
-        <div style="width: 100%">
+        <!-- 表头部分 -->
+        <div
+          id="tableHeaderContainer"
+          class="table-header-container"
+          style="width: 100%; overflow-x: hidden"
+        >
           <table style="width: 100%; table-layout: fixed; border-collapse: collapse; margin-bottom: 0">
             <colgroup>
               <col style="width: 50px; min-width: 50px" />
-              <col style="width: auto; min-width: 80px" />
+              <col style="width: auto; min-width: 180px" />
               <col style="width: 100px; min-width: 100px" />
               <col style="width: 80px; min-width: 80px" />
               <col style="width: 50px; min-width: 50px" />
             </colgroup>
             <thead>
               <tr>
-                <th style="background-color: #f8f9fa; border-bottom: 2px solid #ddd; padding: 12px; text-align: left">
+                <th style="background-color: #f8f9fa; border-bottom: 2px solid #ddd; padding: 12px; text-align: center">
                   序号
                 </th>
                 <th style="background-color: #f8f9fa; border-bottom: 2px solid #ddd; padding: 12px; text-align: left">
@@ -971,13 +978,17 @@
         </div>
 
         <!-- 表体部分（可滚动） -->
-        <div style="max-height: 400px; overflow-y: auto; width: 100%">
+        <div
+          id="tableBodyContainer"
+          class="table-body-container"
+          style="max-height: 400px; overflow: auto; width: 100%"
+        >
           <table
             id="videoTable"
             style="width: 100%; table-layout: fixed; border-collapse: collapse; margin-top: 0"
           >
             <colgroup>
-              <col style="width: 40px; min-width: 40px; max-width: 40px" />
+              <col style="width: 50px; min-width: 50px" />
               <col style="width: auto; min-width: 180px" />
               <col style="width: 100px; min-width: 100px" />
               <col style="width: 80px; min-width: 80px" />

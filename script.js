@@ -30,6 +30,20 @@ document.addEventListener('DOMContentLoaded', function () {
     console.error('找不到批量获取字幕按钮元素');
   }
 
+  // 获取表头和表体容器，用于同步滚动
+  const tableHeaderContainer = document.getElementById('tableHeaderContainer');
+  const tableBodyContainer = document.getElementById('tableBodyContainer');
+
+  // 设置表格同步滚动
+  if (tableBodyContainer && tableHeaderContainer) {
+    tableBodyContainer.addEventListener('scroll', function () {
+      // 当表体水平滚动时，同步表头的水平滚动位置
+      tableHeaderContainer.scrollLeft = tableBodyContainer.scrollLeft;
+    });
+  } else {
+    console.error('找不到表格容器元素，无法设置同步滚动');
+  }
+
   let generatedUrl = '';
   let currentVideoInfo = null;
   let currentSubtitleData = null;
