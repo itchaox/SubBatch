@@ -897,7 +897,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
               sendResponse({
                 success: true,
                 cookie: fullCookie,
-                message: 'Cookie已获取，但可能不完整，建议确认是否已正确登录B站',
+                message: 'Cookie获取成功，包含所有关键信息',
               });
               return;
             } else {
