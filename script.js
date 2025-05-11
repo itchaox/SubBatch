@@ -8,7 +8,6 @@ document.addEventListener('DOMContentLoaded', function () {
   const clearBtn = document.querySelector('.clear-btn');
   const bilibiliCookieInput = document.getElementById('bilibiliCookie');
   const cookieClearBtn = document.querySelector('.cookie-clear-btn');
-  const applyCookieBtn = document.getElementById('applyCookieBtn');
   const errorToast = document.getElementById('errorToast');
   const successToast = document.getElementById('successToast');
   const generateUrlBtn = document.getElementById('generateUrlBtn');
@@ -503,7 +502,6 @@ document.addEventListener('DOMContentLoaded', function () {
       },
       (response) => {
         if (response && response.success) {
-          showSuccess('Cookie已设置');
           console.log('Cookie设置成功');
         } else {
           showError('Cookie设置失败');
@@ -520,6 +518,9 @@ document.addEventListener('DOMContentLoaded', function () {
     bilibiliCookieInput.focus();
   });
 
+  // 为Cookie输入框添加input事件监听器，当用户输入内容时自动保存
+  bilibiliCookieInput.addEventListener('input', setCookie);
+
   // 为Cookie输入框添加blur事件，当用户输入完成离开输入框时设置Cookie
   bilibiliCookieInput.addEventListener('blur', setCookie);
 
@@ -531,18 +532,11 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   });
 
-  // 应用Cookie按钮事件
-  applyCookieBtn.addEventListener('click', () => {
-    setCookie();
-    showSuccess('Cookie已应用');
-  });
-
   // 修改获取视频信息按钮的事件监听
   generateUrlBtn.addEventListener('click', async () => {
-    // 先设置Cookie
-    setCookie();
+    // Cookie已通过input事件自动设置，无需在此处再调用setCookie
 
-    // 然后继续原有逻辑
+    // 继续原有逻辑
     generatedUrl = generateUrl();
     if (generatedUrl) {
       // 重置当前视频信息和字幕数据
@@ -573,8 +567,7 @@ document.addEventListener('DOMContentLoaded', function () {
       showSuccess('正在测试WBI接口，请查看控制台日志');
       console.log('开始测试WBI接口:', currentVideoInfo.aid, currentVideoInfo.cid);
 
-      // 先设置Cookie
-      setCookie();
+      // Cookie已通过input事件自动设置，无需在此处再调用setCookie
 
       // 发送测试请求
       const response = await chrome.runtime.sendMessage({
