@@ -607,8 +607,24 @@
 
       .table-container {
         overflow-x: auto;
+        position: relative;
+      }
+
+      /* 创建表体容器 */
+      .table-body-container {
         max-height: 400px;
         overflow-y: auto;
+        width: 100%;
+        border-top: none;
+      }
+
+      /* 固定表头样式 */
+      .fixed-header {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        background-color: #f8f9fa;
+        border-bottom: 2px solid #eee;
       }
 
       table {
@@ -882,7 +898,7 @@
       <div class="table-container">
         <table id="videoTable">
           <thead>
-            <tr>
+            <tr class="fixed-header">
               <th>序号</th>
               <th>视频标题</th>
               <th>作者</th>
@@ -890,10 +906,24 @@
               <th>操作</th>
             </tr>
           </thead>
-          <tbody id="videoTableBody">
-            <!-- 表格内容将通过JavaScript动态添加 -->
-          </tbody>
         </table>
+        <div class="table-body-container">
+          <table
+            id="videoTableBody-container"
+            style="width: 100%; table-layout: fixed; border-collapse: collapse"
+          >
+            <colgroup>
+              <col style="width: 30px" />
+              <col style="width: auto; min-width: 100px" />
+              <col style="width: 100px" />
+              <col style="width: 80px" />
+              <col style="width: 50px" />
+            </colgroup>
+            <tbody id="videoTableBody">
+              <!-- 表格内容将通过JavaScript动态添加 -->
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
 
