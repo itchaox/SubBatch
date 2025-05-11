@@ -607,7 +607,32 @@
 
       .table-container {
         overflow-x: auto;
+        overflow-y: hidden;
         position: relative;
+      }
+
+      /* 表体容器样式 */
+      .table-body-container {
+        max-height: 400px;
+        overflow-y: auto;
+        width: 100%;
+        border-top: none;
+      }
+
+      /* 固定表头样式 */
+      thead {
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        background-color: #f8f9fa;
+      }
+
+      th {
+        background-color: #f8f9fa;
+        position: sticky;
+        top: 0;
+        z-index: 1;
+        box-shadow: 0 2px 0 rgba(0, 0, 0, 0.1);
       }
 
       /* 创建表体容器 */
@@ -896,9 +921,20 @@
         </div>
       </div>
       <div class="table-container">
-        <table id="videoTable">
+        <!-- 表头部分 - 不滚动 -->
+        <table
+          id="videoTable-header"
+          style="width: 100%; table-layout: fixed; border-collapse: collapse; margin-bottom: 0"
+        >
+          <colgroup>
+            <col style="width: 50px" />
+            <col style="width: auto; min-width: 100px" />
+            <col style="width: 100px" />
+            <col style="width: 80px" />
+            <col style="width: 50px" />
+          </colgroup>
           <thead>
-            <tr class="fixed-header">
+            <tr>
               <th>序号</th>
               <th>视频标题</th>
               <th>作者</th>
@@ -907,13 +943,18 @@
             </tr>
           </thead>
         </table>
-        <div class="table-body-container">
+
+        <!-- 表体部分 - 可滚动 -->
+        <div
+          class="table-body-container"
+          style="max-height: 400px; overflow-y: auto; width: 100%; border-top: none"
+        >
           <table
-            id="videoTableBody-container"
-            style="width: 100%; table-layout: fixed; border-collapse: collapse"
+            id="videoTable"
+            style="width: 100%; table-layout: fixed; border-collapse: collapse; margin-top: 0"
           >
             <colgroup>
-              <col style="width: 30px" />
+              <col style="width: 50px" />
               <col style="width: auto; min-width: 100px" />
               <col style="width: 100px" />
               <col style="width: 80px" />
