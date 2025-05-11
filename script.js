@@ -74,7 +74,7 @@ document.addEventListener('DOMContentLoaded', function () {
       progressSubText.style.color = '#FAAD14';
     } else {
       // 处理中显示紫色（保持原有颜色）
-      circle.style.stroke = '#8e44ad';
+      circle.style.stroke = '#52C41A';
       progressText.style.color = '#333';
       progressSubText.style.color = '#666';
     }
