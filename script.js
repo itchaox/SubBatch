@@ -102,8 +102,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
     closeButton.addEventListener('click', closeToast);
 
-    // 2秒后自动关闭
-    setTimeout(closeToast, 2000);
+    // 3秒后自动关闭
+    setTimeout(closeToast, 3000);
   }
 
   // 显示成功提示
@@ -122,8 +122,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
     closeButton.addEventListener('click', closeToast);
 
-    // 2秒后自动关闭
-    setTimeout(closeToast, 2000);
+    // 3秒后自动关闭
+    setTimeout(closeToast, 3000);
   }
 
   // 从URL中提取视频ID
