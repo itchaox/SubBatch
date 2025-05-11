@@ -398,13 +398,14 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   }
 
-  // 添加formatTime函数，用于格式化时间
-  function formatTime(seconds) {
+  // 修复SRT格式时间戳函数
+  function formatTimeForSRT(seconds) {
     const pad = (num) => (num < 10 ? '0' + num : num);
     const hours = Math.floor(seconds / 3600);
     const minutes = Math.floor((seconds % 3600) / 60);
     const secs = Math.floor(seconds % 60);
     const ms = Math.floor((seconds % 1) * 1000);
+    // 注意这里使用逗号而不是点号
     return `${pad(hours)}:${pad(minutes)}:${pad(secs)},${ms.toString().padStart(3, '0')}`;
   }
 
@@ -453,8 +454,8 @@ document.addEventListener('DOMContentLoaded', function () {
             if (subtitleData && subtitleData.body && subtitleData.body.length > 0) {
               subtitleText = subtitleData.body
                 .map((item) => {
-                  const startTime = formatTime(item.from);
-                  const endTime = formatTime(item.to);
+                  const startTime = formatTimeForSRT(item.from);
+                  const endTime = formatTimeForSRT(item.to);
                   return `${startTime} --> ${endTime}\n${item.content}\n`;
                 })
                 .join('\n');
@@ -1531,8 +1532,19 @@ document.addEventListener('DOMContentLoaded', function () {
 
       // 如果当前行是时间轴（含 --> 格式的行）
       if (line.includes(' --> ')) {
-        // 添加序号和时间轴
-        srtContent += entryNumber + '\n' + line + '\n';
+        // 提取并转换时间戳格式
+        const timeParts = line.split(' --> ');
+        if (timeParts.length === 2) {
+          // 替换点号为逗号
+          const startTime = timeParts[0].replace('.', ',');
+          const endTime = timeParts[1].replace('.', ',');
+
+          // 添加序号和修复后的时间轴
+          srtContent += entryNumber + '\n' + startTime + ' --> ' + endTime + '\n';
+        } else {
+          // 如果时间轴格式不正确，保持原样
+          srtContent += entryNumber + '\n' + line + '\n';
+        }
 
         // 查找后续的内容行，一直到遇到空行或下一个时间轴
         let contentLines = [];
