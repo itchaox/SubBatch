@@ -17,7 +17,7 @@
       "128": "images/logo/logo-128.png"
     }
   },
-  "permissions": ["sidePanel", "activeTab", "tabs", "downloads", "storage"],
+  "permissions": ["sidePanel", "activeTab", "tabs", "downloads", "storage", "scripting", "cookies"],
   "host_permissions": [
     "https://api.bilibili.com/*",
     "https://www.bilibili.com/*",
@@ -25,7 +25,8 @@
     "https://i1.hdslb.com/*",
     "https://i2.hdslb.com/*",
     "https://upos-sz-mirrorhw.bilivideo.com/*",
-    "https://cors-anywhere.herokuapp.com/*"
+    "https://cors-anywhere.herokuapp.com/*",
+    "https://*.bilibili.com/*"
   ],
   "background": {
     "service_worker": "background.js"

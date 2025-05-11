@@ -625,6 +625,91 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   });
 
+  // 添加获取Cookie按钮的事件监听
+  const getCookieBtn = document.getElementById('getCookieBtn');
+  if (getCookieBtn) {
+    getCookieBtn.addEventListener('click', async () => {
+      try {
+        // 显示处理中状态
+        getCookieBtn.disabled = true;
+        getCookieBtn.innerHTML = `
+          <svg viewBox="0 0 24 24" style="animation: spin 1.5s linear infinite;">
+            <path d="M12 6v3l4-4-4-4v3c-4.42 0-8 3.58-8 8 0 1.57.46 3.03 1.24 4.26L6.7 14.8c-.45-.83-.7-1.79-.7-2.8 0-3.31 2.69-6 6-6zm6.76 1.74L17.3 9.2c.44.84.7 1.79.7 2.8 0 3.31-2.69 6-6 6v-3l-4 4 4 4v-3c4.42 0 8-3.58 8-8 0-1.57-.46-3.03-1.24-4.26z"/>
+          </svg>
+          获取中...
+        `;
+
+        // 先检查当前是否在B站页面
+        const tabResponse = await chrome.runtime.sendMessage({ action: 'getTabUrl' });
+        const currentUrl = tabResponse?.url || '';
+
+        if (!currentUrl.includes('bilibili.com')) {
+          // 如果不在B站页面，提示用户并尝试打开B站页面
+          showError('请先前往B站页面，正在为您跳转...');
+
+          // 尝试在新标签页打开B站
+          chrome.tabs.create({ url: 'https://www.bilibili.com/' }, (tab) => {
+            showSuccess('请在B站页面登录后再次点击获取Cookie按钮');
+          });
+
+          // 恢复按钮状态
+          getCookieBtn.disabled = false;
+          getCookieBtn.innerHTML = `
+            <svg viewBox="0 0 24 24">
+              <path d="M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z" />
+            </svg>
+            获取Cookie
+          `;
+          return;
+        }
+
+        // 在B站页面，尝试获取Cookie
+        console.log('正在获取Cookie，请稍候...');
+        showSuccess('正在获取Cookie，请稍候...');
+
+        const response = await chrome.runtime.sendMessage({ action: 'getCookie' });
+        console.log('获取Cookie响应:', response);
+
+        // 恢复按钮状态
+        getCookieBtn.disabled = false;
+        getCookieBtn.innerHTML = `
+          <svg viewBox="0 0 24 24">
+            <path d="M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z" />
+          </svg>
+          获取Cookie
+        `;
+
+        if (response && response.success && response.cookie) {
+          bilibiliCookieInput.value = response.cookie;
+          setCookie();
+
+          // 显示自定义消息或默认成功消息
+          if (response.message) {
+            showSuccess(response.message);
+          } else {
+            showSuccess('已成功获取B站Cookie');
+          }
+        } else {
+          // 处理错误情况，确保即使response没有message属性也不会报错
+          const errorMsg = response && response.message ? response.message : '获取Cookie失败，请确保已登录B站';
+          showError(errorMsg);
+        }
+      } catch (error) {
+        console.error('获取Cookie出错:', error);
+        showError('获取Cookie失败: ' + (error?.message || '未知错误'));
+
+        // 确保按钮状态恢复
+        getCookieBtn.disabled = false;
+        getCookieBtn.innerHTML = `
+          <svg viewBox="0 0 24 24">
+            <path d="M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z" />
+          </svg>
+          获取Cookie
+        `;
+      }
+    });
+  }
+
   // 修改获取视频信息按钮的事件监听
   generateUrlBtn.addEventListener('click', async () => {
     // Cookie已通过input事件自动设置，无需在此处再调用setCookie

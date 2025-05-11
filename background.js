@@ -832,6 +832,183 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true; // 保持消息通道开启，等待异步响应
   }
 
+  // 处理获取B站Cookie的消息
+  if (message.action === 'getCookie') {
+    console.log('收到获取Cookie请求');
+
+    // 查询当前激活的标签页
+    chrome.tabs.query({ active: true, currentWindow: true }, async (tabs) => {
+      try {
+        if (!tabs || tabs.length === 0) {
+          console.error('无法获取当前标签页');
+          sendResponse({ success: false, message: '无法获取当前标签页' });
+          return;
+        }
+
+        const currentTab = tabs[0];
+        console.log('当前标签页URL:', currentTab.url);
+
+        // 检查是否在B站页面
+        if (!currentTab.url || !currentTab.url.includes('bilibili.com')) {
+          console.error('当前不在B站页面');
+          sendResponse({ success: false, message: '请在B站页面使用此功能' });
+          return;
+        }
+
+        // 使用chrome.cookies API获取所有B站Cookie
+        console.log('开始获取B站Cookies...');
+
+        try {
+          // 直接使用内容脚本获取完整Cookie字符串
+          console.log('尝试使用脚本直接获取document.cookie...');
+          const results = await chrome.scripting.executeScript({
+            target: { tabId: currentTab.id },
+            func: () => {
+              return document.cookie;
+            },
+          });
+
+          console.log('脚本执行结果:', results);
+
+          if (results && results[0] && results[0].result && results[0].result.trim() !== '') {
+            const fullCookie = results[0].result;
+            console.log('成功获取完整Cookie字符串，长度:', fullCookie.length);
+
+            // 保存Cookie
+            bilibiliCookie = fullCookie;
+            await saveCookieToStorage(fullCookie);
+
+            // 检查必要的Cookie项是否存在
+            const hasSessData = fullCookie.includes('SESSDATA=');
+            const hasBiliJct = fullCookie.includes('bili_jct=');
+            const hasDedeUserID = fullCookie.includes('DedeUserID=');
+
+            console.log(
+              'Cookie关键项检查: SESSDATA=',
+              hasSessData,
+              'bili_jct=',
+              hasBiliJct,
+              'DedeUserID=',
+              hasDedeUserID,
+            );
+
+            if (!hasSessData || !hasBiliJct || !hasDedeUserID) {
+              console.warn('Cookie可能不完整，缺少关键信息');
+              sendResponse({
+                success: true,
+                cookie: fullCookie,
+                message: 'Cookie已获取，但可能不完整，建议确认是否已正确登录B站',
+              });
+              return;
+            } else {
+              console.log('Cookie获取成功，包含所有关键信息');
+              sendResponse({
+                success: true,
+                cookie: fullCookie,
+                message: 'Cookie获取成功',
+              });
+              return;
+            }
+          } else {
+            console.log('直接获取document.cookie失败，尝试使用cookies API');
+          }
+        } catch (scriptError) {
+          console.error('尝试使用脚本获取Cookie时出错:', scriptError);
+          console.log('将尝试使用cookies API');
+        }
+
+        // 如果内容脚本方法失败，再尝试使用cookies API
+        // 从URL获取域名
+        const url = new URL(currentTab.url);
+        const domain = url.hostname;
+        console.log('从URL提取的域名:', domain);
+
+        // 获取所有相关域名的cookie
+        const domains = ['.bilibili.com', 'www.bilibili.com', 'bilibili.com', domain];
+
+        let allCookies = [];
+
+        // 获取所有域名的cookies
+        for (const d of domains) {
+          try {
+            console.log(`获取域名 ${d} 的cookies...`);
+            const cookies = await chrome.cookies.getAll({ domain: d });
+            console.log(`域名 ${d} 获取到 ${cookies.length} 个cookies`);
+            allCookies = allCookies.concat(cookies);
+          } catch (e) {
+            console.error(`获取域名 ${d} 的cookies时出错:`, e);
+          }
+        }
+
+        // 去重
+        const uniqueCookies = Array.from(new Set(allCookies.map((c) => c.name))).map((name) => {
+          return allCookies.find((c) => c.name === name);
+        });
+
+        console.log('获取到的总Cookie数:', uniqueCookies.length);
+
+        if (uniqueCookies.length === 0) {
+          console.error('未获取到任何Cookie');
+          sendResponse({ success: false, message: '未获取到Cookie，请确保已登录B站' });
+          return;
+        }
+
+        // 将Cookie格式化为字符串格式
+        const cookieString = uniqueCookies.map((cookie) => `${cookie.name}=${cookie.value}`).join('; ');
+
+        console.log('整合后的Cookie长度:', cookieString.length);
+
+        if (cookieString.trim() === '') {
+          console.error('整合后的Cookie为空');
+          sendResponse({ success: false, message: '获取到的Cookie为空，请确保已登录B站' });
+          return;
+        }
+
+        // 保存Cookie
+        bilibiliCookie = cookieString;
+        await saveCookieToStorage(cookieString);
+
+        // 检查是否包含关键Cookie项
+        const hasSessData = cookieString.includes('SESSDATA=');
+        const hasBiliJct = cookieString.includes('bili_jct=');
+        const hasDedeUserID = cookieString.includes('DedeUserID=');
+
+        console.log(
+          'Cookie包含关键信息检查: SESSDATA=',
+          hasSessData,
+          'bili_jct=',
+          hasBiliJct,
+          'DedeUserID=',
+          hasDedeUserID,
+        );
+
+        if (!hasSessData || !hasBiliJct || !hasDedeUserID) {
+          console.warn('通过API获取的Cookie可能不完整，缺少关键信息');
+          sendResponse({
+            success: true,
+            cookie: cookieString,
+            message: 'Cookie已获取(API方式)，但可能不完整，建议确认是否已正确登录B站',
+          });
+        } else {
+          console.log('通过API获取Cookie成功，包含所有关键信息');
+          sendResponse({
+            success: true,
+            cookie: cookieString,
+            message: 'Cookie获取成功(API方式)',
+          });
+        }
+      } catch (error) {
+        console.error('获取Cookie时出错:', error);
+        sendResponse({
+          success: false,
+          message: '获取Cookie失败: ' + (error?.message || '未知错误'),
+        });
+      }
+    });
+
+    return true; // 保持消息通道开启，等待异步响应
+  }
+
   // 处理测试WBI接口的消息
   if (message.action === 'testWbiApi') {
     console.log('收到测试WBI接口请求:', message);

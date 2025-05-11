@@ -20,6 +20,20 @@
         overflow-x: hidden;
       }
 
+      /* 添加旋转动画 */
+      @keyframes spin {
+        0% {
+          transform: rotate(0deg);
+        }
+        100% {
+          transform: rotate(360deg);
+        }
+      }
+
+      .spin {
+        animation: spin 1.5s linear infinite;
+      }
+
       .input-container {
         width: 90%;
         /* max-width: 400px; */
@@ -1004,7 +1018,7 @@
         <label class="input-label">Cookie</label>
         <div class="input-wrapper">
           <input
-            type="password"
+            type="text"
             id="bilibiliCookie"
             class="input-field"
             placeholder="请参考使用文档获取并填写 Bilibili 的Cookie"
@@ -1018,17 +1032,18 @@
           </button>
         </div>
         <!-- 添加Cookie操作按钮 -->
-        <!-- <div class="cookie-action-btn-container">
+        <div class="cookie-action-btn-container">
           <button
-            id="applyCookieBtn"
+            id="getCookieBtn"
             class="cookie-action-btn"
+            style="background-color: #52c41a"
           >
             <svg viewBox="0 0 24 24">
               <path d="M9 16.2L4.8 12l-1.4 1.4L9 19 21 7l-1.4-1.4L9 16.2z" />
             </svg>
-            应用Cookie
+            获取Cookie
           </button>
-        </div> -->
+        </div>
       </div>
 
       <!-- 视频地址输入框 -->
