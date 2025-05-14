@@ -1064,7 +1064,7 @@ document.addEventListener('DOMContentLoaded', function () {
         subtitleStatusHtml = `<span style="color: #666;">${video.subtitleStatus}</span>`;
       } else if (
         video.subtitleStatus &&
-        (video.subtitleStatus.includes('失败') || video.subtitleStatus.includes('错误'))
+        (video.subtitleStatus.includes('无字幕文件') || video.subtitleStatus.includes('错误'))
       ) {
         // 失败状态显示为红色
         subtitleStatusHtml = `<span style="color: #ff4d4f;">${video.subtitleStatus}</span>`;
@@ -1223,7 +1223,8 @@ document.addEventListener('DOMContentLoaded', function () {
         } else {
           // 获取失败
           const errorMessage = response?.message || '未知原因';
-          videoList[i].subtitleStatus = `获取失败: ${errorMessage}`;
+          // videoList[i].subtitleStatus = `获取失败: ${errorMessage}`;
+          videoList[i].subtitleStatus = `无字幕文件`;
           failCount++;
           console.log(`视频 ${video.title} 字幕获取失败: ${errorMessage}`);
         }
