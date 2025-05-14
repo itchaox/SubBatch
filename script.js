@@ -1038,7 +1038,7 @@ document.addEventListener('DOMContentLoaded', function () {
     // 有视频时显示计数信息
     document.getElementById('videoCountInfo').style.display = 'inline';
     // 计算已获取字幕的视频数量
-    const completedCount = videoList.filter((video) => video.subtitleStatus === '已获取').length;
+    const completedCount = videoList.filter((video) => video.subtitleStatus === '获取成功').length;
 
     // 更新计数器显示
     document.getElementById('totalVideoCount').textContent = videoList.length.toString();
@@ -1050,9 +1050,9 @@ document.addEventListener('DOMContentLoaded', function () {
 
       // 根据字幕状态设置样式
       let subtitleStatusHtml = '';
-      if (video.subtitleStatus === '已获取') {
+      if (video.subtitleStatus === '获取成功') {
         // 已获取状态显示为绿色并添加✅图标
-        subtitleStatusHtml = `<span style="color: #52c41a; font-weight: 500;">✅ 已获取</span>`;
+        subtitleStatusHtml = `<span style="color: #52c41a; font-weight: 500;">✅ 获取成功</span>`;
       } else if (video.subtitleStatus === '获取中') {
         // 获取中状态显示为蓝色带动画
         subtitleStatusHtml = `<span style="color: #1890ff; display: flex; align-items: center;">
@@ -1158,7 +1158,7 @@ document.addEventListener('DOMContentLoaded', function () {
     let successCount = 0;
     let failCount = 0;
     const totalVideos = videoList.length;
-    const needProcessVideos = videoList.filter((v) => v.subtitleStatus !== '已获取').length;
+    const needProcessVideos = videoList.filter((v) => v.subtitleStatus !== '获取成功').length;
 
     showSuccess('开始批量获取字幕，请稍候...');
 
@@ -1172,7 +1172,7 @@ document.addEventListener('DOMContentLoaded', function () {
       updateProgress(currentPercent, `处理第 ${i + 1}/${totalVideos} 个视频...`);
 
       // 如果已经成功获取过字幕，跳过
-      if (video.subtitleStatus === '已获取' && video.subtitleText) {
+      if (video.subtitleStatus === '获取成功' && video.subtitleText) {
         console.log(`视频 ${video.title} 已有字幕，跳过`);
         continue;
       }
@@ -1216,7 +1216,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
         if (response && response.success) {
           // 更新字幕状态和内容
-          videoList[i].subtitleStatus = '已获取';
+          videoList[i].subtitleStatus = '获取成功';
           videoList[i].subtitleText = response.subtitleText;
           successCount++;
           console.log(`视频 ${video.title} 字幕获取成功`);
@@ -1301,7 +1301,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
       // 筛选出已获取字幕的视频
       const videosWithSubtitle = videoList.filter(
-        (video) => video.subtitleStatus === '已获取' && video.subtitleText && video.subtitleText.trim() !== '',
+        (video) => video.subtitleStatus === '获取成功' && video.subtitleText && video.subtitleText.trim() !== '',
       );
 
       if (videosWithSubtitle.length === 0) {
