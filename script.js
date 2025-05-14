@@ -248,7 +248,10 @@ document.addEventListener('DOMContentLoaded', function () {
 
         displayVideoInfo(response);
         showSuccess('成功获取视频信息');
-        return response;
+        return {
+          ...response,
+          mid: response?.full_data?.owner?.mid || 0,
+        };
       } else {
         showError('获取视频信息失败');
         return null;
@@ -959,6 +962,7 @@ document.addEventListener('DOMContentLoaded', function () {
             subtitleText: null,
             view_count: video.stat?.view || 0,
             like_count: video.stat?.like || 0,
+            mid: video.upper?.mid || 0,
           };
 
           // 添加到表格
@@ -977,6 +981,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
   // 添加视频到表格
   function addVideoToTable(videoInfo) {
+    console.log('🚀 videoInfo:', videoInfo);
     if (!videoInfo || !videoInfo.title) {
       showError('视频信息不完整，无法添加到表格');
       return;
@@ -1001,6 +1006,7 @@ document.addEventListener('DOMContentLoaded', function () {
       subtitleText: null,
       view_count: videoInfo.view_count,
       like_count: videoInfo.like_count,
+      mid: videoInfo.mid,
     };
 
     // 添加到视频列表
@@ -1059,7 +1065,9 @@ document.addEventListener('DOMContentLoaded', function () {
         <td><a href="https://www.bilibili.com/video/${video.bvid}" target="_blank" title="${video.title}">${
         video.title
       }</a></td>
-        <td>${video.author}</td>
+        <td><a href="https://space.bilibili.com/${video.mid}" target="_blank" title="${video.author}">${
+        video.author
+      }</a></td>
         <td>${subtitleStatusHtml}</td>
         <td>
           <button class="table-action-btn remove-row-btn" data-index="${index}">
