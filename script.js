@@ -991,9 +991,9 @@ document.addEventListener('DOMContentLoaded', function () {
         getFavoriteBtn.disabled = false;
         getFavoriteBtn.innerHTML = `
           <svg viewBox="0 0 24 24">
-            <path d="M17 3H7c-1.1 0-1.99.9-1.99 2L5 21l7-3 7 3V5c0-1.1-.9-2-2-2z"/>
+            <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
           </svg>
-          获取收藏夹的视频
+          获取视频
         `;
       }
     });
