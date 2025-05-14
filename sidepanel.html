@@ -860,6 +860,119 @@
         text-decoration: underline;
         color: #2860e1;
       }
+
+      /* 自定义下拉框样式 */
+      .custom-select-container {
+        position: relative;
+        min-width: 110px;
+        user-select: none;
+        z-index: 100;
+      }
+
+      .custom-select-trigger {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 8px 12px;
+        background-color: #ffffff;
+        border: 1px solid #dcdfe6;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 14px;
+        color: #606266;
+        transition: all 0.2s ease;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+        height: 20px; /* 固定高度，使其与输入框高度统一 */
+      }
+
+      .custom-select-trigger:hover {
+        border-color: #c0c4cc;
+      }
+
+      .custom-select-trigger.active {
+        border-color: #3370ff;
+        box-shadow: 0 0 0 2px rgba(51, 112, 255, 0.1);
+      }
+
+      .custom-select-icon {
+        margin-left: 6px;
+        transition: transform 0.2s ease;
+      }
+
+      .custom-select-trigger.active .custom-select-icon {
+        transform: rotate(180deg);
+      }
+
+      .custom-select-dropdown {
+        position: absolute;
+        top: calc(100% + 5px);
+        left: 0;
+        width: 100%;
+        background-color: #fff;
+        border-radius: 4px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        z-index: 1000;
+        overflow: hidden;
+        max-height: 0;
+        opacity: 0;
+        transform: translateY(-10px);
+        transition: all 0.3s cubic-bezier(0.23, 1, 0.32, 1);
+        pointer-events: none;
+        border: 1px solid #ebeef5;
+      }
+
+      .custom-select-dropdown.active {
+        max-height: 200px;
+        opacity: 1;
+        transform: translateY(0);
+        pointer-events: auto;
+      }
+
+      .custom-select-option {
+        padding: 10px 12px;
+        cursor: pointer;
+        font-size: 14px;
+        color: #606266;
+        transition: all 0.2s ease;
+        position: relative;
+        display: flex;
+        align-items: center;
+      }
+
+      .custom-select-option:hover {
+        background-color: #f5f7fa;
+      }
+
+      .custom-select-option.selected {
+        color: #3370ff;
+        font-weight: 500;
+        background-color: #ecf5ff;
+      }
+
+      .custom-select-option.selected::before {
+        content: '';
+        position: absolute;
+        left: 0;
+        width: 3px;
+        height: 100%;
+        background-color: #3370ff;
+      }
+
+      /* 添加箭头图标 */
+      .select-arrow-icon {
+        width: 16px;
+        height: 16px;
+        fill: #909399;
+        transition: transform 0.3s;
+      }
+
+      /* 选中时样式 */
+      .custom-select-selected-text {
+        color: #303133;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
     </style>
   </head>
   <body>
@@ -1048,22 +1161,46 @@
 
       <!-- 统一的地址输入框 -->
       <div class="input-row">
-        <div style="display: flex; align-items: center; gap: 10px; min-width: 80px">
-          <select
-            id="urlTypeSelector"
-            class="input-field"
-            style="padding: 8px; width: 110px"
+        <div
+          class="custom-select-container"
+          id="urlTypeContainer"
+        >
+          <div
+            class="custom-select-trigger"
+            id="urlTypeTrigger"
           >
-            <option value="video">视频地址</option>
-            <option value="favorite">收藏夹地址</option>
-          </select>
+            <span class="custom-select-selected-text">视频地址</span>
+            <svg
+              class="select-arrow-icon"
+              viewBox="0 0 24 24"
+            >
+              <path d="M7 10l5 5 5-5z" />
+            </svg>
+          </div>
+          <div
+            class="custom-select-dropdown"
+            id="urlTypeDropdown"
+          >
+            <div
+              class="custom-select-option selected"
+              data-value="video"
+            >
+              视频地址
+            </div>
+            <div
+              class="custom-select-option"
+              data-value="favorite"
+            >
+              收藏夹地址
+            </div>
+          </div>
         </div>
         <div class="input-wrapper">
           <input
             id="urlInput"
             type="text"
             class="input-field"
-            placeholder="输入B站视频/收藏夹地址"
+            placeholder="请输入B站视频地址"
           />
           <button class="clear-btn">
             <svg viewBox="0 0 24 24">

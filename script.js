@@ -2,10 +2,16 @@ document.addEventListener('DOMContentLoaded', function () {
   console.log('DOM加载完成，初始化脚本...');
 
   const getPageUrlBtn = document.getElementById('getPageUrlBtn');
-  const urlTypeSelector = document.getElementById('urlTypeSelector');
   const urlInput = document.getElementById('urlInput');
   const generateUrlBtn = document.getElementById('generateUrlBtn');
   const getFavoriteBtn = document.getElementById('getFavoriteBtn');
+
+  // 自定义下拉框元素
+  const urlTypeTrigger = document.getElementById('urlTypeTrigger');
+  const urlTypeDropdown = document.getElementById('urlTypeDropdown');
+  const urlTypeOptions = document.querySelectorAll('.custom-select-option');
+  const urlTypeSelectedText = document.querySelector('.custom-select-selected-text');
+  let currentUrlType = 'video'; // 默认选择视频地址
 
   const bilibiliCookieInput = document.getElementById('bilibiliCookie');
   const cookieClearBtn = document.querySelector('.cookie-clear-btn');
@@ -544,17 +550,93 @@ document.addEventListener('DOMContentLoaded', function () {
     urlInput.focus();
   });
 
-  // 处理URL类型选择器变化
-  urlTypeSelector.addEventListener('change', function () {
-    if (this.value === 'video') {
-      generateUrlBtn.style.display = 'block';
-      getFavoriteBtn.style.display = 'none';
-      urlInput.placeholder = '输入B站视频地址';
-    } else {
-      generateUrlBtn.style.display = 'none';
-      getFavoriteBtn.style.display = 'block';
-      urlInput.placeholder = '输入B站收藏夹地址';
-    }
+  // 自定义下拉框点击显示/隐藏下拉列表
+  urlTypeTrigger.addEventListener('click', function (e) {
+    e.stopPropagation();
+    this.classList.toggle('active');
+    urlTypeDropdown.classList.toggle('active');
+  });
+
+  // 支持触摸事件
+  urlTypeTrigger.addEventListener('touchend', function (e) {
+    e.stopPropagation();
+    e.preventDefault();
+    this.classList.toggle('active');
+    urlTypeDropdown.classList.toggle('active');
+  });
+
+  // 点击页面其他部分关闭下拉框
+  document.addEventListener('click', function () {
+    urlTypeTrigger.classList.remove('active');
+    urlTypeDropdown.classList.remove('active');
+  });
+
+  document.addEventListener('touchend', function () {
+    urlTypeTrigger.classList.remove('active');
+    urlTypeDropdown.classList.remove('active');
+  });
+
+  // 下拉选项点击事件
+  urlTypeOptions.forEach(function (option) {
+    option.addEventListener('click', function (e) {
+      e.stopPropagation();
+
+      // 更新当前选中值
+      currentUrlType = this.getAttribute('data-value');
+
+      // 更新显示文本
+      urlTypeSelectedText.textContent = this.textContent;
+
+      // 更新选中状态
+      urlTypeOptions.forEach((opt) => opt.classList.remove('selected'));
+      this.classList.add('selected');
+
+      // 根据类型显示不同按钮
+      if (currentUrlType === 'video') {
+        generateUrlBtn.style.display = 'block';
+        getFavoriteBtn.style.display = 'none';
+        urlInput.placeholder = '请输入B站视频地址';
+      } else {
+        generateUrlBtn.style.display = 'none';
+        getFavoriteBtn.style.display = 'block';
+        urlInput.placeholder = '请输入B站收藏夹地址';
+      }
+
+      // 关闭下拉框
+      urlTypeTrigger.classList.remove('active');
+      urlTypeDropdown.classList.remove('active');
+    });
+
+    // 支持触摸事件
+    option.addEventListener('touchend', function (e) {
+      e.stopPropagation();
+      e.preventDefault();
+
+      // 更新当前选中值
+      currentUrlType = this.getAttribute('data-value');
+
+      // 更新显示文本
+      urlTypeSelectedText.textContent = this.textContent;
+
+      // 更新选中状态
+      urlTypeOptions.forEach((opt) => opt.classList.remove('selected'));
+      this.classList.add('selected');
+
+      // 根据类型显示不同按钮
+      if (currentUrlType === 'video') {
+        generateUrlBtn.style.display = 'block';
+        getFavoriteBtn.style.display = 'none';
+        urlInput.placeholder = '请输入B站视频地址';
+      } else {
+        generateUrlBtn.style.display = 'none';
+        getFavoriteBtn.style.display = 'block';
+        urlInput.placeholder = '请输入B站收藏夹地址';
+      }
+
+      // 关闭下拉框
+      urlTypeTrigger.classList.remove('active');
+      urlTypeDropdown.classList.remove('active');
+    });
   });
 
   // 获取当前页面地址按钮
