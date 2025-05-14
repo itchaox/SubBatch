@@ -480,7 +480,9 @@ document.addEventListener('DOMContentLoaded', function () {
       // 创建一个临时的<a>元素用于下载
       const downloadLink = document.createElement('a');
       downloadLink.href = url;
-      downloadLink.download = `${currentVideoInfo?.title || 'subtitle'}.txt`;
+      const safeTitle = (currentVideoInfo?.title || 'subtitle').replace(/[\\/:*?"<>|]/g, '_');
+      const safeAuthor = (currentVideoInfo?.author || 'unknown').replace(/[\\/:*?"<>|]/g, '_');
+      downloadLink.download = `【${safeAuthor}】—${safeTitle}.txt`;
 
       // 将链接添加到文档中并点击
       document.body.appendChild(downloadLink);
@@ -1524,7 +1526,8 @@ document.addEventListener('DOMContentLoaded', function () {
         try {
           // 创建文件名，移除不合法的文件名字符
           const safeTitle = video.title.replace(/[\\/:*?"<>|]/g, '_');
-          const fileName = `${safeTitle}.${format}`;
+          const safeAuthor = video.author ? video.author.replace(/[\\/:*?"<>|]/g, '_') : 'unknown';
+          const fileName = `【${safeAuthor}】—${safeTitle}.${format}`;
 
           // 根据选择的格式处理字幕内容
           let subtitleContent;
