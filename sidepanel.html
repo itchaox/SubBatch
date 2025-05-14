@@ -976,6 +976,7 @@
     </div>
     <div style="display: flex; gap: 8px; width: 95%; margin-bottom: 10px">
       <button
+        id="getPageUrlBtn"
         class="get-url-btn"
         style="flex: 1; padding: 6px 12px; font-size: 13px; margin: 0"
       >
@@ -985,19 +986,7 @@
         >
           <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
         </svg>
-        获取视频地址
-      </button>
-      <button
-        class="get-collect-btn"
-        style="flex: 1; padding: 6px 12px; font-size: 13px; margin: 0"
-      >
-        <svg
-          viewBox="0 0 24 24"
-          style="width: 16px; height: 16px"
-        >
-          <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
-        </svg>
-        获取收藏夹地址
+        获取当前网页地址
       </button>
 
       <button
@@ -1057,15 +1046,24 @@
         </div>
       </div>
 
-      <!-- 视频地址输入框 -->
+      <!-- 统一的地址输入框 -->
       <div class="input-row">
-        <label class="input-label">视频地址</label>
+        <div style="display: flex; align-items: center; gap: 10px; min-width: 80px">
+          <select
+            id="urlTypeSelector"
+            class="input-field"
+            style="padding: 8px; width: 110px"
+          >
+            <option value="video">视频地址</option>
+            <option value="favorite">收藏夹地址</option>
+          </select>
+        </div>
         <div class="input-wrapper">
           <input
-            id="tableUrlInput"
+            id="urlInput"
             type="text"
             class="input-field"
-            placeholder="输入B站视频地址"
+            placeholder="输入B站视频/收藏夹地址"
           />
           <button class="clear-btn">
             <svg viewBox="0 0 24 24">
@@ -1079,40 +1077,17 @@
           <button
             id="generateUrlBtn"
             class="cookie-action-btn"
-            style="background-color: #3370ff"
+            style="background-color: #3370ff; display: block"
           >
             <svg viewBox="0 0 24 24">
               <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
             </svg>
             添加到表格
           </button>
-          <span class="cookie-tip"></span>
-        </div>
-      </div>
-
-      <!-- 收藏夹地址输入框 -->
-      <div class="input-row">
-        <label class="input-label">收藏夹地址</label>
-        <div class="input-wrapper">
-          <input
-            id="favoriteUrlInput"
-            type="text"
-            class="input-field"
-            placeholder="输入B站收藏夹地址"
-          />
-          <button class="clear-btn">
-            <svg viewBox="0 0 24 24">
-              <path
-                d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"
-              />
-            </svg>
-          </button>
-        </div>
-        <div class="cookie-action-btn-container">
           <button
             id="getFavoriteBtn"
             class="cookie-action-btn"
-            style="background-color: #3370ff"
+            style="background-color: #3370ff; display: none"
           >
             <svg viewBox="0 0 24 24">
               <path d="M17 3H7c-1.1 0-1.99.9-1.99 2L5 21l7-3 7 3V5c0-1.1-.9-2-2-2z" />
@@ -1135,8 +1110,19 @@
           <span
             id="videoCountInfo"
             style="font-size: 14px; font-weight: normal; color: #666; margin-left: 8px; display: none"
-            >(总共: <span id="totalVideoCount" style="color: #3370ff; font-weight: bold;">0</span> 条, 获取成功:
-            <span id="completedSubtitleCount" style="color: #3370ff; font-weight: bold;">0</span> 条)</span
+            >(总共:
+            <span
+              id="totalVideoCount"
+              style="color: #3370ff; font-weight: bold"
+              >0</span
+            >
+            条, 获取成功:
+            <span
+              id="completedSubtitleCount"
+              style="color: #3370ff; font-weight: bold"
+              >0</span
+            >
+            条)</span
           >
         </h3>
         <div class="table-actions">

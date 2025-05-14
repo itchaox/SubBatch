@@ -1,16 +1,16 @@
 document.addEventListener('DOMContentLoaded', function () {
   console.log('DOM加载完成，初始化脚本...');
 
-  const getUrlBtn = document.querySelector('.get-url-btn');
-  const getCollectBtn = document.querySelector('.get-collect-btn');
+  const getPageUrlBtn = document.getElementById('getPageUrlBtn');
+  const urlTypeSelector = document.getElementById('urlTypeSelector');
+  const urlInput = document.getElementById('urlInput');
+  const generateUrlBtn = document.getElementById('generateUrlBtn');
+  const getFavoriteBtn = document.getElementById('getFavoriteBtn');
 
-  const tableUrlInput = document.getElementById('tableUrlInput');
-  const clearBtn = document.querySelector('.clear-btn');
   const bilibiliCookieInput = document.getElementById('bilibiliCookie');
   const cookieClearBtn = document.querySelector('.cookie-clear-btn');
   const errorToast = document.getElementById('errorToast');
   const successToast = document.getElementById('successToast');
-  const generateUrlBtn = document.getElementById('generateUrlBtn');
   const previewBtn = document.getElementById('previewBtn');
   const copyBtn = document.getElementById('copyBtn');
   const sponsorBtn = document.getElementById('sponsorBtn');
@@ -501,13 +501,13 @@ document.addEventListener('DOMContentLoaded', function () {
 
   // 生成URL
   function generateUrl() {
-    const baseUrl = tableUrlInput.value.trim();
-    if (!baseUrl) {
-      showError('请先填写视频地址！');
+    const url = urlInput.value.trim();
+    if (!url) {
+      showError('请先填写地址！');
       return '';
     }
 
-    return baseUrl;
+    return url;
   }
 
   // 复制文本到剪贴板
@@ -536,48 +536,33 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   // 事件监听器
-  clearBtn.addEventListener('click', () => {
-    tableUrlInput.value = '';
+  // 清空地址输入框
+  document.querySelector('#urlInput + .clear-btn').addEventListener('click', () => {
+    urlInput.value = '';
     resetVideoInfo();
     // 清空后自动聚焦输入框
-    tableUrlInput.focus();
+    urlInput.focus();
   });
 
-  // 为视频地址输入框的清除按钮添加事件监听
-  document.querySelector('#tableUrlInput + .clear-btn').addEventListener('click', () => {
-    tableUrlInput.value = '';
-    resetVideoInfo();
-    // 清空后自动聚焦输入框
-    tableUrlInput.focus();
-  });
-
-  // 为收藏夹地址输入框的清除按钮添加事件监听
-  document.querySelector('#favoriteUrlInput + .clear-btn').addEventListener('click', () => {
-    favoriteUrlInput.value = '';
-    // 清空后自动聚焦输入框
-    favoriteUrlInput.focus();
-    console.log('已清空收藏夹地址输入框');
-  });
-
-  getUrlBtn.addEventListener('click', async () => {
-    try {
-      const response = await chrome.runtime.sendMessage({ action: 'getTabUrl' });
-      if (response?.url) {
-        tableUrlInput.value = response.url;
-        resetVideoInfo();
-        showSuccess('已获取当前页面地址');
-      }
-    } catch (error) {
-      console.error('获取URL失败:', error);
-      showError('获取地址失败，请重试');
+  // 处理URL类型选择器变化
+  urlTypeSelector.addEventListener('change', function () {
+    if (this.value === 'video') {
+      generateUrlBtn.style.display = 'block';
+      getFavoriteBtn.style.display = 'none';
+      urlInput.placeholder = '输入B站视频地址';
+    } else {
+      generateUrlBtn.style.display = 'none';
+      getFavoriteBtn.style.display = 'block';
+      urlInput.placeholder = '输入B站收藏夹地址';
     }
   });
 
-  getCollectBtn.addEventListener('click', async () => {
+  // 获取当前页面地址按钮
+  getPageUrlBtn.addEventListener('click', async () => {
     try {
       const response = await chrome.runtime.sendMessage({ action: 'getTabUrl' });
       if (response?.url) {
-        favoriteUrlInput.value = response.url;
+        urlInput.value = response.url;
         resetVideoInfo();
         showSuccess('已获取当前页面地址');
       }
@@ -719,23 +704,26 @@ document.addEventListener('DOMContentLoaded', function () {
   generateUrlBtn.addEventListener('click', async () => {
     // Cookie已通过input事件自动设置，无需在此处再调用setCookie
 
-    // 继续原有逻辑
-    generatedUrl = generateUrl();
-    if (generatedUrl) {
-      // 重置当前视频信息和字幕数据
-      currentVideoInfo = null;
-      currentSubtitleData = null;
+    // 获取URL
+    const url = urlInput.value.trim();
+    if (!url) {
+      showError('请先填写视频地址！');
+      return;
+    }
 
-      // 如果是B站视频链接，获取视频信息
-      if (isBilibiliUrl(generatedUrl)) {
-        const videoInfo = await fetchBilibiliVideoInfo(generatedUrl);
-        if (videoInfo && videoInfo.success) {
-          // 添加到表格
-          addVideoToTable(videoInfo);
-        }
-      } else {
-        showError('不是B站视频链接，无法添加');
+    // 重置当前视频信息和字幕数据
+    currentVideoInfo = null;
+    currentSubtitleData = null;
+
+    // 如果是B站视频链接，获取视频信息
+    if (isBilibiliUrl(url)) {
+      const videoInfo = await fetchBilibiliVideoInfo(url);
+      if (videoInfo && videoInfo.success) {
+        // 添加到表格
+        addVideoToTable(videoInfo);
       }
+    } else {
+      showError('不是B站视频链接，无法添加');
     }
   });
 
@@ -789,17 +777,13 @@ document.addEventListener('DOMContentLoaded', function () {
     chrome.tabs.create({ url: 'https://space.bilibili.com/521041866' });
   });
 
-  // 获取收藏夹地址输入框和解析按钮
-  const favoriteUrlInput = document.getElementById('favoriteUrlInput');
-  const parseFavoriteUrlBtn = document.getElementById('getFavoriteBtn');
-
   // 为解析收藏夹地址按钮添加事件监听
-  if (parseFavoriteUrlBtn && favoriteUrlInput) {
-    parseFavoriteUrlBtn.addEventListener('click', async () => {
-      const favoriteUrl = favoriteUrlInput.value.trim();
+  if (getFavoriteBtn) {
+    getFavoriteBtn.addEventListener('click', async () => {
+      const favoriteUrl = urlInput.value.trim();
       if (!favoriteUrl) {
         showError('请输入B站收藏夹地址');
-        favoriteUrlInput.focus();
+        urlInput.focus();
         return;
       }
 
@@ -816,8 +800,8 @@ document.addEventListener('DOMContentLoaded', function () {
       console.log('从URL中提取的收藏夹ID:', fid);
 
       // 禁用按钮并显示加载状态
-      parseFavoriteUrlBtn.disabled = true;
-      parseFavoriteUrlBtn.innerHTML = `
+      getFavoriteBtn.disabled = true;
+      getFavoriteBtn.innerHTML = `
         <svg viewBox="0 0 24 24" class="spin">
           <path d="M12 6v3l4-4-4-4v3c-4.42 0-8 3.58-8 8 0 1.57.46 3.03 1.24 4.26L6.7 14.8c-.45-.83-.7-1.79-.7-2.8 0-3.31 2.69-6 6-6zm6.76 1.74L17.3 9.2c.44.84.7 1.79.7 2.8 0 3.31-2.69 6-6 6v-3l-4 4 4 4v-3c4.42 0 8-3.58 8-8 0-1.57-.46-3.03-1.24-4.26z"/>
         </svg>
@@ -922,8 +906,8 @@ document.addEventListener('DOMContentLoaded', function () {
         showError('获取收藏夹内容失败: ' + (error.message || '未知错误'));
       } finally {
         // 恢复按钮状态
-        parseFavoriteUrlBtn.disabled = false;
-        parseFavoriteUrlBtn.innerHTML = `
+        getFavoriteBtn.disabled = false;
+        getFavoriteBtn.innerHTML = `
           <svg viewBox="0 0 24 24">
             <path d="M17 3H7c-1.1 0-1.99.9-1.99 2L5 21l7-3 7 3V5c0-1.1-.9-2-2-2z"/>
           </svg>
