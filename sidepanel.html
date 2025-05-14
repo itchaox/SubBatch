@@ -1130,7 +1130,14 @@
       class="video-table-container"
     >
       <div class="table-header">
-        <h3>📹 视频列表</h3>
+        <h3>
+          📹 视频列表
+          <span
+            id="videoCountInfo"
+            style="font-size: 14px; font-weight: normal; color: #666; margin-left: 8px; display: none"
+            >(总计: <span id="totalVideoCount">0</span> 条, 已获取: <span id="completedSubtitleCount">0</span> 条)</span
+          >
+        </h3>
         <div class="table-actions">
           <button
             id="batchGetSubtitleBtn"

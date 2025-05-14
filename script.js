@@ -1028,8 +1028,21 @@ document.addEventListener('DOMContentLoaded', function () {
       const emptyRow = document.createElement('tr');
       emptyRow.innerHTML = `<td colspan="5" style="text-align: center; padding: 20px;">暂无视频，请添加视频</td>`;
       videoTableBody.appendChild(emptyRow);
+
+      // 更新计数器显示
+      document.getElementById('totalVideoCount').textContent = '0';
+      document.getElementById('completedSubtitleCount').textContent = '0';
       return;
     }
+
+    // 有视频时显示计数信息
+    document.getElementById('videoCountInfo').style.display = 'inline';
+    // 计算已获取字幕的视频数量
+    const completedCount = videoList.filter((video) => video.subtitleStatus === '已获取').length;
+
+    // 更新计数器显示
+    document.getElementById('totalVideoCount').textContent = videoList.length.toString();
+    document.getElementById('completedSubtitleCount').textContent = completedCount.toString();
 
     // 遍历视频列表，为每个视频创建表格行
     videoList.forEach((video, index) => {
