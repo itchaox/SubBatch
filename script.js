@@ -584,8 +584,15 @@ document.addEventListener('DOMContentLoaded', function () {
       // 更新当前选中值
       currentUrlType = this.getAttribute('data-value');
 
-      // 更新显示文本
-      urlTypeSelectedText.textContent = this.textContent;
+      // 获取选项中的SVG图标
+      const iconSvg = this.querySelector('.option-icon').cloneNode(true);
+
+      // 更新选中文本和图标
+      urlTypeSelectedText.textContent = this.textContent.trim();
+
+      // 替换触发器中的图标
+      const triggerIcon = urlTypeTrigger.querySelector('.option-icon');
+      triggerIcon.innerHTML = iconSvg.innerHTML;
 
       // 更新选中状态
       urlTypeOptions.forEach((opt) => opt.classList.remove('selected'));
@@ -607,7 +614,7 @@ document.addEventListener('DOMContentLoaded', function () {
       urlTypeDropdown.classList.remove('active');
     });
 
-    // 支持触摸事件
+    // 同样更新触摸事件处理
     option.addEventListener('touchend', function (e) {
       e.stopPropagation();
       e.preventDefault();
@@ -615,8 +622,15 @@ document.addEventListener('DOMContentLoaded', function () {
       // 更新当前选中值
       currentUrlType = this.getAttribute('data-value');
 
-      // 更新显示文本
-      urlTypeSelectedText.textContent = this.textContent;
+      // 获取选项中的SVG图标
+      const iconSvg = this.querySelector('.option-icon').cloneNode(true);
+
+      // 更新选中文本和图标
+      urlTypeSelectedText.textContent = this.textContent.trim();
+
+      // 替换触发器中的图标
+      const triggerIcon = urlTypeTrigger.querySelector('.option-icon');
+      triggerIcon.innerHTML = iconSvg.innerHTML;
 
       // 更新选中状态
       urlTypeOptions.forEach((opt) => opt.classList.remove('selected'));

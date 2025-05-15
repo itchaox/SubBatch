@@ -877,19 +877,29 @@
       }
 
       .custom-select-trigger {
+        background-color: #ffffff;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        border: 1px solid #e0e0e0;
+        border-radius: 6px;
+        padding: 8px 12px;
+        cursor: pointer;
+        position: relative;
         display: flex;
         align-items: center;
-        justify-content: space-between;
-        padding: 8px 12px;
-        background-color: #ffffff;
-        border: 1px solid #dcdfe6;
-        border-radius: 4px;
-        cursor: pointer;
-        font-size: 14px;
-        color: #606266;
-        transition: all 0.2s ease;
-        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
-        height: 20px; /* 固定高度，使其与输入框高度统一 */
+        transition: all 0.3s ease;
+        min-width: 120px;
+      }
+
+      .custom-select-selected-text {
+        flex: 1;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .custom-select-icon {
+        margin-left: 6px;
+        transition: transform 0.2s ease;
       }
 
       .custom-select-trigger:hover {
@@ -899,15 +909,6 @@
       .custom-select-trigger.active {
         border-color: #3370ff;
         box-shadow: 0 0 0 2px rgba(51, 112, 255, 0.1);
-      }
-
-      .custom-select-icon {
-        margin-left: 6px;
-        transition: transform 0.2s ease;
-      }
-
-      .custom-select-trigger.active .custom-select-icon {
-        transform: rotate(180deg);
       }
 
       .custom-select-dropdown {
@@ -938,10 +939,9 @@
       .custom-select-option {
         padding: 10px 12px;
         cursor: pointer;
-        font-size: 14px;
-        color: #606266;
         transition: all 0.2s ease;
-        position: relative;
+        white-space: nowrap;
+        text-overflow: ellipsis;
         display: flex;
         align-items: center;
       }
@@ -979,6 +979,14 @@
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
+      }
+
+      /* 添加选项图标 */
+      .option-icon {
+        width: 16px;
+        height: 16px;
+        margin-right: 8px;
+        fill: currentColor;
       }
     </style>
   </head>
@@ -1176,6 +1184,14 @@
             class="custom-select-trigger"
             id="urlTypeTrigger"
           >
+            <svg
+              class="option-icon"
+              viewBox="0 0 24 24"
+            >
+              <path
+                d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"
+              />
+            </svg>
             <span class="custom-select-selected-text">视频地址</span>
             <svg
               class="select-arrow-icon"
@@ -1192,12 +1208,26 @@
               class="custom-select-option selected"
               data-value="video"
             >
+              <svg
+                class="option-icon"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  d="M17 10.5V7c0-.55-.45-1-1-1H4c-.55 0-1 .45-1 1v10c0 .55.45 1 1 1h12c.55 0 1-.45 1-1v-3.5l4 4v-11l-4 4z"
+                />
+              </svg>
               视频地址
             </div>
             <div
               class="custom-select-option"
               data-value="favorite"
             >
+              <svg
+                class="option-icon"
+                viewBox="0 0 24 24"
+              >
+                <path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z" />
+              </svg>
               收藏夹地址
             </div>
           </div>
