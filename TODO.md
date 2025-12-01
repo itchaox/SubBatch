@@ -2,6 +2,11 @@
 接口地址: https://api.bilibili.com/x/polymer/web-space/seasons_archives_list
 需要注意处理分页问题
 
+官方的合集地址格式是这样的: https://space.bilibili.com/521041866/lists/4337438?type=season
+
+B 站官方调用接口是这个样子:https://api.bilibili.com/x/polymer/web-space/seasons_archives_list?mid=521041866&s
+eason_id=4337438&sort_reverse=false&page_size=29&page_num=1&web_location=333.1387
+
 接口获取视频合集信息
 https://api.bilibili.com/x/polymer/web-space/seasons_archives_list
 请求方式：GET
