@@ -1036,6 +1036,125 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true; // 保持消息通道开启，等待异步响应
   }
 
+  // 处理获取合集列表的消息
+  if (message.action === 'fetchCollectionList') {
+    console.log('收到获取合集列表请求:', message);
+
+    if (!message.mid || !message.season_id) {
+      console.error('获取合集请求缺少必要参数 mid 或 season_id');
+      sendResponse({
+        success: false,
+        message: '缺少必要参数 mid 或 season_id',
+      });
+      return true;
+    }
+
+    const page = typeof message.page === 'number' && message.page > 0 ? message.page : 1;
+    const pageSize = typeof message.pageSize === 'number' && message.pageSize > 0 ? message.pageSize : 30;
+    const responseSender = sendResponse;
+
+    try {
+      // 构建合集API URL
+      const collectionUrl = `https://api.bilibili.com/x/polymer/web-space/seasons_archives_list?mid=${message.mid}&season_id=${message.season_id}&sort_reverse=false&page_num=${page}&page_size=${pageSize}&web_location=333.1387`;
+      console.log('合集API请求URL:', collectionUrl);
+
+      // 检查Cookie状态
+      console.log('合集请求前Cookie状态:');
+      logCookieStatus();
+      diagnoseCookie();
+
+      // 创建请求头
+      const headers = {
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+        Accept: 'application/json, text/plain, */*',
+        'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+        Origin: 'https://space.bilibili.com',
+        Referer: `https://space.bilibili.com/${message.mid}/channel/collectiondetail?sid=${message.season_id}`,
+      };
+
+      // 如果有Cookie，添加到请求头中
+      if (bilibiliCookie && bilibiliCookie.trim() !== '') {
+        headers['Cookie'] = bilibiliCookie;
+        console.log('合集请求已添加Cookie (部分显示):', bilibiliCookie.substring(0, 20) + '...');
+      } else {
+        console.log('合集请求未添加Cookie，因为Cookie未设置或为空');
+      }
+
+      // 使用setTimeout确保在单独的任务中执行网络请求
+      setTimeout(() => {
+        fetch(collectionUrl, {
+          method: 'GET',
+          headers: headers,
+          credentials: 'include',
+        })
+          .then((response) => {
+            console.log('合集API响应状态:', response.status);
+
+            if (!response.ok) {
+              throw new Error(`HTTP请求失败，状态码: ${response.status}`);
+            }
+
+            return response.json();
+          })
+          .then((result) => {
+            console.log('合集API响应:', result);
+
+            try {
+              if (result.code === 0 && result.data) {
+                responseSender({
+                  success: true,
+                  data: result.data,
+                  message: '获取合集内容成功',
+                  page: page,
+                });
+              } else {
+                console.error('合集API返回错误:', result);
+                responseSender({
+                  success: false,
+                  message: result.message || '获取合集内容失败',
+                  code: result.code,
+                });
+              }
+            } catch (sendError) {
+              console.error('发送响应时出错:', sendError);
+              try {
+                responseSender({
+                  success: false,
+                  message: '发送响应时出错: ' + sendError.message,
+                });
+              } catch (finalError) {
+                console.error('最终尝试发送响应也失败:', finalError);
+              }
+            }
+          })
+          .catch((error) => {
+            console.error('获取合集内容出错:', error);
+            try {
+              responseSender({
+                success: false,
+                message: error.message || '网络请求错误',
+              });
+            } catch (sendError) {
+              console.error('发送错误响应时出错:', sendError);
+            }
+          });
+      }, 0);
+    } catch (error) {
+      console.error('准备合集请求时出错:', error);
+      try {
+        responseSender({
+          success: false,
+          message: '准备请求时出错: ' + error.message,
+        });
+      } catch (sendError) {
+        console.error('发送错误响应时出错:', sendError);
+      }
+    }
+
+    return true; // 保持消息通道开启
+  }
+
   // 处理获取收藏夹列表的消息
   if (message.action === 'fetchFavoriteList') {
     console.log('收到获取收藏夹列表请求:', message);

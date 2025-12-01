@@ -199,6 +199,20 @@ document.addEventListener('DOMContentLoaded', function () {
     return null;
   }
 
+  // 从URL中提取合集信息 (mid和season_id)
+  function parseCollectionUrl(url) {
+    // 匹配格式: https://space.bilibili.com/521041866/lists/4337438?type=season
+    const regex = /space\.bilibili\.com\/(\d+)\/lists\/(\d+)/;
+    const match = url.match(regex);
+    if (match && match.length >= 3) {
+      return {
+        mid: match[1],
+        season_id: match[2],
+      };
+    }
+    return null;
+  }
+
   // 判断是否为B站URL
   function isBilibiliUrl(url) {
     return url.includes('bilibili.com/video') || url.includes('b23.tv') || /bilibili\.com\/video\/av\d+/i.test(url);
@@ -603,10 +617,14 @@ document.addEventListener('DOMContentLoaded', function () {
         generateUrlBtn.style.display = 'block';
         getFavoriteBtn.style.display = 'none';
         urlInput.placeholder = '请输入B站视频地址';
-      } else {
+      } else if (currentUrlType === 'favorite') {
         generateUrlBtn.style.display = 'none';
         getFavoriteBtn.style.display = 'block';
         urlInput.placeholder = '请输入B站收藏夹地址';
+      } else if (currentUrlType === 'collection') {
+        generateUrlBtn.style.display = 'none';
+        getFavoriteBtn.style.display = 'block';
+        urlInput.placeholder = '请输入B站合集地址';
       }
 
       // 关闭下拉框
@@ -641,10 +659,14 @@ document.addEventListener('DOMContentLoaded', function () {
         generateUrlBtn.style.display = 'block';
         getFavoriteBtn.style.display = 'none';
         urlInput.placeholder = '请输入B站视频地址';
-      } else {
+      } else if (currentUrlType === 'favorite') {
         generateUrlBtn.style.display = 'none';
         getFavoriteBtn.style.display = 'block';
         urlInput.placeholder = '请输入B站收藏夹地址';
+      } else if (currentUrlType === 'collection') {
+        generateUrlBtn.style.display = 'none';
+        getFavoriteBtn.style.display = 'block';
+        urlInput.placeholder = '请输入B站合集地址';
       }
 
       // 关闭下拉框
@@ -876,7 +898,28 @@ document.addEventListener('DOMContentLoaded', function () {
   // 为解析收藏夹地址按钮添加事件监听
   if (getFavoriteBtn) {
     getFavoriteBtn.addEventListener('click', async () => {
-      const favoriteUrl = urlInput.value.trim();
+      const inputUrl = urlInput.value.trim();
+
+      // 处理合集地址
+      if (currentUrlType === 'collection') {
+        if (!inputUrl) {
+          showError('请输入B站合集地址');
+          urlInput.focus();
+          return;
+        }
+
+        const collectionInfo = parseCollectionUrl(inputUrl);
+        if (!collectionInfo) {
+          showError('无法识别的合集地址，请检查格式');
+          return;
+        }
+
+        await fetchCollectionVideos(collectionInfo.mid, collectionInfo.season_id);
+        return;
+      }
+
+      // 处理收藏夹地址
+      const favoriteUrl = inputUrl;
       if (!favoriteUrl) {
         showError('请输入B站收藏夹地址');
         urlInput.focus();
@@ -1011,6 +1054,156 @@ document.addEventListener('DOMContentLoaded', function () {
         `;
       }
     });
+  }
+
+  // 获取合集视频列表
+  async function fetchCollectionVideos(mid, season_id) {
+    console.log(`开始获取合集视频: mid=${mid}, season_id=${season_id}`);
+
+    // 禁用按钮并显示加载状态
+    getFavoriteBtn.disabled = true;
+    getFavoriteBtn.innerHTML = `
+        <svg viewBox="0 0 24 24" class="spin">
+          <path d="M12 6v3l4-4-4-4v3c-4.42 0-8 3.58-8 8 0 1.57.46 3.03 1.24 4.26L6.7 14.8c-.45-.83-.7-1.79-.7-2.8 0-3.31 2.69-6 6-6zm6.76 1.74L17.3 9.2c.44.84.7 1.79.7 2.8 0 3.31-2.69 6-6 6v-3l-4 4 4 4v-3c4.42 0 8-3.58 8-8 0-1.57-.46-3.03-1.24-4.26z"/>
+        </svg>
+        获取中
+      `;
+
+    showSuccess('正在获取合集内容，请稍候...');
+
+    try {
+      let allVideos = [];
+      let hasMore = true;
+      let currentPage = 1;
+      const pageSize = 30;
+
+      while (hasMore) {
+        showSuccess(`正在获取第${currentPage}页合集内容...`);
+        console.log(`获取合集第${currentPage}页，每页${pageSize}条`);
+
+        const response = await new Promise((resolve, reject) => {
+          const timeoutId = setTimeout(() => {
+            reject(new Error('请求超时，background.js没有及时响应'));
+          }, 15000);
+
+          chrome.runtime.sendMessage(
+            {
+              action: 'fetchCollectionList',
+              mid: mid,
+              season_id: season_id,
+              page: currentPage,
+              pageSize: pageSize,
+            },
+            (response) => {
+              clearTimeout(timeoutId);
+              const error = chrome.runtime.lastError;
+              if (error) {
+                console.error('发送消息时出错:', error);
+                reject(error);
+                return;
+              }
+              resolve(response);
+            },
+          );
+        });
+
+        if (response && response.success && response.data) {
+          console.log(`第${currentPage}页合集数据:`, response.data);
+
+          const archives = response.data.archives || [];
+          if (archives.length > 0) {
+            allVideos = allVideos.concat(archives);
+            console.log(`当前已获取${allVideos.length}个视频`);
+            showSuccess(`已获取${allVideos.length}个视频 (第${currentPage}页)`);
+          }
+
+          const pageInfo = response.data.page;
+          if (pageInfo) {
+            if (allVideos.length < pageInfo.total) {
+              currentPage++;
+              await new Promise((resolve) => setTimeout(resolve, 300));
+            } else {
+              hasMore = false;
+            }
+          } else {
+            hasMore = false;
+          }
+
+          if (archives.length === 0) {
+            hasMore = false;
+          }
+        } else {
+          const errorMsg = response?.message || '获取合集内容失败';
+          showError(errorMsg);
+          console.error('获取合集失败:', response);
+          break;
+        }
+      }
+
+      if (allVideos.length > 0) {
+        showSuccess(`成功获取合集内容，共${allVideos.length}个视频`);
+        console.log('完整合集内容:', allVideos);
+
+        const addedCount = processAndAddCollectionVideosToTable(allVideos);
+
+        if (addedCount > 0) {
+          showSuccess(`成功添加${addedCount}个视频到表格`);
+        } else {
+          showError('没有找到可添加的视频');
+        }
+      } else {
+        showError('合集中没有视频');
+      }
+    } catch (error) {
+      console.error('获取合集出错:', error);
+      showError('获取合集内容失败: ' + (error.message || '未知错误'));
+    } finally {
+      getFavoriteBtn.disabled = false;
+      getFavoriteBtn.innerHTML = `
+          <svg viewBox="0 0 24 24">
+            <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
+          </svg>
+          获取视频
+        `;
+    }
+  }
+
+  // 处理合集视频并添加到表格
+  function processAndAddCollectionVideosToTable(videos) {
+    if (!videos || !Array.isArray(videos) || videos.length === 0) {
+      console.error('无效的视频数据');
+      return 0;
+    }
+
+    let addedCount = 0;
+
+    videos.forEach((video) => {
+      // 检查是否已存在相同的视频
+      const existingVideo = videoList.find(
+        (v) => (video.bvid && v.bvid === video.bvid) || (video.aid && v.aid === video.aid),
+      );
+
+      if (!existingVideo) {
+        const formattedVideo = {
+          id: video.bvid || video.aid || Date.now().toString(),
+          bvid: video.bvid,
+          aid: video.aid,
+          cid: video.cid || 0, // 如果没有cid，后续需要获取
+          title: video.title,
+          author: video.owner?.name || '未知作者',
+          subtitleStatus: '未获取',
+          subtitleText: null,
+          view_count: video.stat?.view || 0,
+          like_count: video.stat?.like || 0,
+          mid: video.owner?.mid || 0,
+        };
+
+        addVideoToTable(formattedVideo);
+        addedCount++;
+      }
+    });
+
+    return addedCount;
   }
 
   // 处理收藏夹视频并添加到表格
@@ -1264,6 +1457,42 @@ document.addEventListener('DOMContentLoaded', function () {
       updateVideoTable();
 
       try {
+        // 尝试补全缺失的CID
+        if (video.bvid && !video.cid) {
+          try {
+            console.log(`视频 ${video.title} 缺少CID，尝试获取...`);
+            updateProgress(currentPercent, `正在获取CID: ${video.title}`);
+
+            // 使用Promise包装，确保等待结果
+            const infoResponse = await new Promise((resolve) => {
+              chrome.runtime.sendMessage(
+                {
+                  action: 'fetchBilibiliInfo',
+                  videoId: video.bvid,
+                },
+                resolve,
+              );
+            });
+
+            if (infoResponse && infoResponse.success && infoResponse.cid) {
+              console.log(`成功获取CID: ${infoResponse.cid}`);
+              video.cid = infoResponse.cid;
+              videoList[i].cid = infoResponse.cid; // Update main list
+              currentVideoInfo.cid = infoResponse.cid;
+
+              if (infoResponse.aid) {
+                video.aid = infoResponse.aid;
+                videoList[i].aid = infoResponse.aid;
+                currentVideoInfo.aid = infoResponse.aid;
+              }
+            } else {
+              console.error('获取CID失败:', infoResponse);
+            }
+          } catch (cidError) {
+            console.error('获取CID出错:', cidError);
+          }
+        }
+
         // 检查视频信息是否完整
         if (!video.bvid || !video.cid) {
           console.error(`视频 ${video.title} 信息不完整，无法获取字幕`, video);
