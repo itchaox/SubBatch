@@ -1144,7 +1144,7 @@ document.addEventListener('DOMContentLoaded', function () {
         showSuccess(`成功获取合集内容，共${allVideos.length}个视频`);
         console.log('完整合集内容:', allVideos);
 
-        const addedCount = processAndAddCollectionVideosToTable(allVideos);
+        const addedCount = await processAndAddCollectionVideosToTable(allVideos, mid);
 
         if (addedCount > 0) {
           showSuccess(`成功添加${addedCount}个视频到表格`);
@@ -1169,13 +1169,30 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   // 处理合集视频并添加到表格
-  function processAndAddCollectionVideosToTable(videos) {
+  async function processAndAddCollectionVideosToTable(videos, collectionMid) {
     if (!videos || !Array.isArray(videos) || videos.length === 0) {
       console.error('无效的视频数据');
       return 0;
     }
 
     let addedCount = 0;
+    let authorName = '未知作者';
+
+    // 如果有合集MID，尝试获取UP主信息
+    if (collectionMid) {
+      try {
+        const response = await new Promise((resolve) => {
+          chrome.runtime.sendMessage({ action: 'fetchUserCard', mid: collectionMid, photo: true }, resolve);
+        });
+
+        if (response && response.success && response.data && response.data.card) {
+          authorName = response.data.card.name || '未知作者';
+          console.log('获取到合集UP主名称:', authorName);
+        }
+      } catch (error) {
+        console.error('获取合集UP主信息失败:', error);
+      }
+    }
 
     videos.forEach((video) => {
       // 检查是否已存在相同的视频
@@ -1190,12 +1207,12 @@ document.addEventListener('DOMContentLoaded', function () {
           aid: video.aid,
           cid: video.cid || 0, // 如果没有cid，后续需要获取
           title: video.title,
-          author: video.owner?.name || '未知作者',
+          author: authorName, // 使用获取到的UP主名称
           subtitleStatus: '未获取',
           subtitleText: null,
           view_count: video.stat?.view || 0,
           like_count: video.stat?.like || 0,
-          mid: video.owner?.mid || 0,
+          mid: collectionMid || video.owner?.mid || 0,
         };
 
         addVideoToTable(formattedVideo);
