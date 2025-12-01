@@ -1461,7 +1461,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
       // 计算当前进度百分比
       const currentPercent = Math.floor((i / totalVideos) * 100);
-      updateProgress(currentPercent, `处理第 ${i + 1}/${totalVideos} 个视频...`);
+      updateProgress(currentPercent, '获取字幕中...');
 
       // 如果已经成功获取过字幕，跳过
       if (video.subtitleStatus === '获取成功' && video.subtitleText) {
@@ -1478,7 +1478,7 @@ document.addEventListener('DOMContentLoaded', function () {
         if (video.bvid && !video.cid) {
           try {
             console.log(`视频 ${video.title} 缺少CID，尝试获取...`);
-            updateProgress(currentPercent, `正在获取CID: ${video.title}`);
+            updateProgress(currentPercent, '获取字幕中...');
 
             // 使用Promise包装，确保等待结果
             const infoResponse = await new Promise((resolve) => {
