@@ -937,6 +937,7 @@
       }
 
       .custom-select-option {
+        position: relative;
         padding: 10px 12px;
         cursor: pointer;
         transition: all 0.2s ease;
@@ -960,9 +961,12 @@
         content: '';
         position: absolute;
         left: 0;
+        top: 50%;
+        transform: translateY(-50%);
         width: 3px;
-        height: 100%;
+        height: 32px;
         background-color: #3370ff;
+        /* border-radius: 0 2px 2px 0; */
       }
 
       /* 添加箭头图标 */
