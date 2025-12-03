@@ -1,156 +1,534 @@
-新增:合集功能
-接口地址: https://api.bilibili.com/x/polymer/web-space/seasons_archives_list
-需要注意处理分页问题
+## 功能
 
-官方的合集地址格式是这样的: https://space.bilibili.com/521041866/lists/4337438?type=season
+通过个人主页地址获取视频
 
-B 站官方调用接口是这个样子:https://api.bilibili.com/x/polymer/web-space/seasons_archives_list?mid=521041866&s
-eason_id=4337438&sort_reverse=false&page_size=29&page_num=1&web_location=333.1387
+[查询用户投稿视频明细]
+API 接口地址: https://api.bilibili.com/x/space/wbi/arc/search
 
-接口获取视频合集信息
-https://api.bilibili.com/x/polymer/web-space/seasons_archives_list
 请求方式：GET
-url 参数：
+鉴权方式：Wbi 签名
+
+## URL 参数
 
 参数名 类型 内容 必要性 备注
-mid num 用户 mid 必要 创建者的 mid，但也可以是任意的非负整数
-season_id num 视频合集 ID 必要
-sort_reverse bool 排序方式 可选 true: 升序排序
-false: 默认排序
-page_num num 页码索引 可选 默认为 1
-page_size num 单页内容数量 可选 默认为 30
-gaia_vtoken str 风控验证? 可选 若被风控则必要(如 User-Agent 不正常)
-web_location str 页面位置? 可选 333.999
-w_rid str WBI 签名 可选 参见 WBI 签名
-wts num UNIX 秒级时间戳 可选 参见 WBI 签名
-json 回复：
+mid num 目标用户 mid 必要
+order str 排序方式 非必要 默认为 pubdate
+最新发布：pubdate
+最多播放：click
+最多收藏：stow
+tid num 筛选目标分区 非必要 默认为 0
+0：不进行分区筛选
+分区 tid 为所筛选的分区
+keyword str 关键词筛选 非必要 用于使用关键词搜索该 UP 主视频稿件
+pn num 页码 非必要 默认为 1
+ps num 每页项数 非必要 默认为 30
+
+## json 回复
 
 根对象：
 
 字段 类型 内容 备注
 code num 返回值 0：成功
+-400：请求错误
+-412：请求被拦截
 message str 错误信息 默认为 0
 ttl num 1
 data obj 信息本体
 data 对象：
 
 字段 类型 内容 备注
-aids array 稿件 avid 列表 对应下方数组中内容 aid
-archives array 合集中的视频
-meta obj 合集元数据
-page obj 分页信息
-data 中的 archives 数组：
+list obj 列表信息
+page obj 页面信息
+episodic_button obj “播放全部“按钮
+is_risk bool
+gaia_res_type num
+gaia_data obj
+data 中的 list 对象：
+
+字段 类型 内容 备注
+slist array 空数组
+tlist obj 投稿视频分区索引
+vlist array 投稿视频列表
+list 中的 tlist 对象：
+
+字段 类型 内容 备注
+{tid} obj 该分区的详情 字段名为存在的分区 tid
+…… obj …… 向下扩展
+tlist 中的{tid}对象：
+
+字段 类型 内容 备注
+count num 投稿至该分区的视频数
+name str 该分区名称
+tid num 该分区 tid
+list 中的 vlist 数组：
 
 项 类型 内容 备注
-0 obj 合集内容
-n obj (n+1)P 内容
+0 obj 投稿视频 1
+n obj 投稿视频（n+1）
 …… obj …… ……
-archives 数组中的对象：
+list 中的 vlist 数组中的对象：
 
 字段 类型 内容 备注
 aid num 稿件 avid
+attribute num
+author str 视频 UP 主 不一定为目标用户（合作视频）
 bvid str 稿件 bvid
-ctime num 创建时间 Unix 时间戳
-duration num 视频时长 单位为秒
-enable_vt bool false 旧接口无
-interactive_video bool 是否是互动视频
-pic str 封面 URL
-playback_position num 会随着播放时间增长，播放完成后为 -1 。单位为 %
-pubdate num 发布日期 Unix 时间戳
-stat obj 稿件信息
-state num 0
-title str 稿件标题
-ugc_pay num UGC 付费? 0: 否
-vt_display str 空 旧接口无
-archives 中的 stat 对象：
+comment num 视频评论数
+copyright str 视频版权类型
+created num 投稿时间 时间戳
+description str 视频简介
+elec_arc_type num 充电为 1，否则 0 可能还有其他情况
+enable_vt num 0 作用尚不明确
+hide_click bool false 作用尚不明确
+is_avoided num 0 作用尚不明确
+is_charging_arc bool 是否为充电视频
+is_lesson_video num 是否为课堂视频 0：否
+1：是
+is_lesson_finished num 课堂是否已完结 0：否
+1：是
+is_live_playback num 是否为直播回放 0：否
+1：是
+is_pay num 0 作用尚不明确
+is_self_view bool false 作用尚不明确
+is_steins_gate num 是否为互动视频 0：否
+1：是
+is_union_video num 是否为合作视频 0：否
+1：是
+jump_url str 跳转链接 跳转到课堂的链接，否则为""
+length str 视频长度 MM:SS
+mid num 视频 UP 主 mid 不一定为目标用户（合作视频）
+meta obj 所属合集或课堂 无数据时为 null
+pic str 视频封面
+play num 视频播放次数
+playback_position num 百分比播放进度 封面下方显示的粉色条
+review num 0 作用尚不明确
+season_id num 合集或课堂编号 都不属于时为 0
+subtitle str 空 作用尚不明确
+title str 视频标题
+typeid num 视频分区 tid
+video_review num 视频弹幕数
+vt num 0 作用尚不明确
+vt_display str 空 作用尚不明确
+list 中的 vlist 数组中的对象中的 meta 对象：
 
 字段 类型 内容 备注
-view num 稿件播放量
-vt num 0
-data 中的 meta 对象：
-
-字段 类型 内容 备注
-category num 0
+attribute num 0 作用尚不明确
 cover str 合集封面 URL
-description str 合集描述
-mid num UP 主 ID
-name str 合集标题
-ptime num 发布时间 Unix 时间戳
-season_id num 合集 ID
-total num 合集内视频数量
+ep_count num 合集视频数量
+ep_num num 合集视频数量
+first_aid num 首个视频 av 号
+id num 合集 id
+intro str 合集介绍
+mid num UP 主 uid 若为课堂，则为 0
+ptime num unix 时间(s) 最后更新时间
+sign_state num 0 作用尚不明确
+stat obj 合集统计数据
+title str 合集名称
+list 中的 vlist 数组中的对象中的 meta 对象中的 stat 对象：
+
+字段 类型 内容 备注
+coin num 合集总投币数
+danmaku num 合集总弹幕数
+favorite num 合集总收藏数
+like num 合集总点赞数
+mtime num unix 时间(s) 其他统计数据更新时间
+reply num 合集总评论数
+season_id num 合集 id
+share num 合集总分享数
+view num 合集总播放量
+vt num 0 作用尚不明确
+vv num 0 作用尚不明确
 data 中的 page 对象：
 
 字段 类型 内容 备注
-page_num num 分页页码
-page_size num 单页个数
-total num 合集内视频数量
+count num 总计稿件数
+pn num 当前页码
+ps num 每页项数
+data 中的 episodic_button 对象：
 
-## 响应示例:
+字段 类型 内容 备注
+text str 按钮文字
+uri str 全部播放页 url
 
-获取 mid=37737161 的 season_id=1227671 视频合集信息，默认排序，第 1 页，每页 30 个视频
+## 接口调用示例
 
-curl -G "https://api.bilibili.com/x/polymer/space/seasons_archives_list" \
---data-urlencode "mid=37737161" \
---data-urlencode "sort_reverse=false" \
---data-urlencode "season_id=1227671" \
---data-urlencode "page_num=1" \
---data-urlencode "page_size=30"
+pn（页码）和 ps（每页项数）只改变 vlist 中成员的多少与内容
+
+以每页 2 项查询用户 mid=53456 的第 1 页投稿视频明细
+
+```
+curl -G 'https://api.bilibili.com/x/space/arc/search' \
+--data-urlencode 'mid=53456' \
+--data-urlencode 'ps=2' \
+--data-urlencode 'pn=1'
+```
+
+## 接口响应示例
+
+```
+{
+	"code": 0,
+	"message": "0",
+	"ttl": 1,
+	"data": {
+		"list": {
+			"slist": [],
+			"tlist": {
+				"1": {
+					"tid": 1,
+					"count": 3,
+					"name": "动画"
+				},
+				"129": {
+					"tid": 129,
+					"count": 1,
+					"name": "舞蹈"
+				},
+				"160": {
+					"tid": 160,
+					"count": 96,
+					"name": "生活"
+				},
+				"177": {
+					"tid": 177,
+					"count": 4,
+					"name": "纪录片"
+				},
+				"181": {
+					"tid": 181,
+					"count": 50,
+					"name": "影视"
+				},
+				"188": {
+					"tid": 188,
+					"count": 444,
+					"name": "科技"
+				},
+				"196": {
+					"tid": 196,
+					"count": 2,
+					"name": "课堂"
+				}
+			},
+			"vlist": [{
+				"comment": 985,
+				"typeid": 250,
+				"play": 224185,
+				"pic": "http://i0.hdslb.com/bfs/archive/5e56c10a9bd67f2fcac46fdd0fc2caa8769700c8.jpg",
+				"subtitle": "",
+				"description": "这一次，我们的样片日记首次来到了西藏，在桃花季开启了藏东样片之旅！这趟“开荒”之旅我们跋山涉水，一路硬刚，多亏有路虎卫士这样的神队友撑全场！这次的素材我们也上传到了官网（ysjf.com/material），欢迎大家去看看~如果你喜欢这期视频，请多多支持我们，并把视频分享给你的朋友们一起看看！",
+				"copyright": "1",
+				"title": "和朋友去西藏拍样片日记……",
+				"review": 0,
+				"author": "影视飓风",
+				"mid": 946974,
+				"created": 1745290800,
+				"length": "22:11",
+				"video_review": 2365,
+				"aid": 114375683741573,
+				"bvid": "BV1ac5yzhE94",
+				"hide_click": false,
+				"is_pay": 0,
+				"is_union_video": 1,
+				"is_steins_gate": 0,
+				"is_live_playback": 0,
+				"is_lesson_video": 0,
+				"is_lesson_finished": 0,
+				"lesson_update_info": "",
+				"jump_url": "",
+				"meta": {
+					"id": 2046621,
+					"title": "样片日记",
+					"cover": "https://archive.biliimg.com/bfs/archive/e2ca3e5a6672cf35c9e61ac02e8d739cc0aafa8b.jpg",
+					"mid": 946974,
+					"intro": "",
+					"sign_state": 0,
+					"attribute": 140,
+					"stat": {
+						"season_id": 2046621,
+						"view": 31755096,
+						"danmaku": 171253,
+						"reply": 33685,
+						"favorite": 409505,
+						"coin": 935105,
+						"share": 199467,
+						"like": 1791607,
+						"mtime": 1745309513,
+						"vt": 0,
+						"vv": 0
+					},
+					"ep_count": 13,
+					"first_aid": 238588630,
+					"ptime": 1745290800,
+					"ep_num": 13
+				},
+				"is_avoided": 0,
+				"season_id": 2046621,
+				"attribute": 16793984,
+				"is_charging_arc": false,
+				"elec_arc_type": 0,
+				"vt": 0,
+				"enable_vt": 0,
+				"vt_display": "",
+				"playback_position": 0,
+				"is_self_view": false
+			}, {
+				"comment": 0,
+				"typeid": 197,
+				"play": 8506,
+				"pic": "https://archive.biliimg.com/bfs/archive/489f3df26a190a152ad479bfe50a73f1cd4c43c5.jpg",
+				"subtitle": "",
+				"description": "8节课，Tim和青青带你用iPhone拍出电影感",
+				"copyright": "1",
+				"title": "【影视飓风】只看8节课，用iPhone拍出电影感",
+				"review": 0,
+				"author": "影视飓风",
+				"mid": 946974,
+				"created": 1744865737,
+				"length": "00:00",
+				"video_review": 9,
+				"aid": 114351440726681,
+				"bvid": "BV1WB5ezxEnz",
+				"hide_click": false,
+				"is_pay": 0,
+				"is_union_video": 0,
+				"is_steins_gate": 0,
+				"is_live_playback": 0,
+				"is_lesson_video": 1,
+				"is_lesson_finished": 1,
+				"lesson_update_info": "8",
+				"jump_url": "https://www.bilibili.com/cheese/play/ss190402215",
+				"meta": {
+					"id": 190402215,
+					"title": "【影视飓风】只看8节课，用iPhone拍出电影感",
+					"cover": "https://archive.biliimg.com/bfs/archive/489f3df26a190a152ad479bfe50a73f1cd4c43c5.jpg",
+					"mid": 0,
+					"intro": "",
+					"sign_state": 0,
+					"attribute": 0,
+					"stat": {
+						"season_id": 190402215,
+						"view": 1111222,
+						"danmaku": 1853,
+						"reply": 0,
+						"favorite": 0,
+						"coin": 0,
+						"share": 0,
+						"like": 0,
+						"mtime": 0,
+						"vt": 0,
+						"vv": 0
+					},
+					"ep_count": 0,
+					"ptime": 1744865737,
+					"ep_num": 0
+				},
+				"is_avoided": 0,
+				"season_id": 190402215,
+				"attribute": 1073758592,
+				"is_charging_arc": false,
+				"elec_arc_type": 0,
+				"vt": 0,
+				"enable_vt": 0,
+				"vt_display": "",
+				"playback_position": 0,
+				"is_self_view": false
+			}]
+		},
+		"page": {
+			"pn": 1,
+			"ps": 42,
+			"count": 786
+		},
+		"episodic_button": {
+			"text": "播放全部",
+			"uri": "//www.bilibili.com/medialist/play/946974?from=space"
+		},
+		"is_risk": false,
+		"gaia_res_type": 0,
+		"gaia_data": null
+	}
+}
+
+```
+
+## Wbi 签名
+
+自 2023 年 3 月起，Bilibili Web 端部分接口开始采用 WBI 签名鉴权，表现在 REST API 请求时在 Query param 中添加了 w_rid 和 wts 字段。WBI 签名鉴权独立于 APP 鉴权 与其他 Cookie 鉴权，目前被认为是一种 Web 端风控手段。
+
+经持续观察，大部分查询性接口都已经或准备采用 WBI 签名鉴权，请求 WBI 签名鉴权接口时，若签名参数 w_rid 与时间戳 wts 缺失、错误，会返回 v_voucher，如：
+
+{"code":0,"message":"0","ttl":1,"data":{"v\*voucher":"voucher**\*\*\***"}}
+感谢 #631 的研究与逆向工程。
+
+细节更新：#885。
+
+最新进展: #919
+
+WBI 签名算法
+获取实时口令 img_key、sub_key
+
+从 nav 接口 中获取 img_url、sub_url 两个字段的参数。 或从 bili_ticket 接口 中获取 img sub 两个字段的参数。
+
+注：img_url、sub_url 两个字段的值看似为存于 BFS 中的 png 图片 url，实则只是经过伪装的实时 Token，故无需且不能试图访问这两个 url
+
+{"code":-101,"message":"账号未登录","ttl":1,"data":{"isLogin":false,"wbi_img":{"img_url":"https://i0.hdslb.com/bfs/wbi/7cd084941338484aae1ad9425b84077c.png","sub_url":"https://i0.hdslb.com/bfs/wbi/4932caff0ff746eab6f01bf08b70ac45.png"}}}
+截取其文件名，分别记为 img_key、sub_key，如上述例子中的 7cd084941338484aae1ad9425b84077c 和 4932caff0ff746eab6f01bf08b70ac45。
+
+img_key、sub_key 全站统一使用，观测知应为每日更替，使用时建议做好缓存和刷新处理。
+
+特别地，发现部分接口将 img_key、sub_key 硬编码进 JavaScript 文件内，如搜索接口 https://s1.hdslb.com/bfs/static/laputa-search/client/assets/index.1ea39bea.js，暂不清楚原因及影响。 同时, 部分页面会在 SSR 的 **INITIAL_STATE** 包含 wbiImgKey 与 wbiSubKey, 具体可用性与区别尚不明确
+
+打乱重排实时口令获得 mixin_key
+
+把上一步获取到的 sub_key 拼接在 img_key 后面（下例记为 raw_wbi_key），遍历重排映射表 MIXIN_KEY_ENC_TAB，取出 raw_wbi_key 中对应位置的字符拼接得到新的字符串，截取前 32 位，即为 mixin_key。
+
+重排映射表 MIXIN_KEY_ENC_TAB 长为 64，内容如下：
+
+const MIXIN_KEY_ENC_TAB: [u8; 64] = [
+46, 47, 18, 2, 53, 8, 23, 32, 15, 50, 10, 31, 58, 3, 45, 35, 27, 43, 5, 49,
+33, 9, 42, 19, 29, 28, 14, 39, 12, 38, 41, 13, 37, 48, 7, 16, 24, 55, 40,
+61, 26, 17, 0, 1, 60, 51, 30, 4, 22, 25, 54, 21, 56, 59, 6, 63, 57, 62, 11,
+36, 20, 34, 44, 52
+]
+重排操作如下例：
+
+fn gen*mixin_key(raw_wbi_key: impl AsRef<[u8]>) -> String {
+const MIXIN_KEY_ENC_TAB: [u8; 64] = [
+46, 47, 18, 2, 53, 8, 23, 32, 15, 50, 10, 31, 58, 3, 45, 35, 27, 43, 5, 49, 33, 9, 42,
+19, 29, 28, 14, 39, 12, 38, 41, 13, 37, 48, 7, 16, 24, 55, 40, 61, 26, 17, 0, 1, 60,
+51, 30, 4, 22, 25, 54, 21, 56, 59, 6, 63, 57, 62, 11, 36, 20, 34, 44, 52,
+];
+let raw_wbi_key = raw_wbi_key.as_ref();
+let mut mixin_key = {
+let binding = MIXIN_KEY_ENC_TAB
+.iter()
+// 此步操作即遍历 MIXIN_KEY_ENC_TAB，取出 raw_wbi_key 中对应位置的字符
+.map(|n| raw_wbi_key[*n as usize])
+// 并收集进数组内
+.collect::<Vec<u8>>();
+unsafe { String::from_utf8_unchecked(binding) }
+};
+let \* = mixin_key.split_off(32); // 截取前 32 位字符
+mixin_key
+}
+如 img_key -> 7cd084941338484aae1ad9425b84077c、sub_key -> 4932caff0ff746eab6f01bf08b70ac45 经过上述操作后得到 mixin_key -> ea1db124af3c7062474693fa704f4ff8。
+
+计算签名（即 w_rid）
+
+若下方内容为欲签名的原始请求参数（以 JavaScript Object 为例）
 
 {
-"code": 0,
-"message": "0",
-"ttl": 1,
-"data": {
-"aids": [
-311606079,
-400546145
-],
-"archives": [
+foo: '114',
+bar: '514',
+zab: 1919810
+}
+wts 字段的值应为当前以秒为单位的 Unix 时间戳，如 1702204169
+
+复制一份参数列表，添加 wts 参数，即：
+
 {
-"aid": 311606079,
-"bvid": "BV1XN411K7g9",
-"ctime": 1679651747,
-"duration": 261,
-"interactive_video": false,
-"pic": "http://i2.hdslb.com/bfs/archive/234e6bd061176dba9e148f4373c52fa7cd2d801f.jpg",
-"pubdate": 1679651747,
-"stat": {
-"view": 12145
-},
-"state": 0,
-"title": "某些 IT 社区平台乱象，文章千篇一律，毫不注重版权，文章互相抄袭成潮流，希望能够好好管管！",
-"ugc_pay": 0
-},
+foo: '114',
+bar: '514',
+zab: 1919810,
+wts: 1702204169
+}
+随后按键名升序排序后百分号编码 URL Query，拼接前面得到的 mixin_key，如 bar=514&foo=114&wts=1702204169&zab=1919810ea1db124af3c7062474693fa704f4ff8，计算其 MD5 即为 w_rid。
+
+需要注意的是：如果参数值含中文或特殊字符等，编码字符字母应当大写 （部分库会错误编码为小写字母），空格应当编码为 %20（部分库按 application/x-www-form-urlencoded 约定编码为 +）, 具体正确行为可参考 encodeURIComponent 函数
+
+例如：
+
 {
-"aid": 400546145,
-"bvid": "BV1qo4y1L73P",
-"ctime": 1682777426,
-"duration": 335,
-"interactive_video": false,
-"pic": "http://i2.hdslb.com/bfs/archive/a6b6fb0330bbf6c500720a024e5a9ade24d888c3.jpg",
-"pubdate": 1682777425,
-"stat": {
-"view": 52743
-},
-"state": 0,
-"title": "某些搜索引擎得到的结果，官方网站反而排在一些诈骗广告后面，诱导用户下载大量捆绑垃圾软件",
-"ugc_pay": 0
+foo: 'one one four',
+bar: '五一四',
+baz: 1919810
 }
-],
-"meta": {
-"category": 0,
-"cover": "https://archive.biliimg.com/bfs/archive/5e1c1f77c3065ec31eec43d7e35f7a061602e4d6.jpg",
-"description": "白马首席讲师吐槽系列视频",
-"mid": 37737161,
-"name": "水浅王八多，真假白马说",
-"ptime": 1682777425,
-"season_id": 1227671,
-"total": 2
-},
-"page": {
-"page_num": 1,
-"page_size": 30,
-"total": 2
+应该被编码为 bar=%E4%BA%94%E4%B8%80%E5%9B%9B&baz=1919810&foo=one%20one%20four。
+
+向原始请求参数中添加 w_rid、wts 字段
+
+将上一步得到的 w_rid 以及前面的 wts 追加到原始请求参数编码得到的 URL Query 后即可，目前看来无需对原始请求参数排序。
+
+如前例最终得到 bar=514&foo=114&zab=1919810&w_rid=8f6f2b5b3d485fe1886cec6a0be8c5d4&wts=1702204169。
+
+### Wbi 签名 的 Demo
+
+[Javascript 示例]
+需要 fetch(浏览器、NodeJS 等环境自带)、md5 依赖
+
+```
+import md5 from 'md5'
+
+const mixinKeyEncTab = [
+  46, 47, 18, 2, 53, 8, 23, 32, 15, 50, 10, 31, 58, 3, 45, 35, 27, 43, 5, 49,
+  33, 9, 42, 19, 29, 28, 14, 39, 12, 38, 41, 13, 37, 48, 7, 16, 24, 55, 40,
+  61, 26, 17, 0, 1, 60, 51, 30, 4, 22, 25, 54, 21, 56, 59, 6, 63, 57, 62, 11,
+  36, 20, 34, 44, 52
+]
+
+// 对 imgKey 和 subKey 进行字符顺序打乱编码
+const getMixinKey = (orig) => mixinKeyEncTab.map(n => orig[n]).join('').slice(0, 32)
+
+// 为请求参数进行 wbi 签名
+function encWbi(params, img_key, sub_key) {
+  const mixin_key = getMixinKey(img_key + sub_key),
+    curr_time = Math.round(Date.now() / 1000),
+    chr_filter = /[!'()*]/g
+
+  Object.assign(params, { wts: curr_time }) // 添加 wts 字段
+  // 按照 key 重排参数
+  const query = Object
+    .keys(params)
+    .sort()
+    .map(key => {
+      // 过滤 value 中的 "!'()*" 字符
+      const value = params[key].toString().replace(chr_filter, '')
+      return `${encodeURIComponent(key)}=${encodeURIComponent(value)}`
+    })
+    .join('&')
+
+  const wbi_sign = md5(query + mixin_key) // 计算 w_rid
+
+  return query + '&w_rid=' + wbi_sign
 }
+
+// 获取最新的 img_key 和 sub_key
+async function getWbiKeys() {
+  const res = await fetch('https://api.bilibili.com/x/web-interface/nav', {
+    headers: {
+      // SESSDATA 字段
+      Cookie: 'SESSDATA=xxxxxx',
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3',
+      Referer: 'https://www.bilibili.com/'//对于直接浏览器调用可能不适用
+    }
+  })
+  const { data: { wbi_img: { img_url, sub_url } } } = await res.json()
+
+  return {
+    img_key: img_url.slice(
+      img_url.lastIndexOf('/') + 1,
+      img_url.lastIndexOf('.')
+    ),
+    sub_key: sub_url.slice(
+      sub_url.lastIndexOf('/') + 1,
+      sub_url.lastIndexOf('.')
+    )
+  }
 }
+
+async function main() {
+  const web_keys = await getWbiKeys()
+  const params = { foo: '114', bar: '514', baz: 1919810 },
+    img_key = web_keys.img_key,
+    sub_key = web_keys.sub_key
+  const query = encWbi(params, img_key, sub_key)
+  console.log(query)
 }
+
+main()
+```
+
+输出内容为进行 Wbi 签名的后参数的 url query 形式
+
+bar=514&baz=1919810&foo=114&wts=1684805578&w_rid=bb97e15f28edf445a0e4420d36f0157e
