@@ -1576,6 +1576,103 @@
       </button>
     </div>
 
+    <!-- 关注弹窗 -->
+    <div
+      id="followModal"
+      style="
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 2000;
+        justify-content: center;
+        align-items: center;
+        backdrop-filter: blur(4px);
+        animation: fadeIn 0.3s ease;
+      "
+    >
+      <div
+        style="
+          background: white;
+          width: 85%;
+          max-width: 320px;
+          border-radius: 12px;
+          padding: 24px 20px;
+          text-align: center;
+          box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+          transform: scale(0.9);
+          animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+        "
+      >
+        <div style="font-size: 40px; margin-bottom: 10px">🎉</div>
+        <h3 style="margin: 0 0 8px; color: #333; font-size: 18px">恭喜您！</h3>
+        <p style="margin: 0 0 20px; color: #666; font-size: 14px; line-height: 1.5">
+          您已成功批量解析了超过
+          <span style="color: #1890ff; font-weight: bold; font-size: 16px">100</span> 次视频字幕！
+          <br />
+          如果觉得好用，可以支持一下作者吗？
+          <br />
+          对作者非常重要的，也是作者更新动力,非常感谢！💗
+        </p>
+        <div style="display: flex; flex-direction: column; gap: 10px">
+          <a
+            id="modalFollowBtn"
+            href="https://space.bilibili.com/521041866"
+            target="_blank"
+            class="close-modal-btn"
+            style="
+              background: #1890ff;
+              color: white;
+              padding: 10px;
+              border-radius: 6px;
+              text-decoration: none;
+              font-size: 14px;
+              font-weight: 500;
+              display: block;
+            "
+          >
+            前往 B 站关注
+          </a>
+          <a
+            id="modalSponsorBtn"
+            href="https://afdian.com/a/wangchao02"
+            target="_blank"
+            class="close-modal-btn"
+            style="
+              background: #fff;
+              color: #1890ff;
+              border: 1px solid #1890ff;
+              padding: 10px;
+              border-radius: 6px;
+              text-decoration: none;
+              font-size: 14px;
+              font-weight: 500;
+              display: block;
+            "
+          >
+            前往赞助支持
+          </a>
+          <button
+            class="close-modal-btn"
+            style="
+              background: transparent;
+              border: none;
+              color: #8c8c8c;
+              padding: 8px;
+              font-size: 12px;
+              cursor: pointer;
+              margin-top: 4px;
+            "
+          >
+            下次一定
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- 添加进度圆环容器 -->
     <div
       id="progressContainer"

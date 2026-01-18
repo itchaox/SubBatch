@@ -362,6 +362,9 @@ document.addEventListener('DOMContentLoaded', function () {
             // subtitleStatusElement.textContent = response.metadata?.lan_doc ? `(${response.metadata.lan_doc})` : '';
             showSuccess('成功获取字幕');
 
+            // 增加解析次数统计
+            checkAndIncrementExtractCount(1);
+
             // 添加测试WBI接口按钮
             addTestApiButton();
           }
@@ -1970,6 +1973,11 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     // 显示结果
+    if (successCount > 0) {
+      // 增加解析次数统计
+      checkAndIncrementExtractCount(successCount);
+    }
+
     if (successCount > 0 && failCount === 0) {
       showSuccess(`所有字幕获取成功 (${successCount}/${videoList.length})`);
     } else if (successCount > 0 && failCount > 0) {
@@ -2465,6 +2473,87 @@ document.addEventListener('DOMContentLoaded', function () {
     feedbackBtn.addEventListener('click', () => {
       showSuccess('正在前往反馈页面...');
       chrome.tabs.create({ url: 'https://bcmcjimpjd.feishu.cn/share/base/form/shrcn5zSNoOWSWVjI7y639o3Lyc' });
+    });
+  }
+
+  // 弹窗关闭逻辑
+  document.querySelectorAll('.close-modal-btn').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const modal = document.getElementById('followModal');
+      if (modal) {
+        modal.style.display = 'none';
+      }
+    });
+  });
+
+  // 监听弹窗内的关注和赞助按钮，点击即视为已转化
+  const modalFollowBtn = document.getElementById('modalFollowBtn');
+  const modalSponsorBtn = document.getElementById('modalSponsorBtn');
+
+  function markAsConverted() {
+    chrome.storage.local.set({ hasConverted: true });
+    console.log('用户已转化，不再显示弹窗');
+  }
+
+  if (modalFollowBtn) {
+    modalFollowBtn.addEventListener('click', markAsConverted);
+  }
+  if (modalSponsorBtn) {
+    modalSponsorBtn.addEventListener('click', markAsConverted);
+  }
+
+  // 检查并增加解析次数
+  function checkAndIncrementExtractCount(amount = 1) {
+    chrome.storage.local.get(['extractCount', 'hasConverted'], function (result) {
+      // 如果用户已经转化（点击过关注/赞助），则不再弹窗
+      if (result.hasConverted) {
+        return;
+      }
+
+      let count = result.extractCount || 0;
+      count += amount;
+      chrome.storage.local.set({ extractCount: count });
+      console.log('当前解析次数:', count);
+
+      // 里程碑提醒逻辑：100, 200, 500, 1000...
+      // 检查这次增加是否跨越了里程碑
+      // 例如：之前是98，增加5变成103，跨越了100
+      const prevCount = count - amount;
+
+      const milestones = [100, 200, 500];
+      let hitMilestone = false;
+      let milestoneValue = 0;
+
+      // 检查固定里程碑
+      for (const m of milestones) {
+        if (prevCount < m && count >= m) {
+          hitMilestone = true;
+          milestoneValue = m;
+          break;
+        }
+      }
+
+      // 检查循环里程碑 (每1000)
+      if (!hitMilestone && count >= 1000) {
+        const prevThousand = Math.floor(prevCount / 1000);
+        const currThousand = Math.floor(count / 1000);
+        if (currThousand > prevThousand) {
+          hitMilestone = true;
+          milestoneValue = currThousand * 1000;
+        }
+      }
+
+      if (hitMilestone) {
+        const modal = document.getElementById('followModal');
+        if (modal) {
+          // 更新弹窗文案中的次数
+          const countSpan = modal.querySelector('span[style*="color: #1890ff"]');
+          if (countSpan) {
+            countSpan.textContent = milestoneValue; // 显示触发的里程碑数值
+          }
+          modal.style.display = 'flex';
+        }
+      }
     });
   }
 });
