@@ -2072,12 +2072,12 @@ document.addEventListener('DOMContentLoaded', function () {
           if (video.publishDate) {
             const formattedDate = formatDate(video.publishDate);
             if (formattedDate && formattedDate !== '-') {
-              dateSuffix = `-【${formattedDate}】`;
+              dateSuffix = `—【${formattedDate}】`;
             }
           }
 
-          // 构建文件名: 【作者】-视频名字-【发布日期】
-          const fileName = `【${safeAuthor}】-${safeTitle}${dateSuffix}.${format}`;
+          // 构建文件名: 【作者】——视频名字——【发布日期】
+          const fileName = `【${safeAuthor}】—${safeTitle}${dateSuffix}.${format}`;
 
           // 根据选择的格式处理字幕内容
           let subtitleContent;
