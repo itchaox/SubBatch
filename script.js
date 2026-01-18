@@ -625,7 +625,7 @@ document.addEventListener('DOMContentLoaded', function () {
       if (currentUrlType === 'video') {
         generateUrlBtn.style.display = 'block';
         getFavoriteBtn.style.display = 'none';
-        urlInput.placeholder = '请输入B站视频地址';
+        urlInput.placeholder = '请输入B站单个视频地址';
       } else if (currentUrlType === 'favorite') {
         generateUrlBtn.style.display = 'none';
         getFavoriteBtn.style.display = 'block';
@@ -641,7 +641,7 @@ document.addEventListener('DOMContentLoaded', function () {
       } else if (currentUrlType === 'selection') {
         generateUrlBtn.style.display = 'none';
         getFavoriteBtn.style.display = 'block';
-        urlInput.placeholder = '请输入B站视频地址 (含分P)';
+        urlInput.placeholder = '请输入B站视频选集地址 (含分P)';
       }
 
       // 关闭下拉框
