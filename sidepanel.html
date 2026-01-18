@@ -1018,6 +1018,81 @@
         开发者不对因使用本工具所产生的任何直接或间接后果承担责任。
       </p>
     </div>
+
+    <!-- 顶部动态公告栏：引导关注与赞助 -->
+    <div style="text-decoration: none; width: 95%; margin-bottom: 12px; display: block">
+      <div
+        style="
+          background: linear-gradient(135deg, #e6f7ff 0%, #f0f9ff 100%);
+          border: 1px solid #bae7ff;
+          border-radius: 8px;
+          padding: 10px 14px;
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          transition: all 0.3s ease;
+          box-shadow: 0 2px 6px rgba(24, 144, 255, 0.1);
+          cursor: pointer;
+        "
+        onmouseover="
+          this.style.transform = 'translateY(-2px)';
+          this.style.boxShadow = '0 4px 12px rgba(24, 144, 255, 0.2)';
+        "
+        onmouseout="
+          this.style.transform = 'translateY(0)';
+          this.style.boxShadow = '0 2px 6px rgba(24, 144, 255, 0.1)';
+        "
+        onclick="window.open('https://space.bilibili.com/521041866', '_blank')"
+      >
+        <div
+          style="
+            background-color: #1890ff;
+            color: white;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            font-size: 18px;
+          "
+        >
+          👋
+        </div>
+        <div style="flex: 1">
+          <div style="font-size: 16px; font-weight: 700; color: #1890ff; margin-bottom: 2px">
+            全网最好用的 B 站字幕批量解析神器！
+          </div>
+          <div style="font-size: 14px; color: #595959">
+            🎉 个人开发不易，求个
+            <a
+              href="https://space.bilibili.com/521041866"
+              target="_blank"
+              onclick="event.stopPropagation()"
+              style="color: #1890ff; font-weight: bold; text-decoration: underline"
+              >B 站关注</a
+            >
+            和
+            <a
+              href="https://afdian.com/a/wangchao02"
+              target="_blank"
+              onclick="event.stopPropagation()"
+              style="color: #1890ff; font-weight: bold; text-decoration: underline"
+              >赞助</a
+            >
+            ，是我积极更新的动力~
+          </div>
+        </div>
+        <svg
+          viewBox="0 0 24 24"
+          style="width: 16px; height: 16px; fill: #1890ff; opacity: 0.6"
+        >
+          <path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z" />
+        </svg>
+      </div>
+    </div>
+
     <!-- 使用文档和反馈问题按钮 -->
     <div style="display: flex; gap: 8px; width: 95%; margin-bottom: 10px">
       <button
