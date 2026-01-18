@@ -550,7 +550,7 @@ async function getBilibiliVideoInfo(videoId) {
         aid: data.data.aid, // 添加aid，便于后续请求
         cid: cid, // 使用获取到的cid
         duration: data.data.duration,
-        // 可以添加额外字段但不要替换上面的基本字段
+        publishDate: data.data.pubdate || data.data.ctime || 0,
         full_data: data.data, // 添加完整数据供需要时使用
       };
     } else {

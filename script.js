@@ -502,8 +502,17 @@ document.addEventListener('DOMContentLoaded', function () {
       downloadLink.href = url;
       const safeTitle = (currentVideoInfo?.title || 'subtitle').replace(/[\\/:*?"<>|]/g, '_');
       const safeAuthor = (currentVideoInfo?.author || 'unknown').replace(/[\\/:*?"<>|]/g, '_');
-      downloadLink.download = `【${safeAuthor}】—${safeTitle}.txt`;
 
+      // 格式化发布日期
+      let dateSuffix = '';
+      if (currentVideoInfo?.publishDate) {
+        const formattedDate = formatDate(currentVideoInfo.publishDate);
+        if (formattedDate && formattedDate !== '-') {
+          dateSuffix = `——【${formattedDate}】`;
+        }
+      }
+
+      downloadLink.download = `【${safeAuthor}】——${safeTitle}${dateSuffix}.txt`;
       // 将链接添加到文档中并点击
       document.body.appendChild(downloadLink);
       downloadLink.click();
@@ -2057,7 +2066,18 @@ document.addEventListener('DOMContentLoaded', function () {
           // 创建文件名，移除不合法的文件名字符
           const safeTitle = video.title.replace(/[\\/:*?"<>|]/g, '_');
           const safeAuthor = video.author ? video.author.replace(/[\\/:*?"<>|]/g, '_') : 'unknown';
-          const fileName = `【${safeAuthor}】—${safeTitle}.${format}`;
+
+          // 格式化发布日期
+          let dateSuffix = '';
+          if (video.publishDate) {
+            const formattedDate = formatDate(video.publishDate);
+            if (formattedDate && formattedDate !== '-') {
+              dateSuffix = `-【${formattedDate}】`;
+            }
+          }
+
+          // 构建文件名: 【作者】-视频名字-【发布日期】
+          const fileName = `【${safeAuthor}】-${safeTitle}${dateSuffix}.${format}`;
 
           // 根据选择的格式处理字幕内容
           let subtitleContent;
