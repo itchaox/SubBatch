@@ -1,0 +1,6 @@
+- 视频:
+- 合集:
+- 收藏夹:
+- 获取分P列表:
+  - API 地址:https://api.bilibili.com/x/player/pagelist
+  - 文档地址:https://socialsisteryi.github.io/bilibili-API-collect/docs/video/info.html#%E8%8E%B7%E5%8F%96%E8%A7%86%E9%A2%91%E7%AE%80%E4%BB%8B
