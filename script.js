@@ -638,6 +638,10 @@ document.addEventListener('DOMContentLoaded', function () {
         generateUrlBtn.style.display = 'none';
         getFavoriteBtn.style.display = 'block';
         urlInput.placeholder = '请输入B站个人主页地址';
+      } else if (currentUrlType === 'selection') {
+        generateUrlBtn.style.display = 'none';
+        getFavoriteBtn.style.display = 'block';
+        urlInput.placeholder = '请输入B站视频地址 (含分P)';
       }
 
       // 关闭下拉框
@@ -684,6 +688,10 @@ document.addEventListener('DOMContentLoaded', function () {
         generateUrlBtn.style.display = 'none';
         getFavoriteBtn.style.display = 'block';
         urlInput.placeholder = '请输入B站个人主页地址';
+      } else if (currentUrlType === 'selection') {
+        generateUrlBtn.style.display = 'none';
+        getFavoriteBtn.style.display = 'block';
+        urlInput.placeholder = '请输入B站视频地址 (含分P)';
       }
 
       // 关闭下拉框
@@ -950,6 +958,24 @@ document.addEventListener('DOMContentLoaded', function () {
         }
 
         await fetchCollectionVideos(collectionInfo.mid, collectionInfo.season_id);
+        return;
+      }
+
+      // 处理视频选集
+      if (currentUrlType === 'selection') {
+        if (!inputUrl) {
+          showError('请输入B站视频地址');
+          urlInput.focus();
+          return;
+        }
+
+        const videoId = extractBilibiliVideoId(inputUrl);
+        if (!videoId) {
+          showError('无法识别的视频地址，请检查格式');
+          return;
+        }
+
+        await fetchVideoParts(videoId);
         return;
       }
 
@@ -1261,6 +1287,134 @@ document.addEventListener('DOMContentLoaded', function () {
     return addedCount;
   }
 
+  // 获取视频分P列表
+  async function fetchVideoParts(videoId) {
+    console.log(`开始获取视频分P: ${videoId}`);
+
+    // 禁用按钮并显示加载状态
+    getFavoriteBtn.disabled = true;
+    getFavoriteBtn.innerHTML = `
+        <svg viewBox="0 0 24 24" class="spin">
+          <path d="M12 6v3l4-4-4-4v3c-4.42 0-8 3.58-8 8 0 1.57.46 3.03 1.24 4.26L6.7 14.8c-.45-.83-.7-1.79-.7-2.8 0-3.31 2.69-6 6-6zm6.76 1.74L17.3 9.2c.44.84.7 1.79.7 2.8 0 3.31-2.69 6-6 6v-3l-4 4 4 4v-3c4.42 0 8-3.58 8-8 0-1.57-.46-3.03-1.24-4.26z"/>
+        </svg>
+        获取中
+      `;
+
+    showSuccess('正在获取视频信息和分P列表...');
+
+    try {
+      // 1. 获取主视频信息以获得标题等元数据
+      const videoUrl = `https://www.bilibili.com/video/${videoId}`;
+      const mainVideoInfo = await fetchBilibiliVideoInfo(videoUrl);
+
+      if (!mainVideoInfo || !mainVideoInfo.success) {
+        throw new Error('无法获取主视频信息');
+      }
+
+      // 2. 获取分P列表
+      const response = await new Promise((resolve, reject) => {
+        const timeoutId = setTimeout(() => {
+          reject(new Error('请求超时，background.js没有及时响应'));
+        }, 15000);
+
+        chrome.runtime.sendMessage(
+          {
+            action: 'fetchVideoParts',
+            videoId: videoId,
+          },
+          (response) => {
+            clearTimeout(timeoutId);
+            const error = chrome.runtime.lastError;
+            if (error) {
+              reject(error);
+              return;
+            }
+            resolve(response);
+          },
+        );
+      });
+
+      if (response && response.success && response.data) {
+        console.log('获取到分P列表:', response.data);
+        const parts = response.data;
+
+        if (parts && parts.length > 0) {
+          showSuccess(`成功获取${parts.length}个分P视频`);
+          const addedCount = processAndAddVideoPartsToTable(parts, mainVideoInfo);
+          if (addedCount > 0) {
+            showSuccess(`成功添加${addedCount}个分P视频到表格`);
+          } else {
+            showError('没有找到可添加的视频或视频已存在');
+          }
+        } else {
+          showError('该视频没有分P信息');
+        }
+      } else {
+        throw new Error(response?.message || '获取分P列表失败');
+      }
+    } catch (error) {
+      console.error('获取视频分P出错:', error);
+      showError('获取分P失败: ' + (error.message || '未知错误'));
+    } finally {
+      // 恢复按钮状态
+      getFavoriteBtn.disabled = false;
+      getFavoriteBtn.innerHTML = `
+          <svg viewBox="0 0 24 24">
+            <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
+          </svg>
+          获取视频
+        `;
+    }
+  }
+
+  // 处理分P视频并添加到表格
+  function processAndAddVideoPartsToTable(parts, mainVideoInfo) {
+    if (!parts || !Array.isArray(parts) || parts.length === 0) {
+      return 0;
+    }
+
+    let addedCount = 0;
+
+    parts.forEach((part) => {
+      // 构造唯一ID
+      const uniqueId = `${mainVideoInfo.bvid}_${part.cid}`;
+
+      // 检查是否已存在
+      const existingVideo = videoList.find((v) => v.id === uniqueId || v.cid === part.cid);
+
+      if (!existingVideo) {
+        const formattedVideo = {
+          id: uniqueId,
+          bvid: mainVideoInfo.bvid,
+          aid: mainVideoInfo.aid,
+          cid: part.cid,
+          // 标题格式：主标题 - Px 分P标题
+          title: `${mainVideoInfo.title} - P${part.page}【${part.part}】`,
+          author: mainVideoInfo.author,
+          publishDate: mainVideoInfo.publishDate,
+          subtitleStatus: '未获取',
+          subtitleText: null,
+          view_count: mainVideoInfo.view_count, // 使用主视频数据
+          like_count: mainVideoInfo.like_count,
+          mid: mainVideoInfo.mid,
+          duration: part.duration,
+        };
+
+        // 批量添加时不更新UI，最后统一更新
+        if (addVideoToTable(formattedVideo, false)) {
+          addedCount++;
+        }
+      }
+    });
+
+    // 如果有添加视频，统一更新UI
+    if (addedCount > 0) {
+      updateVideoTable();
+    }
+
+    return addedCount;
+  }
+
   // 处理收藏夹视频并添加到表格
   function processAndAddVideosToTable(videos) {
     if (!videos || !Array.isArray(videos) || videos.length === 0) {
@@ -1472,23 +1626,31 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   // 添加视频到表格
-  function addVideoToTable(videoInfo) {
+  function addVideoToTable(videoInfo, updateUI = true) {
     console.log('🚀 videoInfo:', videoInfo);
     if (!videoInfo || !videoInfo.title) {
       showError('视频信息不完整，无法添加到表格');
-      return;
+      return false;
     }
 
-    // 检查是否已经存在相同bvid的视频
-    const existingVideo = videoList.find((v) => v.bvid === videoInfo.bvid);
+    // 检查是否已经存在相同的视频
+    // 修改去重逻辑：如果新视频有cid，则需要bvid和cid都匹配才算重复
+    // 如果没有cid，则只检查bvid
+    const existingVideo = videoList.find((v) => {
+      if (videoInfo.cid && v.cid) {
+        return v.bvid === videoInfo.bvid && v.cid === videoInfo.cid;
+      }
+      return v.bvid === videoInfo.bvid;
+    });
+
     if (existingVideo) {
-      showError('该视频已在表格中');
-      return;
+      if (updateUI) showError('该视频已在表格中');
+      return false;
     }
 
     // 创建一个包含所需信息的视频对象
     const video = {
-      id: videoInfo.bvid || videoInfo.aid || Date.now().toString(),
+      id: videoInfo.id || videoInfo.bvid || videoInfo.aid || Date.now().toString(),
       bvid: videoInfo.bvid,
       aid: videoInfo.aid,
       cid: videoInfo.cid,
@@ -1500,15 +1662,19 @@ document.addEventListener('DOMContentLoaded', function () {
       view_count: videoInfo.view_count,
       like_count: videoInfo.like_count,
       mid: videoInfo.mid,
+      duration: videoInfo.duration,
     };
 
     // 添加到视频列表
     videoList.push(video);
 
     // 更新表格UI
-    updateVideoTable();
+    if (updateUI) {
+      updateVideoTable();
+      showSuccess('已添加到表格');
+    }
 
-    showSuccess('已添加到表格');
+    return true;
   }
 
   // 更新视频表格

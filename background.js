@@ -1720,6 +1720,54 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     return true;
   }
+
+  // 处理获取视频分P列表的消息
+  if (message.action === 'fetchVideoParts') {
+    console.log('收到获取视频分P列表请求:', message);
+
+    if (!message.videoId) {
+      console.error('获取分P列表请求缺少必要参数 videoId');
+      sendResponse({
+        success: false,
+        message: '缺少必要参数videoId',
+      });
+      return true;
+    }
+
+    const responseSender = sendResponse;
+
+    (async () => {
+      try {
+        const isBV = message.videoId.startsWith('BV');
+        const param = isBV ? `bvid=${message.videoId}` : `aid=${message.videoId.replace('av', '')}`;
+        const url = `https://api.bilibili.com/x/player/pagelist?${param}`;
+
+        console.log('分P列表请求URL:', url);
+        const result = await fetchWithHeaders(url);
+
+        if (result.code === 0 && result.data) {
+          responseSender({
+            success: true,
+            data: result.data,
+          });
+        } else {
+          responseSender({
+            success: false,
+            message: result.message || '获取分P列表失败',
+            code: result.code,
+          });
+        }
+      } catch (error) {
+        console.error('获取分P列表出错:', error);
+        responseSender({
+          success: false,
+          message: error.message || '网络请求错误',
+        });
+      }
+    })();
+
+    return true;
+  }
 });
 
 // 使用aid+cid方式获取字幕
