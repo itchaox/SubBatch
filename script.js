@@ -625,6 +625,10 @@ document.addEventListener('DOMContentLoaded', function () {
         generateUrlBtn.style.display = 'none';
         getFavoriteBtn.style.display = 'block';
         urlInput.placeholder = '请输入B站合集地址';
+      } else if (currentUrlType === 'user') {
+        generateUrlBtn.style.display = 'none';
+        getFavoriteBtn.style.display = 'block';
+        urlInput.placeholder = '请输入B站个人主页地址';
       }
 
       // 关闭下拉框
@@ -667,6 +671,10 @@ document.addEventListener('DOMContentLoaded', function () {
         generateUrlBtn.style.display = 'none';
         getFavoriteBtn.style.display = 'block';
         urlInput.placeholder = '请输入B站合集地址';
+      } else if (currentUrlType === 'user') {
+        generateUrlBtn.style.display = 'none';
+        getFavoriteBtn.style.display = 'block';
+        urlInput.placeholder = '请输入B站个人主页地址';
       }
 
       // 关闭下拉框
@@ -899,6 +907,24 @@ document.addEventListener('DOMContentLoaded', function () {
   if (getFavoriteBtn) {
     getFavoriteBtn.addEventListener('click', async () => {
       const inputUrl = urlInput.value.trim();
+
+      // 处理用户主页地址
+      if (currentUrlType === 'user') {
+        if (!inputUrl) {
+          showError('请输入B站个人主页地址');
+          urlInput.focus();
+          return;
+        }
+
+        const mid = parseUserUrl(inputUrl);
+        if (!mid) {
+          showError('无法识别的用户主页地址，请检查格式');
+          return;
+        }
+
+        await fetchUserVideos(mid);
+        return;
+      }
 
       // 处理合集地址
       if (currentUrlType === 'collection') {
@@ -1271,6 +1297,166 @@ document.addEventListener('DOMContentLoaded', function () {
     return addedCount;
   }
 
+  // 从URL中提取用户mid
+  function parseUserUrl(url) {
+    // 匹配格式: https://space.bilibili.com/521041866
+    const regex = /space\.bilibili\.com\/(\d+)/;
+    const match = url.match(regex);
+    if (match && match.length >= 2) {
+      return match[1];
+    }
+    return null;
+  }
+
+  // 获取用户主页视频列表
+  async function fetchUserVideos(mid) {
+    console.log(`开始获取用户视频: mid=${mid}`);
+
+    // 禁用按钮并显示加载状态
+    getFavoriteBtn.disabled = true;
+    getFavoriteBtn.innerHTML = `
+        <svg viewBox="0 0 24 24" class="spin">
+          <path d="M12 6v3l4-4-4-4v3c-4.42 0-8 3.58-8 8 0 1.57.46 3.03 1.24 4.26L6.7 14.8c-.45-.83-.7-1.79-.7-2.8 0-3.31 2.69-6 6-6zm6.76 1.74L17.3 9.2c.44.84.7 1.79.7 2.8 0 3.31-2.69 6-6 6v-3l-4 4 4 4v-3c4.42 0 8-3.58 8-8 0-1.57-.46-3.03-1.24-4.26z"/>
+        </svg>
+        获取中
+      `;
+
+    showSuccess('正在获取用户视频内容，请稍候...');
+
+    try {
+      let allVideos = [];
+      let hasMore = true;
+      let currentPage = 1;
+      const pageSize = 30;
+
+      while (hasMore) {
+        showSuccess(`正在获取第${currentPage}页用户视频...`);
+        console.log(`获取用户视频第${currentPage}页，每页${pageSize}条`);
+
+        const response = await new Promise((resolve, reject) => {
+          const timeoutId = setTimeout(() => {
+            reject(new Error('请求超时，background.js没有及时响应'));
+          }, 15000);
+
+          chrome.runtime.sendMessage(
+            {
+              action: 'fetchUserVideoList',
+              mid: mid,
+              page: currentPage,
+              pageSize: pageSize,
+            },
+            (response) => {
+              clearTimeout(timeoutId);
+              const error = chrome.runtime.lastError;
+              if (error) {
+                console.error('发送消息时出错:', error);
+                reject(error);
+                return;
+              }
+              resolve(response);
+            },
+          );
+        });
+
+        if (response && response.success && response.data) {
+          console.log(`第${currentPage}页用户视频数据:`, response.data);
+
+          const medias = response.data.medias || [];
+          if (medias.length > 0) {
+            allVideos = allVideos.concat(medias);
+            console.log(`当前已获取${allVideos.length}个视频`);
+            showSuccess(`已获取${allVideos.length}个视频 (第${currentPage}页)`);
+          }
+
+          // 根据API返回的hasMore判断
+          if (response.hasMore === false) {
+            hasMore = false;
+          } else {
+            // 如果返回的数据少于pageSize，也可以认为是最后一页
+            if (medias.length < pageSize) {
+              hasMore = false;
+            } else {
+              currentPage++;
+              await new Promise((resolve) => setTimeout(resolve, 300));
+            }
+          }
+
+          if (medias.length === 0) {
+            hasMore = false;
+          }
+        } else {
+          const errorMsg = response?.message || '获取用户视频列表失败';
+          showError(errorMsg);
+          console.error('获取用户视频失败:', response);
+          break;
+        }
+      }
+
+      if (allVideos.length > 0) {
+        showSuccess(`成功获取用户视频，共${allVideos.length}个视频`);
+        console.log('完整用户视频内容:', allVideos);
+
+        // 处理并添加到表格
+        let addedCount = 0;
+        allVideos.forEach((video) => {
+          // 格式化视频信息
+          const formattedVideo = {
+            bvid: video.bvid,
+            aid: video.aid,
+            cid: 0, // 用户空间接口不直接返回cid，可能需要后续获取
+            title: video.title,
+            author: video.author,
+            subtitleStatus: '未获取',
+            subtitleText: null,
+            view_count: video.play || 0, // 注意字段名可能不同
+            like_count: 0, // 列表可能不包含点赞数
+            mid: mid,
+          };
+
+          // 如果没有cid，标记为需要获取
+          // 注意：addVideoToTable 中目前没有处理cid缺失的逻辑，
+          // 但 fetchSubtitleWithAid 需要cid。
+          // 我们可能需要在获取字幕时动态获取cid，或者在这里尝试获取。
+          // 鉴于批量处理，最好是先添加，点击获取字幕时再获取详情。
+          // 或者修改 fetchBilibiliVideoInfo 逻辑来支持只用bvid/aid获取详情。
+
+          // 暂时先添加，后续流程可能需要优化
+
+          // 检查是否已经存在
+          const existingVideo = videoList.find((v) => v.bvid === formattedVideo.bvid);
+          if (!existingVideo) {
+            videoList.push({
+              id: formattedVideo.bvid || formattedVideo.aid || Date.now().toString() + Math.random(),
+              ...formattedVideo,
+            });
+            addedCount++;
+          }
+        });
+
+        if (addedCount > 0) {
+          updateVideoTable();
+          showSuccess(`成功添加 ${addedCount} 个视频到列表`);
+        } else {
+          showSuccess('所有视频已在列表中');
+        }
+      } else {
+        showError('未找到任何视频');
+      }
+    } catch (error) {
+      console.error('获取用户视频出错:', error);
+      showError('获取用户视频出错: ' + error.message);
+    } finally {
+      // 恢复按钮状态
+      getFavoriteBtn.disabled = false;
+      getFavoriteBtn.innerHTML = `
+        <svg viewBox="0 0 24 24">
+          <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
+        </svg>
+        获取视频
+      `;
+    }
+  }
+
   // 添加视频到表格
   function addVideoToTable(videoInfo) {
     console.log('🚀 videoInfo:', videoInfo);
@@ -1368,11 +1554,11 @@ document.addEventListener('DOMContentLoaded', function () {
       row.innerHTML = `
         <td>${index + 1}</td>
         <td><a href="https://www.bilibili.com/video/${video.bvid}" target="_blank" title="${video.title}">${
-        video.title
-      }</a></td>
+          video.title
+        }</a></td>
         <td><a href="https://space.bilibili.com/${video.mid}" target="_blank" title="${video.author}">${
-        video.author
-      }</a></td>
+          video.author
+        }</a></td>
         <td>${subtitleStatusHtml}</td>
         <td>
           <button class="table-action-btn remove-row-btn" data-index="${index}">
