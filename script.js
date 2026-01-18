@@ -1227,6 +1227,8 @@ document.addEventListener('DOMContentLoaded', function () {
       );
 
       if (!existingVideo) {
+        console.log('222', video);
+
         const formattedVideo = {
           id: video.bvid || video.aid || Date.now().toString(),
           bvid: video.bvid,
@@ -1234,6 +1236,7 @@ document.addEventListener('DOMContentLoaded', function () {
           cid: video.cid || 0, // 如果没有cid，后续需要获取
           title: video.title,
           author: authorName, // 使用获取到的UP主名称
+          publishDate: video.pubdate || video.pubtime || video.ctime || video.created || 0,
           subtitleStatus: '未获取',
           subtitleText: null,
           view_count: video.stat?.view || 0,
@@ -1276,6 +1279,7 @@ document.addEventListener('DOMContentLoaded', function () {
             cid: video.ugc?.first_cid,
             title: video.title,
             author: video.upper?.name || '未知作者',
+            publishDate: video.pubdate || video.pubtime || video.ctime || video.created || 0,
             subtitleStatus: '未获取',
             subtitleText: null,
             view_count: video.stat?.view || 0,
@@ -1406,6 +1410,7 @@ document.addEventListener('DOMContentLoaded', function () {
             cid: 0, // 用户空间接口不直接返回cid，可能需要后续获取
             title: video.title,
             author: video.author,
+            publishDate: video.created || video.pubdate || 0,
             subtitleStatus: '未获取',
             subtitleText: null,
             view_count: video.play || 0, // 注意字段名可能不同
@@ -1480,6 +1485,7 @@ document.addEventListener('DOMContentLoaded', function () {
       cid: videoInfo.cid,
       title: videoInfo.title,
       author: videoInfo.author,
+      publishDate: videoInfo.publishDate || 0,
       subtitleStatus: '未获取',
       subtitleText: null,
       view_count: videoInfo.view_count,
@@ -1504,7 +1510,7 @@ document.addEventListener('DOMContentLoaded', function () {
     // 如果没有视频，显示空状态
     if (videoList.length === 0) {
       const emptyRow = document.createElement('tr');
-      emptyRow.innerHTML = `<td colspan="5" style="text-align: center; padding: 20px;">暂无视频，请添加视频</td>`;
+      emptyRow.innerHTML = `<td colspan="6" style="text-align: center; padding: 20px;">暂无视频，请添加视频</td>`;
       videoTableBody.appendChild(emptyRow);
 
       // 更新计数器显示
@@ -1559,6 +1565,7 @@ document.addEventListener('DOMContentLoaded', function () {
         <td><a href="https://space.bilibili.com/${video.mid}" target="_blank" title="${video.author}">${
           video.author
         }</a></td>
+        <td style="text-align: center;">${formatDate(video.publishDate)}</td>
         <td>${subtitleStatusHtml}</td>
         <td>
           <button class="table-action-btn remove-row-btn" data-index="${index}">
@@ -1592,6 +1599,17 @@ document.addEventListener('DOMContentLoaded', function () {
         showSuccess('已从表格中移除');
       });
     });
+  }
+
+  // 格式化日期函数
+  function formatDate(timestamp) {
+    if (!timestamp) return '-';
+    try {
+      const date = new Date(timestamp * 1000);
+      return date.toISOString().split('T')[0];
+    } catch (e) {
+      return '-';
+    }
   }
 
   // 批量获取字幕函数
