@@ -1401,6 +1401,7 @@ document.addEventListener('DOMContentLoaded', function () {
           like_count: mainVideoInfo.like_count,
           mid: mainVideoInfo.mid,
           duration: part.duration,
+          page: part.page, // 保存分P页码
         };
 
         // 批量添加时不更新UI，最后统一更新
@@ -1666,6 +1667,7 @@ document.addEventListener('DOMContentLoaded', function () {
       like_count: videoInfo.like_count,
       mid: videoInfo.mid,
       duration: videoInfo.duration,
+      page: videoInfo.page, // 保存分P页码
     };
 
     // 添加到视频列表
@@ -1735,11 +1737,15 @@ document.addEventListener('DOMContentLoaded', function () {
         subtitleStatusHtml = video.subtitleStatus;
       }
 
+      // 构建视频链接，如果有分P则添加p参数
+      let videoUrl = `https://www.bilibili.com/video/${video.bvid}`;
+      if (video.page && video.page > 1) {
+        videoUrl += `?p=${video.page}`;
+      }
+
       row.innerHTML = `
         <td>${index + 1}</td>
-        <td><a href="https://www.bilibili.com/video/${video.bvid}" target="_blank" title="${video.title}">${
-          video.title
-        }</a></td>
+        <td><a href="${videoUrl}" target="_blank" title="${video.title}">${video.title}</a></td>
         <td><a href="https://space.bilibili.com/${video.mid}" target="_blank" title="${video.author}">${
           video.author
         }</a></td>
@@ -2500,6 +2506,29 @@ document.addEventListener('DOMContentLoaded', function () {
   }
   if (modalSponsorBtn) {
     modalSponsorBtn.addEventListener('click', markAsConverted);
+  }
+
+  // 顶部公告栏事件监听 (解决 CSP 报错问题)
+  const bannerContainer = document.getElementById('bannerContainer');
+  const bannerFollowLink = document.getElementById('bannerFollowLink');
+  const bannerSponsorLink = document.getElementById('bannerSponsorLink');
+
+  if (bannerContainer) {
+    bannerContainer.addEventListener('click', () => {
+      window.open('https://space.bilibili.com/521041866', '_blank');
+    });
+  }
+
+  if (bannerFollowLink) {
+    bannerFollowLink.addEventListener('click', (event) => {
+      event.stopPropagation();
+    });
+  }
+
+  if (bannerSponsorLink) {
+    bannerSponsorLink.addEventListener('click', (event) => {
+      event.stopPropagation();
+    });
   }
 
   // 检查并增加解析次数
