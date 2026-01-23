@@ -1743,6 +1743,26 @@ document.addEventListener('DOMContentLoaded', function () {
         videoUrl += `?p=${video.page}`;
       }
 
+      // 构建操作按钮HTML
+      let actionButtonsHtml = '';
+      if (video.subtitleStatus === '获取成功') {
+        actionButtonsHtml += `
+          <button class="table-action-btn copy-row-btn" data-index="${index}" title="复制视频脚本">
+            <svg viewBox="0 0 24 24">
+              <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+            </svg>
+          </button>
+        `;
+      }
+
+      actionButtonsHtml += `
+          <button class="table-action-btn remove-row-btn" data-index="${index}" title="删除视频">
+            <svg viewBox="0 0 24 24">
+              <path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/>
+            </svg>
+          </button>
+      `;
+
       row.innerHTML = `
         <td>${index + 1}</td>
         <td><a href="${videoUrl}" target="_blank" title="${video.title}">${video.title}</a></td>
@@ -1752,9 +1772,7 @@ document.addEventListener('DOMContentLoaded', function () {
         <td style="text-align: center;">${formatDate(video.publishDate)}</td>
         <td>${subtitleStatusHtml}</td>
         <td>
-          <button class="table-action-btn remove-row-btn" data-index="${index}">
-            ❌
-          </button>
+          ${actionButtonsHtml}
         </td>
       `;
       videoTableBody.appendChild(row);
@@ -1762,10 +1780,52 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // 为表格中的按钮添加事件监听
     addTableButtonListeners();
+
+    // 同步表头和表体的滚动
+    const tableBodyContainer = document.getElementById('tableBodyContainer');
+    const tableHeaderContainer = document.getElementById('tableHeaderContainer');
+
+    if (tableBodyContainer && tableHeaderContainer) {
+      // 移除旧的监听器以避免重复
+      tableBodyContainer.onscroll = null;
+
+      tableBodyContainer.addEventListener('scroll', function () {
+        tableHeaderContainer.scrollLeft = this.scrollLeft;
+      });
+    }
   }
 
   // 为表格中的按钮添加事件监听
   function addTableButtonListeners() {
+    // 为复制按钮添加事件监听
+    document.querySelectorAll('.copy-row-btn').forEach((btn) => {
+      btn.addEventListener('click', async function () {
+        const index = parseInt(this.getAttribute('data-index'));
+        if (isNaN(index) || index < 0 || index >= videoList.length) {
+          showError('无效的视频索引');
+          return;
+        }
+
+        const video = videoList[index];
+        if (!video.subtitleText) {
+          showError('没有可复制的字幕内容');
+          return;
+        }
+
+        try {
+          // 转换为TXT格式
+          const txtContent = convertToTxtFormat(video.subtitleText);
+
+          // 复制到剪贴板
+          await navigator.clipboard.writeText(txtContent);
+          showSuccess('复制成功');
+        } catch (err) {
+          console.error('复制失败:', err);
+          showError('复制失败: ' + (err.message || '未知错误'));
+        }
+      });
+    });
+
     // 为移除按钮添加事件监听
     document.querySelectorAll('.remove-row-btn').forEach((btn) => {
       btn.addEventListener('click', function () {

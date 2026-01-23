@@ -689,7 +689,6 @@
       table {
         width: 100%;
         border-collapse: collapse;
-        table-layout: fixed;
       }
 
       th,
@@ -737,8 +736,15 @@
 
       th:nth-child(5),
       td:nth-child(5) {
-        width: 50px;
+        width: 100px;
         text-align: center;
+      }
+
+      th:nth-child(6),
+      td:nth-child(6) {
+        width: 120px;
+        text-align: center;
+        white-space: nowrap;
       }
 
       th {
@@ -751,37 +757,44 @@
 
       /* 表格行按钮样式 */
       .table-action-btn {
-        padding: 4px 8px;
-        font-size: 12px;
-        margin-right: 6px;
-        /* background-color: #f0f2f5; */
-        color: #333;
+        width: 32px;
+        height: 32px;
+        padding: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
         border: none;
-        border-radius: 4px;
+        border-radius: 6px;
         cursor: pointer;
         transition: all 0.2s ease;
+        background-color: transparent;
       }
 
-      .table-action-btn:hover {
-        /* background-color: #e4e6e8; */
+      .table-action-btn svg {
+        width: 18px;
+        height: 18px;
+        fill: currentColor;
       }
 
-      .get-subtitle-row-btn {
-        background-color: #3370ff;
-        color: white;
+      .copy-row-btn {
+        color: #666;
+        background-color: transparent; /* 默认透明，避免遮挡行悬停色 */
+        margin-right: 8px;
       }
 
-      .get-subtitle-row-btn:hover {
-        background-color: #2860e1;
+      .copy-row-btn:hover {
+        background-color: #e6f7ff;
+        color: #1890ff;
       }
 
       .remove-row-btn {
-        background-color: #fff;
-        color: white;
+        color: #666;
+        background-color: transparent; /* 默认透明，避免遮挡行悬停色 */
       }
 
       .remove-row-btn:hover {
-        background-color: #fff;
+        background-color: #ffeef1;
+        color: #ff4d4f;
       }
 
       /* 添加进度圆环样式 */
@@ -1449,18 +1462,17 @@
       >
         <!-- 表头部分 -->
         <div
+          style="overflow: hidden; width: 100%"
           id="tableHeaderContainer"
-          class="table-header-container"
-          style="width: 100%; overflow-x: hidden"
         >
-          <table style="width: 100%; table-layout: fixed; border-collapse: collapse; margin-bottom: 0">
+          <table style="width: 100%; border-collapse: collapse">
             <colgroup>
               <col style="width: 50px; min-width: 50px" />
               <col style="width: auto; min-width: 180px" />
               <col style="width: 100px; min-width: 100px" />
               <col style="width: 100px; min-width: 100px" />
               <col style="width: 100px; min-width: 100px" />
-              <col style="width: 50px; min-width: 50px" />
+              <col style="width: 120px; min-width: 120px" />
             </colgroup>
             <thead>
               <tr>
@@ -1495,7 +1507,7 @@
         >
           <table
             id="videoTable"
-            style="width: 100%; table-layout: fixed; border-collapse: collapse; margin-top: 0"
+            style="width: 100%; border-collapse: collapse; margin-top: 0"
           >
             <colgroup>
               <col style="width: 50px; min-width: 50px" />
@@ -1503,7 +1515,7 @@
               <col style="width: 100px; min-width: 100px" />
               <col style="width: 100px; min-width: 100px" />
               <col style="width: 100px; min-width: 100px" />
-              <col style="width: 50px; min-width: 50px" />
+              <col style="width: 120px; min-width: 120px" />
             </colgroup>
             <tbody id="videoTableBody">
               <!-- 表格内容将通过JavaScript动态添加 -->
