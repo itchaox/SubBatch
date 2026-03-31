@@ -507,15 +507,15 @@ document.addEventListener('DOMContentLoaded', function () {
       const safeAuthor = (currentVideoInfo?.author || 'unknown').replace(/[\\/:*?"<>|]/g, '_');
 
       // 格式化发布日期
-      let dateSuffix = '';
+      let formattedDate = '';
       if (currentVideoInfo?.publishDate) {
-        const formattedDate = formatDate(currentVideoInfo.publishDate);
-        if (formattedDate && formattedDate !== '-') {
-          dateSuffix = `——【${formattedDate}】`;
+        const d = formatDate(currentVideoInfo.publishDate);
+        if (d && d !== '-') {
+          formattedDate = d;
         }
       }
 
-      downloadLink.download = `【${safeAuthor}】——${safeTitle}${dateSuffix}.txt`;
+      downloadLink.download = buildFileName(safeAuthor, safeTitle, formattedDate, 'txt');
       // 将链接添加到文档中并点击
       document.body.appendChild(downloadLink);
       downloadLink.click();
@@ -2280,6 +2280,24 @@ document.addEventListener('DOMContentLoaded', function () {
     document.body.appendChild(dialogOverlay);
   }
 
+  // 根据设置生成文件名
+  function buildFileName(safeAuthor, safeTitle, formattedDate, format) {
+    const d = formattedDate ? `【${formattedDate}】` : '';
+    const sep = '—';
+    switch (defaultFileNameFormat) {
+      case 'author-date-title':
+        return `【${safeAuthor}】${d ? sep + d : ''}${sep}${safeTitle}.${format}`;
+      case 'title-author-date':
+        return `${safeTitle}${sep}【${safeAuthor}】${d ? sep + d : ''}.${format}`;
+      case 'title-date':
+        return `${safeTitle}${d ? sep + d : ''}.${format}`;
+      case 'date-title':
+        return `${d ? d + sep : ''}${safeTitle}.${format}`;
+      default: // 'author-title-date'
+        return `【${safeAuthor}】${sep}${safeTitle}${d ? sep + d : ''}.${format}`;
+    }
+  }
+
   // 执行导出流程
   async function executeExport(videosWithSubtitle, format) {
     try {
@@ -2314,16 +2332,16 @@ document.addEventListener('DOMContentLoaded', function () {
           const safeAuthor = video.author ? video.author.replace(/[\\/:*?"<>|]/g, '_') : 'unknown';
 
           // 格式化发布日期
-          let dateSuffix = '';
+          let formattedDate = '';
           if (video.publishDate) {
-            const formattedDate = formatDate(video.publishDate);
-            if (formattedDate && formattedDate !== '-') {
-              dateSuffix = `—【${formattedDate}】`;
+            const d = formatDate(video.publishDate);
+            if (d && d !== '-') {
+              formattedDate = d;
             }
           }
 
           // 构建文件名: 【作者】——视频名字——【发布日期】
-          const fileName = `【${safeAuthor}】—${safeTitle}${dateSuffix}.${format}`;
+          const fileName = buildFileName(safeAuthor, safeTitle, formattedDate, format);
 
           // 根据选择的格式处理字幕内容
           let subtitleContent;
@@ -2576,6 +2594,57 @@ document.addEventListener('DOMContentLoaded', function () {
       if (!e.target.closest('#formatSelectContainer')) {
         formatSelectTrigger.classList.remove('active');
         formatSelectDropdown.classList.remove('active');
+      }
+    });
+  }
+
+  // 文件命名格式设置
+  let defaultFileNameFormat = 'author-title-date';
+  const fileNameSelectTrigger = document.getElementById('fileNameSelectTrigger');
+  const fileNameSelectDropdown = document.getElementById('fileNameSelectDropdown');
+  const fileNameSelectOptions = document.querySelectorAll('#fileNameSelectDropdown .custom-select-option');
+  const fileNameSelectedText = document.querySelector('#fileNameSelectTrigger .custom-select-selected-text');
+
+  // 从 storage 加载文件命名设置
+  chrome.storage.local.get(['defaultFileNameFormat'], (result) => {
+    if (result.defaultFileNameFormat) {
+      defaultFileNameFormat = result.defaultFileNameFormat;
+      if (fileNameSelectedText) {
+        const matchOption = document.querySelector(`#fileNameSelectDropdown .custom-select-option[data-value="${defaultFileNameFormat}"]`);
+        if (matchOption) {
+          fileNameSelectedText.textContent = matchOption.textContent;
+          fileNameSelectOptions.forEach(o => o.classList.remove('selected'));
+          matchOption.classList.add('selected');
+        }
+      }
+    }
+  });
+
+  if (fileNameSelectTrigger && fileNameSelectDropdown) {
+    fileNameSelectTrigger.addEventListener('click', (e) => {
+      e.stopPropagation();
+      fileNameSelectTrigger.classList.toggle('active');
+      fileNameSelectDropdown.classList.toggle('active');
+    });
+
+    fileNameSelectOptions.forEach((option) => {
+      option.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const value = option.getAttribute('data-value');
+        defaultFileNameFormat = value;
+        fileNameSelectedText.textContent = option.textContent;
+        fileNameSelectOptions.forEach(o => o.classList.remove('selected'));
+        option.classList.add('selected');
+        fileNameSelectTrigger.classList.remove('active');
+        fileNameSelectDropdown.classList.remove('active');
+        chrome.storage.local.set({ defaultFileNameFormat });
+      });
+    });
+
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('#fileNameSelectContainer')) {
+        fileNameSelectTrigger.classList.remove('active');
+        fileNameSelectDropdown.classList.remove('active');
       }
     });
   }
