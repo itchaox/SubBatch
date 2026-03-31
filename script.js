@@ -2091,17 +2091,23 @@ document.addEventListener('DOMContentLoaded', function () {
         return;
       }
 
-      // 创建格式选择弹窗
-      showFormatSelectionDialog((selectedFormat) => {
-        if (!selectedFormat) {
-          return; // 用户取消了选择
-        }
+      // 检查是否设置了默认导出格式
+      if (defaultExportFormat === 'srt' || defaultExportFormat === 'txt') {
+        console.log(`使用默认导出格式: ${defaultExportFormat}`);
+        executeExport(videosWithSubtitle, defaultExportFormat);
+      } else {
+        // 创建格式选择弹窗
+        showFormatSelectionDialog((selectedFormat) => {
+          if (!selectedFormat) {
+            return; // 用户取消了选择
+          }
 
-        console.log(`选择了导出格式: ${selectedFormat}`);
+          console.log(`选择了导出格式: ${selectedFormat}`);
 
-        // 继续执行导出流程，并传入所选格式
-        executeExport(videosWithSubtitle, selectedFormat);
-      });
+          // 继续执行导出流程，并传入所选格式
+          executeExport(videosWithSubtitle, selectedFormat);
+        });
+      }
     } catch (error) {
       console.error('批量导出字幕外层错误:', error);
       showError('批量导出字幕失败: ' + (error.message || '未知错误'));
@@ -2515,6 +2521,74 @@ document.addEventListener('DOMContentLoaded', function () {
   // 为清空表格按钮添加事件监听
   if (clearTableBtn) {
     clearTableBtn.addEventListener('click', clearTable);
+  }
+
+  // 设置按钮事件
+  const settingsBtn = document.getElementById('settingsBtn');
+  const settingsModal = document.getElementById('settingsModal');
+  let defaultExportFormat = 'ask'; // 默认值
+
+  // 自定义下拉框元素
+  const formatSelectTrigger = document.getElementById('formatSelectTrigger');
+  const formatSelectDropdown = document.getElementById('formatSelectDropdown');
+  const formatSelectOptions = document.querySelectorAll('#formatSelectDropdown .custom-select-option');
+  const formatSelectedText = document.querySelector('#formatSelectTrigger .custom-select-selected-text');
+
+  // 从 storage 加载设置
+  chrome.storage.local.get(['defaultExportFormat'], (result) => {
+    if (result.defaultExportFormat) {
+      defaultExportFormat = result.defaultExportFormat;
+      if (formatSelectedText) {
+        const matchOption = document.querySelector(`#formatSelectDropdown .custom-select-option[data-value="${defaultExportFormat}"]`);
+        if (matchOption) {
+          formatSelectedText.textContent = matchOption.textContent;
+          formatSelectOptions.forEach(o => o.classList.remove('selected'));
+          matchOption.classList.add('selected');
+        }
+      }
+    }
+  });
+
+  // 自定义下拉框交互
+  if (formatSelectTrigger && formatSelectDropdown) {
+    formatSelectTrigger.addEventListener('click', (e) => {
+      e.stopPropagation();
+      formatSelectTrigger.classList.toggle('active');
+      formatSelectDropdown.classList.toggle('active');
+    });
+
+    formatSelectOptions.forEach((option) => {
+      option.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const value = option.getAttribute('data-value');
+        defaultExportFormat = value;
+        formatSelectedText.textContent = option.textContent;
+        formatSelectOptions.forEach(o => o.classList.remove('selected'));
+        option.classList.add('selected');
+        formatSelectTrigger.classList.remove('active');
+        formatSelectDropdown.classList.remove('active');
+        chrome.storage.local.set({ defaultExportFormat });
+      });
+    });
+
+    // 点击外部关闭下拉框
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('#formatSelectContainer')) {
+        formatSelectTrigger.classList.remove('active');
+        formatSelectDropdown.classList.remove('active');
+      }
+    });
+  }
+
+  if (settingsBtn && settingsModal) {
+    settingsBtn.addEventListener('click', () => {
+      settingsModal.style.display = 'flex';
+    });
+    settingsModal.addEventListener('click', (e) => {
+      if (e.target === settingsModal) {
+        settingsModal.style.display = 'none';
+      }
+    });
   }
 
   // 初始化表格

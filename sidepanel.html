@@ -776,6 +776,10 @@
         fill: currentColor;
       }
 
+      #settingsBtn:hover {
+        stroke: #3370ff;
+      }
+
       .copy-row-btn {
         color: #666;
         background-color: transparent; /* 默认透明，避免遮挡行悬停色 */
@@ -1402,6 +1406,10 @@
       <div class="table-header">
         <h3>
           📹 视频列表
+          <svg id="settingsBtn" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#666" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-left: 8px; cursor: pointer; transition: stroke 0.2s ease;">
+            <circle cx="12" cy="12" r="3"></circle>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+          </svg>
           <span
             id="videoCountInfo"
             style="font-size: 14px; font-weight: normal; color: #666; margin-left: 8px; display: none"
@@ -1666,6 +1674,32 @@
           >
             下次一定
           </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 设置弹窗 -->
+    <div
+      id="settingsModal"
+      style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0, 0, 0, 0.5); z-index: 2000; justify-content: center; align-items: center; backdrop-filter: blur(4px);"
+    >
+      <div
+        style="background: white; border-radius: 12px; padding: 24px; width: 85%; max-width: 340px; box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);"
+      >
+        <h3 style="margin: 0 0 20px 0; font-size: 16px; font-weight: 600;">设置</h3>
+        <div style="display: flex; align-items: center; gap: 12px;">
+          <span style="font-size: 14px; color: #333; font-weight: 500; white-space: nowrap;">导出格式</span>
+          <div class="custom-select-container" id="formatSelectContainer" style="flex: 1;">
+            <div class="custom-select-trigger" id="formatSelectTrigger">
+              <span class="custom-select-selected-text">每次询问</span>
+              <svg class="select-arrow-icon" viewBox="0 0 24 24"><path d="M7 10l5 5 5-5z" /></svg>
+            </div>
+            <div class="custom-select-dropdown" id="formatSelectDropdown">
+              <div class="custom-select-option" data-value="txt">TXT 格式（纯文本）</div>
+              <div class="custom-select-option" data-value="srt">SRT 格式（带时间戳）</div>
+              <div class="custom-select-option selected" data-value="ask">每次询问</div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
