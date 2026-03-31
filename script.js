@@ -2569,10 +2569,22 @@ document.addEventListener('DOMContentLoaded', function () {
 
   // 自定义下拉框交互
   if (formatSelectTrigger && formatSelectDropdown) {
+    // 关闭所有设置下拉框
+    function closeAllSettingsDropdowns() {
+      formatSelectTrigger.classList.remove('active');
+      formatSelectDropdown.classList.remove('active');
+      if (fileNameSelectTrigger) fileNameSelectTrigger.classList.remove('active');
+      if (fileNameSelectDropdown) fileNameSelectDropdown.classList.remove('active');
+    }
+
     formatSelectTrigger.addEventListener('click', (e) => {
       e.stopPropagation();
-      formatSelectTrigger.classList.toggle('active');
-      formatSelectDropdown.classList.toggle('active');
+      const wasOpen = formatSelectTrigger.classList.contains('active');
+      closeAllSettingsDropdowns();
+      if (!wasOpen) {
+        formatSelectTrigger.classList.add('active');
+        formatSelectDropdown.classList.add('active');
+      }
     });
 
     formatSelectOptions.forEach((option) => {
@@ -2623,8 +2635,12 @@ document.addEventListener('DOMContentLoaded', function () {
   if (fileNameSelectTrigger && fileNameSelectDropdown) {
     fileNameSelectTrigger.addEventListener('click', (e) => {
       e.stopPropagation();
-      fileNameSelectTrigger.classList.toggle('active');
-      fileNameSelectDropdown.classList.toggle('active');
+      const wasOpen = fileNameSelectTrigger.classList.contains('active');
+      closeAllSettingsDropdowns();
+      if (!wasOpen) {
+        fileNameSelectTrigger.classList.add('active');
+        fileNameSelectDropdown.classList.add('active');
+      }
     });
 
     fileNameSelectOptions.forEach((option) => {
