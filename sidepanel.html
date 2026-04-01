@@ -780,6 +780,43 @@
         stroke: #3370ff;
       }
 
+      /* Switch 开关样式 */
+      .switch {
+        position: relative;
+        display: inline-block;
+        width: 40px;
+        height: 22px;
+        flex-shrink: 0;
+      }
+      .switch input {
+        opacity: 0;
+        width: 0;
+        height: 0;
+      }
+      .switch-slider {
+        position: absolute;
+        cursor: pointer;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background-color: #ddd;
+        border-radius: 22px;
+        transition: 0.3s;
+      }
+      .switch-slider::before {
+        content: '';
+        position: absolute;
+        height: 18px; width: 18px;
+        left: 2px; bottom: 2px;
+        background-color: white;
+        border-radius: 50%;
+        transition: 0.3s;
+      }
+      .switch input:checked + .switch-slider {
+        background-color: #3370ff;
+      }
+      .switch input:checked + .switch-slider::before {
+        transform: translateX(18px);
+      }
+
       .copy-row-btn {
         color: #666;
         background-color: transparent; /* 默认透明，避免遮挡行悬停色 */
@@ -1716,6 +1753,13 @@
               <div class="custom-select-option" data-value="date-title">日期—标题</div>
             </div>
           </div>
+        </div>
+        <div style="display: flex; align-items: center; justify-content: space-between; margin-top: 16px;">
+          <span style="font-size: 14px; color: #333; font-weight: 500;">字幕添加视频信息</span>
+          <label class="switch">
+            <input type="checkbox" id="prependVideoInfoToggle">
+            <span class="switch-slider"></span>
+          </label>
         </div>
       </div>
     </div>

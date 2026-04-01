@@ -495,7 +495,8 @@ document.addEventListener('DOMContentLoaded', function () {
       }
 
       // 创建Blob对象
-      const blob = new Blob([subtitleText], { type: 'text/plain;charset=utf-8' });
+      const finalText = prependVideoInfo ? prependVideoInfoText(subtitleText, currentVideoInfo?.title, currentVideoInfo?.bvid) : subtitleText;
+      const blob = new Blob([finalText], { type: 'text/plain;charset=utf-8' });
 
       // 创建下载链接
       const url = URL.createObjectURL(blob);
@@ -1814,7 +1815,10 @@ document.addEventListener('DOMContentLoaded', function () {
 
         try {
           // 转换为TXT格式
-          const txtContent = convertToTxtFormat(video.subtitleText);
+          let txtContent = convertToTxtFormat(video.subtitleText);
+
+          // 添加视频信息前缀
+          txtContent = prependVideoInfoText(txtContent, video.title, video.bvid);
 
           // 复制到剪贴板
           await navigator.clipboard.writeText(txtContent);
@@ -2298,6 +2302,13 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   }
 
+  // 根据设置在字幕内容前添加视频标题和链接
+  function prependVideoInfoText(subtitleContent, title, bvid) {
+    if (!prependVideoInfo || !bvid) return subtitleContent;
+    const videoUrl = `https://www.bilibili.com/video/${bvid}`;
+    return `标题：${title}\n链接：${videoUrl}\n\n${subtitleContent}`;
+  }
+
   // 执行导出流程
   async function executeExport(videosWithSubtitle, format) {
     try {
@@ -2349,6 +2360,11 @@ document.addEventListener('DOMContentLoaded', function () {
             subtitleContent = convertToSrtFormat(video.subtitleText);
           } else {
             subtitleContent = convertToTxtFormat(video.subtitleText);
+          }
+
+          // 添加视频信息前缀（仅TXT格式，SRT不能破坏格式）
+          if (format !== 'srt') {
+            subtitleContent = prependVideoInfoText(subtitleContent, video.title, video.bvid);
           }
 
           // 将字幕内容添加到zip文件
@@ -2673,6 +2689,24 @@ document.addEventListener('DOMContentLoaded', function () {
       if (e.target === settingsModal) {
         settingsModal.style.display = 'none';
       }
+    });
+  }
+
+  // 字幕添加视频信息开关
+  let prependVideoInfo = false;
+  const prependVideoInfoToggle = document.getElementById('prependVideoInfoToggle');
+
+  chrome.storage.local.get(['prependVideoInfo'], (result) => {
+    if (result.prependVideoInfo) {
+      prependVideoInfo = true;
+      if (prependVideoInfoToggle) prependVideoInfoToggle.checked = true;
+    }
+  });
+
+  if (prependVideoInfoToggle) {
+    prependVideoInfoToggle.addEventListener('change', (e) => {
+      prependVideoInfo = e.target.checked;
+      chrome.storage.local.set({ prependVideoInfo });
     });
   }
 
