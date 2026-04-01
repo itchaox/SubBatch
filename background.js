@@ -628,8 +628,9 @@ async function getBilibiliSubtitle(cid, bvid, retryCount = 2) {
       };
     }
 
-    // 获取第一个字幕（通常是默认字幕），优先获取中文字幕
-    const defaultSubtitle = subtitles.find((item) => item.lan === 'ai-zh');
+    // 获取字幕，优先获取中文字幕，没有则取列表第一个
+    // 获取字幕列表的第一个字幕
+    const defaultSubtitle = subtitles[0];
     console.log('默认字幕信息:', defaultSubtitle);
 
     const subtitleUrl = defaultSubtitle.subtitle_url;
@@ -1843,8 +1844,8 @@ async function fetchSubtitleWithAid(aid, cid, retryCount = 2) {
       };
     }
 
-    // 获取第一个字幕，优先获取中文字幕
-    const defaultSubtitle = subtitles.find((item) => item.lan === 'ai-zh');
+    // 获取字幕列表的第一个字幕
+    const defaultSubtitle = subtitles[0];
     console.log('🚀 defaultSubtitle:', defaultSubtitle);
     const subtitleUrl = defaultSubtitle.subtitle_url;
     console.log('🚀 subtitleUrl:', subtitleUrl);
