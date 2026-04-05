@@ -2713,6 +2713,27 @@ document.addEventListener('DOMContentLoaded', function () {
   // 初始化表格
   updateVideoTable();
 
+  // 感叹号图标 fixed 定位 tooltip
+  const helpIcon = document.querySelector('.status-help-icon');
+  if (helpIcon) {
+    const tooltip = document.createElement('div');
+    tooltip.className = 'status-fixed-tooltip';
+    tooltip.textContent = helpIcon.getAttribute('data-tooltip');
+    document.body.appendChild(tooltip);
+
+    helpIcon.addEventListener('mouseenter', function () {
+      const rect = this.getBoundingClientRect();
+      tooltip.style.top = (rect.top - 8) + 'px';
+      tooltip.style.left = (rect.left + rect.width / 2) + 'px';
+      tooltip.style.transform = 'translateX(-50%) translateY(-100%)';
+      tooltip.classList.add('show');
+    });
+
+    helpIcon.addEventListener('mouseleave', function () {
+      tooltip.classList.remove('show');
+    });
+  }
+
   // 为使用文档和反馈问题按钮添加事件监听器
   const docBtn = document.getElementById('docBtn');
   const feedbackBtn = document.getElementById('feedbackBtn');
