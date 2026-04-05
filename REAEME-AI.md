@@ -144,7 +144,7 @@ const SUBTITLE_STATUS = {
   PROCESSING: '获取中',
   SUCCESS: '获取成功',
   FAILED: '获取失败',
-  NO_SUBTITLE: '无字幕文件'
+  NO_SUBTITLE: '无外挂字幕'
 };
 ```
 

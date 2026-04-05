@@ -106,7 +106,7 @@ Bilibili uses WBI (Web Browser Interface) signature for certain API endpoints as
 ```javascript
 {
   id, bvid, aid, cid, title, author,
-  subtitleStatus: '未获取' | '获取中' | '获取成功' | '获取失败' | '无字幕文件',
+  subtitleStatus: '未获取' | '获取中' | '获取成功' | '获取失败' | '无外挂字幕',
   subtitleText: null | string,
   view_count, like_count, mid
 }
