@@ -27,6 +27,7 @@ document.addEventListener('DOMContentLoaded', function () {
   const exportTableBtn = document.getElementById('exportTableBtn');
   const clearTableBtn = document.getElementById('clearTableBtn');
   const batchGetSubtitleBtn = document.getElementById('batchGetSubtitleBtn');
+  const transcribeAudioBtn = document.getElementById('transcribeAudioBtn');
 
   // 进度条相关元素
   const progressContainer = document.getElementById('progressContainer');
@@ -2068,6 +2069,140 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   }
 
+  // 音频转字幕按钮事件监听
+  if (transcribeAudioBtn) {
+    console.log('添加音频转字幕按钮事件监听');
+    transcribeAudioBtn.addEventListener('click', async function () {
+      console.log('音频转字幕按钮被点击');
+
+      // 检查是否有视频在表格中
+      if (videoList.length === 0) {
+        showError('请先添加视频到表格');
+        return;
+      }
+
+      // 检查视频时长（30分钟 = 1800秒）
+      const hasLongVideo = videoList.some((v) => v.duration && v.duration > 1800);
+      if (hasLongVideo) {
+        showError('音频转字幕功能仅支持 30 分钟以内的视频');
+        return;
+      }
+
+      // 显示进度
+      showProgress(true);
+      updateProgress(0, '准备转写...');
+
+      try {
+        // 获取第一个未获取成功字幕的视频
+        const videoToTranscribe = videoList.find(
+          (v) => v.subtitleStatus !== '获取成功' && v.bvid && v.cid
+        );
+
+        if (!videoToTranscribe) {
+          showError('没有需要转写的视频（所有视频都已获取字幕或信息不完整）');
+          showProgress(false);
+          return;
+        }
+
+        showSuccess('开始音频转写，请稍候...');
+
+        // 获取当前 B站 标签页用于 content script
+        const bilibiliTabs = await chrome.tabs.query({
+          url: '*://*.bilibili.com/video/*',
+          currentWindow: true,
+        });
+        const bilibiliTab = bilibiliTabs.length > 0 ? bilibiliTabs[0] : null;
+        console.log('B站 标签页:', bilibiliTab?.url, 'ID:', bilibiliTab?.id);
+
+        if (!bilibiliTab) {
+          showError('请在 B站视频页面打开侧边栏');
+          showProgress(false);
+          return;
+        }
+
+        // 发送转写请求（包括 tabId）
+        const response = await chrome.runtime.sendMessage({
+          action: 'transcribeAudio',
+          bvid: videoToTranscribe.bvid,
+          cid: videoToTranscribe.cid,
+          tabId: bilibiliTab.id,
+        });
+
+        console.log('音频转写响应:', response);
+
+        if (response.success) {
+          // 检查是否需要在前端处理音频
+          if (response.stage === 'needs_frontend_processing' && response.audioData) {
+            console.log('需要在前端处理音频，开始解码...');
+            updateProgress(50, '在前端解码音频...');
+
+            try {
+              // 在前端解码音频
+              const audioBuffer = await decodeAudioInFrontend(response.audioData);
+              if (!audioBuffer) {
+                throw new Error('前端音频解码失败');
+              }
+
+              updateProgress(60, '音频解码完成，开始转写...');
+
+              // 在前端初始化 Whisper 并转写
+              const transcribeResult = await transcribeAudioInFrontend(audioBuffer, (progress, msg) => {
+                updateProgress(60 + progress * 0.35, msg || '转写中...');
+              });
+
+              updateProgress(100, '转写完成');
+
+              // 保存结果到视频对象
+              videoToTranscribe.subtitleStatus = '获取成功';
+              videoToTranscribe.subtitleText = transcribeResult.srtContent;
+
+              // 更新表格
+              updateVideoTable();
+
+              showSuccess('音频转字幕完成！可以导出或继续添加视频。');
+            } catch (frontendError) {
+              console.error('前端音频处理失败:', frontendError);
+              showError('前端音频处理失败: ' + (frontendError.message || '未知错误'));
+            }
+          } else if (response.srtContent) {
+            updateProgress(100, '转写完成');
+
+            // 保存结果到视频对象
+            videoToTranscribe.subtitleStatus = '获取成功';
+            videoToTranscribe.subtitleText = response.srtContent;
+
+            // 更新表格
+            updateVideoTable();
+
+            showSuccess('音频转字幕完成！可以导出或继续添加视频。');
+          } else {
+            showError('转写结果格式不正确');
+          }
+        } else {
+          showError('转写失败: ' + (response.message || '未知错误'));
+        }
+      } catch (error) {
+        console.error('音频转写出错:', error);
+        showError('转写出错: ' + (error.message || '未知错误'));
+      } finally {
+        setTimeout(() => {
+          showProgress(false);
+        }, 2000);
+      }
+    });
+  } else {
+    console.warn('音频转字幕按钮未找到');
+  }
+
+  // 监听转写进度消息
+  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+    if (message.action === 'transcribeProgress') {
+      console.log('收到转写进度:', message);
+      updateProgress(message.progress || 0, message.message || '处理中...');
+    }
+    return true;
+  });
+
   // 批量导出字幕为独立的TXT文件
   async function batchExportSubtitles() {
     try {
@@ -2860,3 +2995,317 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   }
 });
+
+// ============================================
+// 音频转字幕 - 前端处理函数
+// ============================================
+
+/**
+ * 在前端解码音频数据
+ * @param {Array} audioData - 原始音频数据（Uint8Array converted to Array）
+ * @returns {Promise<AudioBuffer>}
+ */
+async function decodeAudioInFrontend(audioData) {
+  try {
+    console.log('开始在前端解码音频，数据大小:', audioData.length);
+
+    // 将 Array 转回 Uint8Array
+    const uint8Array = new Uint8Array(audioData);
+
+    // 创建 AudioContext
+    const audioContext = new (window.AudioContext || window.webkitAudioContext)();
+
+    // 解码音频数据
+    const audioBuffer = await audioContext.decodeAudioData(uint8Array.buffer);
+    console.log('前端音频解码成功，时长:', audioBuffer.duration, '秒');
+
+    return audioBuffer;
+  } catch (error) {
+    console.error('前端音频解码失败:', error);
+    throw error;
+  }
+}
+
+/**
+ * 将 AudioBuffer 转换为 16kHz 单声道 Float32Array
+ * @param {AudioBuffer} audioBuffer
+ * @returns {Float32Array}
+ */
+function audioBufferTo16kHzMono(audioBuffer) {
+  const sourceSampleRate = audioBuffer.sampleRate;
+  const targetSampleRate = 16000;
+
+  // 如果已经是 16kHz 且为单声道，直接返回
+  if (sourceSampleRate === 16000 && audioBuffer.numberOfChannels === 1) {
+    return audioBuffer.getChannelData(0);
+  }
+
+  // 计算重采样比例
+  const ratio = targetSampleRate / sourceSampleRate;
+  const targetLength = Math.round(audioBuffer.length * ratio);
+  const result = new Float32Array(targetLength);
+
+  // 如果是立体声，混合为单声道
+  let channelData;
+  if (audioBuffer.numberOfChannels === 2) {
+    const left = audioBuffer.getChannelData(0);
+    const right = audioBuffer.getChannelData(1);
+    channelData = new Float32Array(left.length);
+    for (let i = 0; i < left.length; i++) {
+      channelData[i] = (left[i] + right[i]) / 2;
+    }
+  } else {
+    channelData = audioBuffer.getChannelData(0);
+  }
+
+  // 线性插值重采样
+  for (let i = 0; i < targetLength; i++) {
+    const srcIndex = i / ratio;
+    const srcIndexFloor = Math.floor(srcIndex);
+    const srcIndexCeil = Math.min(srcIndexFloor + 1, channelData.length - 1);
+    const frac = srcIndex - srcIndexFloor;
+    result[i] = channelData[srcIndexFloor] * (1 - frac) + channelData[srcIndexCeil] * frac;
+  }
+
+  return result;
+}
+
+/**
+ * SRT 时间格式转换
+ * @param {number} seconds - 秒数
+ * @returns {string} HH:MM:SS,mmm 格式
+ */
+function formatSRTTime(seconds) {
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const secs = Math.floor(seconds % 60);
+  const ms = Math.floor((seconds % 1) * 1000);
+
+  const pad = (num, length = 2) => num.toString().padStart(length, '0');
+  return `${pad(hours)}:${pad(minutes)}:${pad(secs)},${pad(ms, 3)}`;
+}
+
+/**
+ * 将转写结果转换为 SRT 格式
+ * @param {Array<{text: string, timestamp: [number, number]}>} segments
+ * @returns {string} SRT 格式字符串
+ */
+function convertToSRT(segments) {
+  if (!segments || segments.length === 0) {
+    return '';
+  }
+
+  let srtContent = '';
+  let index = 1;
+
+  for (const segment of segments) {
+    // 跳过空文本
+    if (!segment.text || !segment.text.trim()) {
+      continue;
+    }
+
+    // 获取时间戳
+    let startSec, endSec;
+    if (segment.timestamp && Array.isArray(segment.timestamp)) {
+      [startSec, endSec] = segment.timestamp;
+    } else if (segment.offsets && Array.isArray(segment.offsets)) {
+      startSec = segment.offsets[0] / 1000; // 转换为秒
+      endSec = segment.offsets[1] / 1000;
+    } else {
+      // 如果没有时间戳，使用默认值
+      startSec = 0;
+      endSec = 0;
+    }
+
+    // 格式化时间: HH:MM:SS,mmm
+    const startTime = formatSRTTime(startSec);
+    const endTime = formatSRTTime(endSec);
+
+    // 清理文本（移除多余空格）
+    const text = segment.text.trim();
+
+    srtContent += `${index}\n`;
+    srtContent += `${startTime} --> ${endTime}\n`;
+    srtContent += `${text}\n\n`;
+
+    index++;
+  }
+
+  return srtContent.trim();
+}
+
+// 前端 Whisper 转写器
+let frontendWhisperModel = null;
+let frontendWhisperProcessor = null;
+let frontendWhisperTokenizer = null;
+let frontendTransformersModule = null;
+
+/**
+ * 在前端初始化 Whisper 模型
+ * 绕过 pipeline 函数（它内部会 fallback 到 CTC 模型导致 "Unsupported model type" 错误）
+ * 直接使用 AutoModelForSpeechSeq2Seq + AutoProcessor
+ * @param {Function} onProgress - 进度回调
+ */
+async function initFrontendWhisper(onProgress) {
+  if (frontendWhisperModel && frontendWhisperProcessor && frontendWhisperTokenizer) {
+    return;
+  }
+
+  console.log('在前端初始化 Whisper 模型...');
+
+  try {
+    // 动态 import Transformers.js
+    if (!frontendTransformersModule) {
+      console.log('加载 Transformers.js (ES module)...');
+      frontendTransformersModule = await import(chrome.runtime.getURL('libs/transformers.min.js'));
+      console.log('Transformers.js 加载完成');
+    }
+
+    const { AutoModelForSpeechSeq2Seq, AutoProcessor, AutoTokenizer, env } = frontendTransformersModule;
+
+    // 配置本地模型
+    env.allowLocalModels = true;
+    env.useBrowserCache = false;
+    env.localModelPath = chrome.runtime.getURL('models/');
+
+    // 配置 ONNX runtime 使用单线程，避免创建 Web Worker（blob: URL 被 CSP 拦截）
+    try {
+      env.backends.onnx.wasm.numThreads = 1;
+    } catch (e) {
+      console.warn('无法设置 ONNX 单线程模式:', e);
+    }
+
+    console.log('模型根路径:', env.localModelPath);
+
+    const progressCallback = (progress_info) => {
+      console.log('Whisper 加载进度:', progress_info);
+      if (onProgress && progress_info.progress !== undefined) {
+        onProgress(progress_info.progress * 0.3, `加载模型 ${Math.round(progress_info.progress)}%`);
+      }
+    };
+
+    // 直接用 AutoModelForSpeechSeq2Seq 加载（不走 pipeline 的 fallback 逻辑）
+    console.log('开始加载 Whisper 模型...');
+    frontendWhisperModel = await AutoModelForSpeechSeq2Seq.from_pretrained('whisper-base', {
+      progress_callback: progressCallback,
+    });
+    console.log('Whisper 模型加载完成');
+
+    if (onProgress) onProgress(35, '加载处理器和分词器...');
+
+    frontendWhisperProcessor = await AutoProcessor.from_pretrained('whisper-base');
+    console.log('Whisper 处理器加载完成');
+
+    // 加载 Tokenizer 用于解码（batch_decode 是 tokenizer 的方法，不是 processor 的）
+    frontendWhisperTokenizer = await AutoTokenizer.from_pretrained('whisper-base');
+    console.log('Whisper 分词器加载完成');
+  } catch (error) {
+    console.error('在前端初始化 Whisper 失败:', error);
+    throw error;
+  }
+}
+
+/**
+ * 在前端转写音频
+ * @param {AudioBuffer} audioBuffer - 解码后的音频
+ * @param {Function} onProgress - 进度回调
+ * @returns {Promise<{text: string, chunks: Array, srtContent: string}>}
+ */
+async function transcribeAudioInFrontend(audioBuffer, onProgress) {
+  try {
+    // 初始化 Whisper
+    await initFrontendWhisper(onProgress);
+
+    if (onProgress) onProgress(40, '模型加载完成，开始转写...');
+
+    // 转换音频为 16kHz 单声道
+    const monoAudio = audioBufferTo16kHzMono(audioBuffer);
+    console.log('转换后音频样本数:', monoAudio.length);
+
+    if (onProgress) onProgress(50, '处理音频特征...');
+
+    // 使用 processor 提取特征
+    const { input_features } = await frontendWhisperProcessor(monoAudio);
+
+    if (onProgress) onProgress(55, '开始转写音频...');
+
+    // 手动构造 forced_decoder_ids（中文转写）
+    // token IDs: 50258=<|startoftranscript|>, 50260=<|zh|>, 50359=<|transcribe|>
+    const forcedDecoderIds = [
+      [1, 50260],  // position 1: Chinese language token
+      [2, 50359],  // position 2: transcribe task token
+    ];
+
+    // 模型推理（generate 的第一个参数是 Tensor，第二个参数是生成配置）
+    const output = await frontendWhisperModel.generate(input_features, {
+      max_new_tokens: 448,
+      forced_decoder_ids: forcedDecoderIds,
+    });
+
+    if (onProgress) onProgress(85, '解码文本...');
+
+    // 解码输出（batch_decode 是 tokenizer 的方法）
+    const decoded = frontendWhisperTokenizer.batch_decode(output, { skip_special_tokens: true });
+    const text = decoded[0] || '';
+    console.log('转写完成, 文本:', text.substring(0, 100));
+
+    if (onProgress) onProgress(95, '转写完成');
+
+    // 用带时间戳的方式再跑一次（用于生成 SRT）
+    let chunks = [];
+    try {
+      const outputWithTimestamps = await frontendWhisperModel.generate(input_features, {
+        max_new_tokens: 448,
+        forced_decoder_ids: forcedDecoderIds,
+        return_timestamps: true,
+      });
+      const decodedChunks = frontendWhisperTokenizer.batch_decode(outputWithTimestamps, {
+        skip_special_tokens: false,
+        decode_with_timestamps: true,
+      });
+      // 解析时间戳 chunks
+      chunks = parseTimestampChunks(decodedChunks[0] || '');
+    } catch (tsError) {
+      console.warn('获取时间戳失败，使用纯文本:', tsError.message);
+    }
+
+    // 转换为 SRT 格式
+    const srtContent = chunks.length > 0 ? convertToSRT(chunks) : text;
+
+    return {
+      text: text,
+      chunks: chunks,
+      srtContent: srtContent,
+    };
+  } catch (error) {
+    console.error('前端转写失败:', error);
+    throw error;
+  }
+}
+
+/**
+ * 解析 Whisper 带时间戳的输出
+ * @param {string} text - Whisper 输出的带 <|0.00|> 格式时间戳的文本
+ * @returns {Array<{text: string, timestamp: [number, number]}>}
+ */
+function parseTimestampChunks(text) {
+  const chunks = [];
+  const timestampRegex = /<\|(\d+\.\d+)\|>/g;
+  let matches = [];
+  let match;
+  while ((match = timestampRegex.exec(text)) !== null) {
+    matches.push({ time: parseFloat(match[1]), index: match.index, length: match[0].length });
+  }
+
+  for (let i = 0; i < matches.length - 1; i += 2) {
+    const start = matches[i].time;
+    const end = matches[i + 1] ? matches[i + 1].time : start + 1;
+    const textStart = matches[i].index + matches[i].length;
+    const textEnd = matches[i + 1] ? matches[i + 1].index : text.length;
+    const chunkText = text.substring(textStart, textEnd).trim();
+    if (chunkText) {
+      chunks.push({ text: chunkText, timestamp: [start, end] });
+    }
+  }
+  return chunks;
+}

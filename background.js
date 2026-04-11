@@ -1769,6 +1769,142 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
     return true;
   }
+
+  // 处理音频转字幕请求
+  if (message.action === 'transcribeAudio') {
+    console.log('收到音频转字幕请求:', message);
+
+    const { bvid, cid } = message;
+
+    if (!bvid || !cid) {
+      sendResponse({
+        success: false,
+        message: '缺少必要参数 bvid 或 cid',
+      });
+      return true;
+    }
+
+    // 创建转写任务
+    (async () => {
+      try {
+        // 1. 获取音频流 URL
+        console.log('步骤1: 获取音频流 URL');
+        const audioResult = await fetchAudioStreamUrl(bvid, cid);
+
+        if (!audioResult.success) {
+          sendResponse({
+            success: false,
+            message: '获取音频流失败: ' + (audioResult.message || '未知错误'),
+          });
+          return;
+        }
+
+        // 2. 使用传入的 tabId
+        const tabId = message.tabId;
+        console.log('步骤2: 使用传入的 tabId:', tabId);
+
+        // 3. 下载并解码音频
+        console.log('步骤3: 下载并解码音频');
+        const audioDataResult = await fetchAndDecodeAudio(audioResult.audioUrl, tabId, audioResult.audioUrls, (progress, stage, msg) => {
+          // 发送进度更新
+          try {
+            chrome.runtime.sendMessage({
+              action: 'transcribeProgress',
+              progress: progress,
+              stage: stage,
+              message: msg,
+            });
+          } catch (e) {
+            console.warn('发送进度消息失败:', e);
+          }
+        });
+
+        if (!audioDataResult.success) {
+          sendResponse({
+            success: false,
+            message: '下载音频失败: ' + (audioDataResult.message || '未知错误'),
+          });
+          return;
+        }
+
+        // 如果需要在前端处理音频
+        if (audioDataResult.needsProcessing) {
+          sendResponse({
+            success: true,
+            stage: 'needs_frontend_processing',
+            audioData: Array.from(audioDataResult.audioData),
+            message: '请在前端解码音频',
+          });
+          return;
+        }
+
+        // 4. 初始化 Whisper
+        console.log('步骤4: 初始化 Whisper');
+        whisperTranscriber = new WhisperTranscriber();
+
+        await whisperTranscriber.initialize((progress, stage, msg) => {
+          try {
+            chrome.runtime.sendMessage({
+              action: 'transcribeProgress',
+              progress: progress,
+              stage: stage,
+              message: msg,
+            });
+          } catch (e) {
+            console.warn('发送进度消息失败:', e);
+          }
+        });
+
+        // 5. 转换音频格式并转写
+        console.log('步骤5: 转换并转写音频');
+        const monoAudio = audioBufferTo16kHzMono(audioDataResult.audioBuffer);
+
+        const transcribeResult = await whisperTranscriber.transcribe(monoAudio, (progress, stage, msg) => {
+          try {
+            chrome.runtime.sendMessage({
+              action: 'transcribeProgress',
+              progress: progress,
+              stage: stage,
+              message: msg,
+            });
+          } catch (e) {
+            console.warn('发送进度消息失败:', e);
+          }
+        });
+
+        // 6. 转换为 SRT 格式
+        console.log('步骤6: 转换为 SRT 格式');
+        const srtContent = convertToSRT(transcribeResult.chunks);
+
+        // 7. 返回结果
+        console.log('音频转字幕完成');
+        sendResponse({
+          success: true,
+          stage: 'complete',
+          srtContent: srtContent,
+          text: transcribeResult.text,
+          chunks: transcribeResult.chunks,
+          duration: audioResult.duration,
+        });
+
+      } catch (error) {
+        console.error('音频转字幕出错:', error);
+        sendResponse({
+          success: false,
+          message: error.message || '音频转字幕失败',
+        });
+      }
+    })();
+
+    return true;
+  }
+
+  // 处理进度查询请求
+  if (message.action === 'getTranscribeProgress') {
+    // 目前进度是通过 sendResponse 实时推送的，这里返回成功表示服务正常
+    sendResponse({ success: true, message: '服务正常' });
+    return true;
+  }
 });
 
 // 使用aid+cid方式获取字幕
@@ -2228,4 +2364,742 @@ async function testWbiApi(aid, cid) {
   } finally {
     console.log('==== 测试WBI接口结束 ====');
   }
+}
+
+// ============================================
+// 音频转字幕功能 - Whisper 相关代码
+// ============================================
+
+/**
+ * 获取 B站视频音频流 URL
+ * @param {string} bvid - B站视频 BV 号
+ * @param {number} cid - 视频 CID
+ * @returns {Promise<{success: boolean, audioUrl?: string, duration?: number, message?: string}>}
+ */
+async function fetchAudioStreamUrl(bvid, cid) {
+  try {
+    console.log('开始获取音频流 URL:', { bvid, cid });
+    console.log('当前 Cookie 状态:', bilibiliCookie ? '已设置' : '未设置');
+
+    // 1. 获取 WBI 签名密钥
+    const wbiKeys = await getWbiKeys();
+    if (!wbiKeys) {
+      throw new Error('获取 WBI 签名密钥失败');
+    }
+
+    // 2. 构建参数
+    // fnval=16 表示请求 DASH 格式 (音视频分离)
+    const params = {
+      bvid: bvid,
+      cid: cid,
+      fnval: 16,  // DASH 格式
+      fnver: 0,
+      fourk: 1,
+    };
+
+    // 3. 计算 WBI 签名
+    const query = encWbi(params, wbiKeys.img_key, wbiKeys.sub_key);
+    const url = `https://api.bilibili.com/x/player/wbi/playurl?${query}`;
+
+    console.log('请求音频流 URL:', url);
+
+    // 4. 发起请求
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+        'Referer': 'https://www.bilibili.com/',
+        'Cookie': bilibiliCookie,
+      },
+      credentials: 'omit',  // 改为 omit 避免 CORS 问题
+    });
+
+    console.log('音频流 API 响应状态:', response.status);
+
+    if (!response.ok) {
+      throw new Error(`HTTP 请求失败: ${response.status}`);
+    }
+
+    const data = await response.json();
+    console.log('音频流 API 响应:', JSON.stringify(data, null, 2));
+
+    if (data.code !== 0 || !data.data) {
+      throw new Error(data.message || '获取音频流 URL 失败');
+    }
+
+    // 5. 解析 DASH 数据获取音频信息
+    const dashData = data.data.dash;
+    console.log('DASH 数据:', dashData);
+
+    if (!dashData || !dashData.audio || dashData.audio.length === 0) {
+      throw new Error('该视频没有可用的音频流');
+    }
+
+    // 6. 选取音频流 (优先选取高质量音频)
+    const audioStream = dashData.audio[0];
+    console.log('音频流信息:', audioStream);
+
+    if (!audioStream || !audioStream.baseUrl) {
+      throw new Error('无法获取音频流地址');
+    }
+
+    // 收集所有可用的音频 URL（包括不同质量和 backupUrl）
+    const audioUrls = [];
+    for (const audio of dashData.audio) {
+      if (audio.baseUrl) audioUrls.push(audio.baseUrl);
+      if (audio.backupUrl && !audioUrls.includes(audio.backupUrl)) audioUrls.push(audio.backupUrl);
+    }
+
+    console.log('成功获取音频流 URL:', {
+      audioUrl: audioStream.baseUrl.substring(0, 80) + '...',
+      backupCount: audioUrls.length - 1,
+      duration: dashData.duration,
+      mimeType: audioStream.mimeType,
+    });
+
+    return {
+      success: true,
+      audioUrl: audioStream.baseUrl,
+      audioUrls: audioUrls,  // 所有可用 URL 列表
+      duration: dashData.duration || audioStream.duration,
+      mimeType: audioStream.mimeType || 'audio/mp4',
+    };
+
+  } catch (error) {
+    console.error('获取音频流 URL 出错:', error);
+    return {
+      success: false,
+      message: error.message || '获取音频流 URL 失败',
+    };
+  }
+}
+
+/**
+ * 通过页面 MAIN world 下载音频
+ * 核心原理：CDN 检查请求 origin，Service Worker (chrome-extension://) 会被 403 拒绝
+ * 只有从 bilibili.com 页面上下文发起的请求才会被 CDN 接受
+ * 流程：MAIN world fetch → postMessage → ISOLATED world → chrome.runtime.sendMessage → background
+ * @param {string} audioUrl - 音频 URL（备用）
+ * @param {number} tabId - B站视频页面的 tabId
+ * @param {Function} onProgress - 进度回调
+ * @returns {Promise<ArrayBuffer>}
+ */
+async function downloadViaContentScript(audioUrl, tabId, backupUrls, onProgress) {
+  return new Promise((resolve, reject) => {
+    if (!tabId) {
+      reject(new Error('没有可用的 B站 标签页 ID'));
+      return;
+    }
+
+    console.log('通过 MAIN world 下载音频, tabId:', tabId);
+    if (onProgress) onProgress(5, 'downloading', '准备下载音频...');
+
+    const timeoutId = setTimeout(() => {
+      cleanup();
+      reject(new Error('下载音频超时（3分钟）'));
+    }, 180000);
+
+    const chunks = [];
+    let totalSize = 0;
+
+    function cleanup() {
+      chrome.runtime.onMessage.removeListener(messageHandler);
+    }
+
+    const messageHandler = (message, sender, sendResponse) => {
+      if (message.action === 'audioChunk') {
+        chunks.push(new Uint8Array(message.data));
+        totalSize += message.data.length;
+        const progress = Math.min(45, 10 + (totalSize / (10 * 1024 * 1024)) * 35);
+        if (onProgress) onProgress(progress, 'downloading', `下载中... ${(totalSize / 1024 / 1024).toFixed(1)}MB`);
+      } else if (message.action === 'audioDataComplete') {
+        clearTimeout(timeoutId);
+        cleanup();
+        const result = new Uint8Array(totalSize);
+        let offset = 0;
+        for (const chunk of chunks) {
+          result.set(chunk, offset);
+          offset += chunk.length;
+        }
+        console.log('MAIN world 音频下载完成, 总大小:', (totalSize / 1024 / 1024).toFixed(2), 'MB');
+        resolve(result.buffer);
+      } else if (message.action === 'audioDataError') {
+        clearTimeout(timeoutId);
+        cleanup();
+        reject(new Error(message.error || '下载音频失败'));
+      }
+    };
+
+    chrome.runtime.onMessage.addListener(messageHandler);
+
+    // Step 1: 注入 ISOLATED world 监听器（中转 postMessage → sendMessage）
+    chrome.scripting.executeScript({
+      target: { tabId },
+      func: () => {
+        window.addEventListener('message', (event) => {
+          if (event.source !== window) return;
+          if (!event.data || event.data.__subbatch !== true) return;
+
+          if (event.data.type === 'CHUNK') {
+            // postMessage 用 structured clone 传 Uint8Array 很高效
+            // sendMessage 用 JSON，需要转成普通数组
+            chrome.runtime.sendMessage({
+              action: 'audioChunk',
+              data: Array.from(event.data.data),
+            });
+          } else if (event.data.type === 'COMPLETE') {
+            chrome.runtime.sendMessage({ action: 'audioDataComplete' });
+          } else if (event.data.type === 'ERROR') {
+            chrome.runtime.sendMessage({
+              action: 'audioDataError',
+              error: event.data.error,
+            });
+          }
+        });
+      },
+    }).then(() => {
+      // Step 2: 注入 MAIN world 脚本（从页面上下文下载音频）
+      return chrome.scripting.executeScript({
+        target: { tabId },
+        world: 'MAIN',
+        func: (fallbackUrl, apiBackupUrls) => {
+          // 从 __playinfo__ 获取音频 URL（和 B站播放器用同一个 URL）
+          let audioUrl = null;
+          let audioUrls = []; // 备选 URL 列表
+          try {
+            const playInfo = window.__playinfo__;
+            if (playInfo && playInfo.data && playInfo.data.dash) {
+              const audio = playInfo.data.dash.audio;
+              if (audio && audio.length > 0) {
+                audioUrl = audio[0].baseUrl;
+                // 收集所有备选音频 URL（包括 backupUrl）
+                for (const a of audio) {
+                  audioUrls.push(a.baseUrl);
+                  if (a.backupUrl) audioUrls.push(a.backupUrl);
+                }
+                console.log('[SubBatch] 从 __playinfo__ 获取音频 URL，共', audioUrls.length, '个备选');
+              }
+            }
+          } catch (e) {}
+
+          // 如果 __playinfo__ 没有音频 URL，尝试从 __NEXT_DATA__ 或 playerMetadata 获取
+          if (!audioUrl) {
+            try {
+              // 尝试从页面全局变量获取
+              if (window.playerMetadata && window.playerMetadata.video) {
+                const dash = window.playerMetadata.video.dash;
+                if (dash && dash.audio && dash.audio.length > 0) {
+                  audioUrl = dash.audio[0].baseUrl;
+                  console.log('[SubBatch] 从 playerMetadata 获取音频 URL');
+                }
+              }
+            } catch (e) {}
+          }
+
+          if (!audioUrl && fallbackUrl) {
+            audioUrl = fallbackUrl;
+            console.log('[SubBatch] 使用 API 返回的 URL');
+          }
+
+          if (!audioUrl) {
+            window.postMessage({ __subbatch: true, type: 'ERROR', error: '无法获取音频 URL，请确保视频正在播放' }, '*');
+            return;
+          }
+
+          console.log('[SubBatch] 开始下载音频（页面上下文）');
+
+          // 尝试下载的 URL 列表：优先 __playinfo__ URL，再 API 返回的 URL
+          const urlsToTry = [audioUrl];
+          for (const url of audioUrls) {
+            if (url !== audioUrl) urlsToTry.push(url);
+          }
+          // 加入 API 返回的备用 URL
+          if (apiBackupUrls && apiBackupUrls.length > 0) {
+            for (const url of apiBackupUrls) {
+              if (!urlsToTry.includes(url)) urlsToTry.push(url);
+            }
+          }
+          if (fallbackUrl && !urlsToTry.includes(fallbackUrl)) {
+            urlsToTry.push(fallbackUrl);
+          }
+
+          console.log('[SubBatch] 共', urlsToTry.length, '个 URL 可尝试');
+
+          async function tryDownload(url) {
+            // B站 CDN 需要正确的 Referer
+            const response = await fetch(url, {
+              referrer: 'https://www.bilibili.com/',
+              referrerPolicy: 'no-referrer-when-downgrade',
+            });
+            if (!response.ok) throw new Error('HTTP ' + response.status);
+            return await response.arrayBuffer();
+          }
+
+          // 依次尝试各个 URL
+          (async () => {
+            for (let i = 0; i < urlsToTry.length; i++) {
+              try {
+                console.log('[SubBatch] 尝试下载第', (i + 1), '个 URL');
+                const buffer = await tryDownload(urlsToTry[i]);
+                const uint8 = new Uint8Array(buffer);
+                // 分 2MB 块发送，避免 postMessage/sendMessage 超限
+                const CHUNK = 2 * 1024 * 1024;
+                for (let j = 0; j < uint8.length; j += CHUNK) {
+                  window.postMessage({
+                    __subbatch: true,
+                    type: 'CHUNK',
+                    data: uint8.slice(j, j + CHUNK),
+                  }, '*');
+                }
+                window.postMessage({ __subbatch: true, type: 'COMPLETE' }, '*');
+                return; // 成功，退出
+              } catch (err) {
+                console.warn('[SubBatch] 第', (i + 1), '个 URL 下载失败:', err.message);
+                if (i === urlsToTry.length - 1) {
+                  // 所有 URL 都失败
+                  window.postMessage({
+                    __subbatch: true,
+                    type: 'ERROR',
+                    error: '下载失败: ' + err.message,
+                  }, '*');
+                }
+              }
+            }
+          })();
+        },
+        args: [audioUrl, backupUrls || []],
+      });
+    }).catch(error => {
+      clearTimeout(timeoutId);
+      cleanup();
+      console.error('executeScript 错误:', error);
+      reject(error);
+    });
+  });
+}
+
+/**
+ * 直接下载音频（回退方案）
+ * @param {string} audioUrl - 音频 URL
+ * @returns {Promise<ArrayBuffer>}
+ */
+async function downloadAudioDirectly(audioUrl, backupUrls) {
+  console.log('直接下载音频:', audioUrl.substring(0, 80));
+
+  // 获取所有 Cookie（包括 httpOnly 的 buvid3/buvid4 等）
+  const cookie = await getAllBilibiliCookies();
+  console.log('使用完整 Cookie (前50字符):', cookie.substring(0, 50));
+
+  // 构建 URL 尝试列表
+  const urlsToTry = [audioUrl];
+  if (backupUrls && backupUrls.length > 0) {
+    for (const url of backupUrls) {
+      if (!urlsToTry.includes(url)) urlsToTry.push(url);
+    }
+  }
+
+  for (let i = 0; i < urlsToTry.length; i++) {
+    const url = urlsToTry[i];
+    console.log('直接下载尝试第', (i + 1), '个 URL');
+    try {
+      const response = await fetch(url, {
+        method: 'GET',
+        referrer: 'https://www.bilibili.com/',
+        referrerPolicy: 'unsafe-url',
+        headers: {
+          'Cookie': cookie,
+        },
+        credentials: 'omit',
+      });
+
+      if (!response.ok) {
+        console.warn('直接下载 HTTP', response.status, '，尝试下一个 URL');
+        continue;
+      }
+
+      return await response.arrayBuffer();
+    } catch (err) {
+      console.warn('直接下载失败:', err.message, '，尝试下一个 URL');
+    }
+  }
+
+  throw new Error('所有 URL 均下载失败: HTTP 403');
+}
+
+/**
+ * 获取所有 B站相关 Cookie（包括 httpOnly）
+ * 使用 chrome.cookies.getAll API，解决 document.cookie 无法获取 httpOnly Cookie 的问题
+ * CDN 403 的主要原因就是缺少 buvid3/buvid4 等 httpOnly Cookie
+ * @returns {Promise<string>}
+ */
+async function getAllBilibiliCookies() {
+  const domains = ['.bilibili.com', 'www.bilibili.com', 'bilibili.com'];
+  let allCookies = [];
+
+  // 第一步：从浏览器 Cookie 存储获取（包括 httpOnly）
+  for (const domain of domains) {
+    try {
+      const cookies = await chrome.cookies.getAll({ domain });
+      allCookies = allCookies.concat(cookies);
+    } catch (e) {
+      console.warn(`获取 ${domain} cookies 失败:`, e);
+    }
+  }
+
+  // 第二步：合并用户存储的 bilibiliCookie（包含 SESSDATA、bili_jct 等认证 Cookie）
+  let storedCookie = '';
+  if (bilibiliCookie && bilibiliCookie.trim() !== '') {
+    storedCookie = bilibiliCookie;
+  } else {
+    try {
+      const result = await chrome.storage.local.get(['bilibiliCookie']);
+      storedCookie = result.bilibiliCookie || '';
+    } catch (e) {
+      console.warn('从 storage 获取 Cookie 失败:', e);
+    }
+  }
+
+  // 解析存储的 Cookie 字符串为 cookie 对象
+  if (storedCookie) {
+    const pairs = storedCookie.split(';');
+    for (const pair of pairs) {
+      const trimmed = pair.trim();
+      if (!trimmed) continue;
+      const eqIndex = trimmed.indexOf('=');
+      if (eqIndex === -1) continue;
+      const name = trimmed.substring(0, eqIndex).trim();
+      const value = trimmed.substring(eqIndex + 1).trim();
+      if (name) {
+        allCookies.push({ name, value });
+      }
+    }
+  }
+
+  // 去重（同名 cookie 保留 path 更精确的，存储 Cookie 优先级最低）
+  const uniqueMap = new Map();
+  for (const c of allCookies) {
+    const existing = uniqueMap.get(c.name);
+    if (!existing || (c.path && c.path.length > (existing.path || '').length)) {
+      uniqueMap.set(c.name, c);
+    }
+  }
+
+  const cookieString = Array.from(uniqueMap.values())
+    .map((c) => `${c.name}=${c.value}`)
+    .join('; ');
+
+  console.log(`获取到完整 Cookie (${allCookies.length} 个, 去重后 ${uniqueMap.size} 个), 包含 SESSDATA: ${cookieString.includes('SESSDATA')}`);
+  return cookieString;
+}
+
+/**
+ * 下载并解码音频为 AudioBuffer
+ * @param {string} audioUrl - 音频流 URL
+ * @param {number|null} tabId - B站页面的 tabId（用于通过 content script 下载）
+ * @param {Function} onProgress - 进度回调
+ * @returns {Promise<{success: boolean, audioBuffer?: AudioBuffer, audioData?: Uint8Array, needsProcessing?: boolean, message?: string}>}
+ */
+async function fetchAndDecodeAudio(audioUrl, tabId, audioUrls, onProgress) {
+  try {
+    // 验证 URL
+    if (!audioUrl || typeof audioUrl !== 'string' || audioUrl.trim() === '') {
+      console.error('音频 URL 无效:', audioUrl);
+      throw new Error('音频 URL 无效');
+    }
+
+    console.log('开始下载音频, URL 长度:', audioUrl.length);
+    console.log('音频 URL 前100字符:', audioUrl.substring(0, 100));
+    console.log('B站 tabId:', tabId);
+
+    if (onProgress) onProgress(0, 'downloading', '正在下载音频...');
+
+    // 下载音频：优先从页面 MAIN world 下载（CDN 只接受 bilibili.com origin 的请求）
+    let arrayBuffer;
+    if (tabId) {
+      try {
+        arrayBuffer = await downloadViaContentScript(audioUrl, tabId, audioUrls || [], onProgress);
+      } catch (mainWorldError) {
+        console.warn('MAIN world 下载失败，尝试 Service Worker 直接下载:', mainWorldError.message);
+        try {
+          arrayBuffer = await downloadAudioDirectly(audioUrl, audioUrls);
+        } catch (directError) {
+          throw new Error('音频下载失败（MAIN world: ' + mainWorldError.message + '，直接下载: ' + directError.message + '）');
+        }
+      }
+    } else {
+      // 没有 tabId，只能尝试直接下载
+      console.log('没有可用的 B站 标签页，尝试直接下载');
+      arrayBuffer = await downloadAudioDirectly(audioUrl, audioUrls);
+    }
+
+    if (onProgress) onProgress(50, 'decoding', '正在解码音频...');
+
+    // 尝试使用 AudioContext 解码
+    // 注意: AudioContext 在 Service Worker 中可能不可用
+    let audioBuffer = null;
+    let useRawData = false;
+
+    try {
+      // 检查 AudioContext 是否可用
+      const AudioContextClass = self.AudioContext || self.OfflineAudioContext;
+      if (!AudioContextClass) {
+        throw new Error('AudioContext 不可用');
+      }
+
+      // 使用标准 OfflineAudioContext 构造函数
+      // 注意: OfflineAudioContext 用于离线解码，不需要指定 length
+      // 我们使用一个足够大的长度来解码任意长度音频
+      const sampleRate = 16000;
+      const maxDurationSeconds = 3600; // 最大支持 1 小时
+      const maxLength = sampleRate * maxDurationSeconds;
+
+      const audioContext = new OfflineAudioContext(1, maxLength, sampleRate);
+      audioBuffer = await audioContext.decodeAudioData(arrayBuffer.slice(0));
+      console.log('音频解码成功, 时长:', audioBuffer.duration, '秒');
+    } catch (decodeError) {
+      console.warn('AudioContext 解码失败, 将使用原始数据:', decodeError.message);
+      useRawData = true;
+    }
+
+    if (onProgress) onProgress(80, 'decoding', '音频解码完成');
+
+    if (useRawData) {
+      // 返回原始数据供前端处理
+      return {
+        success: true,
+        audioData: new Uint8Array(arrayBuffer),
+        needsProcessing: true,
+        message: '音频解码需要在前端进行',
+      };
+    }
+
+    return {
+      success: true,
+      audioBuffer: audioBuffer,
+      needsProcessing: false,
+    };
+
+  } catch (error) {
+    console.error('下载和解码音频出错:', error);
+    return {
+      success: false,
+      message: error.message || '下载音频失败',
+    };
+  }
+}
+
+/**
+ * 将 AudioBuffer 转换为 16kHz 单声道 Float32Array
+ * @param {AudioBuffer} audioBuffer
+ * @returns {Float32Array}
+ */
+function audioBufferTo16kHzMono(audioBuffer) {
+  const sourceSampleRate = audioBuffer.sampleRate;
+  const targetSampleRate = 16000;
+
+  // 如果已经是 16kHz 且为单声道，直接返回
+  if (sourceSampleRate === 16000 && audioBuffer.numberOfChannels === 1) {
+    return audioBuffer.getChannelData(0);
+  }
+
+  // 计算重采样比例
+  const ratio = targetSampleRate / sourceSampleRate;
+  const targetLength = Math.round(audioBuffer.length * ratio);
+  const result = new Float32Array(targetLength);
+
+  // 如果是立体声，混合为单声道
+  let channelData;
+  if (audioBuffer.numberOfChannels === 2) {
+    const left = audioBuffer.getChannelData(0);
+    const right = audioBuffer.getChannelData(1);
+    channelData = new Float32Array(left.length);
+    for (let i = 0; i < left.length; i++) {
+      channelData[i] = (left[i] + right[i]) / 2;
+    }
+  } else {
+    channelData = audioBuffer.getChannelData(0);
+  }
+
+  // 线性插值重采样
+  for (let i = 0; i < targetLength; i++) {
+    const srcIndex = i / ratio;
+    const srcIndexFloor = Math.floor(srcIndex);
+    const srcIndexCeil = Math.min(srcIndexFloor + 1, channelData.length - 1);
+    const frac = srcIndex - srcIndexFloor;
+    result[i] = channelData[srcIndexFloor] * (1 - frac) + channelData[srcIndexCeil] * frac;
+  }
+
+  return result;
+}
+
+/**
+ * Whisper 转写器类
+ */
+class WhisperTranscriber {
+  constructor() {
+    this.pipeline = null;
+    this.initialized = false;
+  }
+
+  /**
+   * 初始化 Whisper 模型
+   * @param {Function} onProgress - 进度回调
+   */
+  async initialize(onProgress) {
+    if (this.initialized && this.pipeline) {
+      return;
+    }
+
+    console.log('开始初始化 Whisper 模型...');
+
+    try {
+      // 动态导入 Transformers.js
+      const transformersUrl = chrome.runtime.getURL('libs/transformers.min.js');
+      console.log('加载 Transformers.js from:', transformersUrl);
+
+      importScripts(transformersUrl);
+
+      const { pipeline, env } = self;
+
+      // 配置为允许本地模型
+      env.allowLocalModels = true;
+      env.useBrowserCache = true;
+
+      // 获取模型路径
+      const modelPath = chrome.runtime.getURL('models/whisper-base');
+      console.log('模型路径:', modelPath);
+
+      // 创建语音识别 pipeline
+      // 注意: 这里使用 'automatic-speech-recognition' 任务类型
+      this.pipeline = await pipeline('automatic-speech-recognition', modelPath, {
+        progress_callback: (progress_info) => {
+          console.log('Whisper 加载进度:', progress_info);
+          if (onProgress && progress_info.progress !== undefined) {
+            onProgress(progress_info.progress, 'loading_model', `加载模型 ${Math.round(progress_info.progress)}%`);
+          }
+        },
+      });
+
+      this.initialized = true;
+      console.log('Whisper 模型初始化完成');
+
+    } catch (error) {
+      console.error('初始化 Whisper 模型失败:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * 转写音频
+   * @param {Float32Array} audioData - 16kHz 单声道音频数据
+   * @param {Function} onProgress - 进度回调
+   * @returns {Promise<{text: string, chunks: Array}>}
+   */
+  async transcribe(audioData, onProgress) {
+    if (!this.pipeline) {
+      throw new Error('Whisper 模型未初始化');
+    }
+
+    console.log('开始转写音频, 样本数:', audioData.length);
+
+    if (onProgress) onProgress(0, 'transcribing', '开始转写...');
+
+    try {
+      // 将 Float32Array 转换为 Int16Array
+      const int16Array = new Int16Array(audioData.length);
+      for (let i = 0; i < audioData.length; i++) {
+        // 归一化到 Int16 范围
+        int16Array[i] = Math.max(-32768, Math.min(32767, Math.round(audioData[i] * 32767)));
+      }
+
+      // 调用 Whisper 进行转写
+      const result = await this.pipeline(int16Array, {
+        top_k: 0,
+        do_sample: false,
+        language: 'zh',  // 优先中文
+        task: 'transcribe',
+        return_timestamps: true,
+      });
+
+      console.log('转写完成, 结果:', result);
+
+      if (onProgress) onProgress(100, 'complete', '转写完成');
+
+      return {
+        text: result.text || '',
+        chunks: result.chunks || [],
+      };
+
+    } catch (error) {
+      console.error('Whisper 转写失败:', error);
+      throw error;
+    }
+  }
+}
+
+// 全局 Whisper 转写器实例
+let whisperTranscriber = null;
+
+/**
+ * SRT 时间格式转换
+ * @param {number} seconds - 秒数
+ * @returns {string} HH:MM:SS,mmm 格式
+ */
+function formatSRTTime(seconds) {
+  const hours = Math.floor(seconds / 3600);
+  const minutes = Math.floor((seconds % 3600) / 60);
+  const secs = Math.floor(seconds % 60);
+  const ms = Math.floor((seconds % 1) * 1000);
+
+  const pad = (num, length = 2) => num.toString().padStart(length, '0');
+  return `${pad(hours)}:${pad(minutes)}:${pad(secs)},${pad(ms, 3)}`;
+}
+
+/**
+ * 将转写结果转换为 SRT 格式
+ * @param {Array<{text: string, timestamp: [number, number]}>} segments
+ * @returns {string} SRT 格式字符串
+ */
+function convertToSRT(segments) {
+  if (!segments || segments.length === 0) {
+    return '';
+  }
+
+  let srtContent = '';
+  let index = 1;
+
+  for (const segment of segments) {
+    // 跳过空文本
+    if (!segment.text || !segment.text.trim()) {
+      continue;
+    }
+
+    // 获取时间戳
+    let startSec, endSec;
+    if (segment.timestamp && Array.isArray(segment.timestamp)) {
+      [startSec, endSec] = segment.timestamp;
+    } else if (segment.offsets && Array.isArray(segment.offsets)) {
+      startSec = segment.offsets[0] / 1000; // 转换为秒
+      endSec = segment.offsets[1] / 1000;
+    } else {
+      // 如果没有时间戳，使用默认值
+      startSec = 0;
+      endSec = 0;
+    }
+
+    // 格式化时间: HH:MM:SS,mmm
+    const startTime = formatSRTTime(startSec);
+    const endTime = formatSRTTime(endSec);
+
+    // 清理文本（移除多余空格）
+    const text = segment.text.trim();
+
+    srtContent += `${index}\n`;
+    srtContent += `${startTime} --> ${endTime}\n`;
+    srtContent += `${text}\n\n`;
+
+    index++;
+  }
+
+  return srtContent.trim();
 }
