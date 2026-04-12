@@ -3172,10 +3172,27 @@ let frontendWhisperProcessor = null;
 let frontendWhisperTokenizer = null;
 let frontendTransformersModule = null;
 
+// 当前使用的模型名称（用于日志）
+let currentModelName = '';
+
+/**
+ * 检测 WebGPU 是否可用
+ * @returns {Promise<boolean>}
+ */
+async function isWebGPUAvailable() {
+  try {
+    if (!navigator.gpu) return false;
+    const adapter = await navigator.gpu.requestAdapter();
+    return !!adapter;
+  } catch (e) {
+    return false;
+  }
+}
+
 /**
  * 在前端初始化 Whisper 模型
- * 绕过 pipeline 函数（它内部会 fallback 到 CTC 模型导致 "Unsupported model type" 错误）
- * 直接使用 AutoModelForSpeechSeq2Seq + AutoProcessor
+ * 优先使用 WebGPU + whisper-large-v3-turbo（精度高、速度快）
+ * 如果 WebGPU 不可用则降级到 WASM + whisper-small（兼容性好）
  * @param {Function} onProgress - 进度回调
  */
 async function initFrontendWhisper(onProgress) {
@@ -3207,6 +3224,15 @@ async function initFrontendWhisper(onProgress) {
       console.warn('无法设置 ONNX 单线程模式:', e);
     }
 
+    // 配置 ONNX Runtime 从本地加载 WASM/JSEP 文件（避免从 CDN 下载被 CSP 拦截）
+    try {
+      const libsPath = chrome.runtime.getURL('libs/');
+      env.backends.onnx.wasm.wasmPaths = libsPath;
+      console.log('ONNX Runtime 本地路径:', libsPath);
+    } catch (e) {
+      console.warn('无法设置 ONNX 本地路径:', e);
+    }
+
     console.log('模型根路径:', env.localModelPath);
 
     const progressCallback = (progress_info) => {
@@ -3216,21 +3242,71 @@ async function initFrontendWhisper(onProgress) {
       }
     };
 
-    // 直接用 AutoModelForSpeechSeq2Seq 加载（不走 pipeline 的 fallback 逻辑）
-    console.log('开始加载 Whisper 模型...');
-    frontendWhisperModel = await AutoModelForSpeechSeq2Seq.from_pretrained('whisper-small', {
-      progress_callback: progressCallback,
-    });
-    console.log('Whisper 模型加载完成');
+    // 尝试 WebGPU 加载，失败则降级到 WASM
+    let loaded = false;
 
-    if (onProgress) onProgress(35, '加载处理器和分词器...');
+    if (await isWebGPUAvailable()) {
+      try {
+        const gpuModelPath = chrome.runtime.getURL('models/whisper-large-v3-turbo');
+        console.log('尝试 WebGPU + whisper-large-v3-turbo...');
+        if (onProgress) onProgress(5, 'WebGPU 模式，加载大型模型...');
 
-    frontendWhisperProcessor = await AutoProcessor.from_pretrained('whisper-small');
-    console.log('Whisper 处理器加载完成');
+        frontendWhisperModel = await AutoModelForSpeechSeq2Seq.from_pretrained(gpuModelPath, {
+          device: 'webgpu',
+          dtype: 'q4f16',
+          progress_callback: progressCallback,
+        });
+        frontendWhisperProcessor = await AutoProcessor.from_pretrained(gpuModelPath);
+        frontendWhisperTokenizer = await AutoTokenizer.from_pretrained(gpuModelPath);
+        currentModelName = 'whisper-large-v3-turbo';
+        loaded = true;
+        console.log('WebGPU 模型加载成功');
+      } catch (gpuError) {
+        console.warn('WebGPU 加载失败，降级到 WASM:', gpuError.message);
+        // 清理可能的半加载状态
+        frontendWhisperModel = null;
+        frontendWhisperProcessor = null;
+        frontendWhisperTokenizer = null;
+      }
+    }
 
-    // 加载 Tokenizer 用于解码（batch_decode 是 tokenizer 的方法，不是 processor 的）
-    frontendWhisperTokenizer = await AutoTokenizer.from_pretrained('whisper-small');
-    console.log('Whisper 分词器加载完成');
+    if (!loaded) {
+      const cpuModelPath = chrome.runtime.getURL('models/whisper-small');
+      console.log('使用 WASM + whisper-small...');
+      if (onProgress) onProgress(5, 'WASM 模式，加载小型模型...');
+
+      frontendWhisperModel = await AutoModelForSpeechSeq2Seq.from_pretrained(cpuModelPath, {
+        progress_callback: progressCallback,
+      });
+      frontendWhisperProcessor = await AutoProcessor.from_pretrained(cpuModelPath);
+      frontendWhisperTokenizer = await AutoTokenizer.from_pretrained(cpuModelPath);
+      currentModelName = 'whisper-small';
+      console.log('WASM 模型加载成功');
+    }
+
+    // 强制覆盖模型默认的 forced_decoder_ids 为中文转写
+    // 模型默认可能是英文 (50259)，必须覆盖为中文 (50260)
+    // token IDs: 50260=<|zh|>, 50359=<|transcribe|>
+    frontendWhisperModel.generation_config.forced_decoder_ids = [
+      [1, 50260],  // 中文
+      [2, 50359],  // 转写任务
+    ];
+
+    // Monkey-patch _retrieve_init_tokens 确保中文语言设置不被覆盖
+    // Transformers.js v3 的 generate() 内部会调用此方法来决定语言 token
+    // 如果不 patch，v3 可能忽略 forced_decoder_ids 直接用英文
+    if (typeof frontendWhisperModel._retrieve_init_tokens === 'function') {
+      const originalRetrieve = frontendWhisperModel._retrieve_init_tokens;
+      frontendWhisperModel._retrieve_init_tokens = function (generationConfig, ...args) {
+        // 强制注入中文语言参数
+        generationConfig.language = 'chinese';
+        generationConfig.task = 'transcribe';
+        return originalRetrieve.call(this, generationConfig, ...args);
+      };
+      console.log('已 patch _retrieve_init_tokens 强制使用中文');
+    }
+
+    console.log('Whisper 模型加载完成:', currentModelName, '(语言已设为中文)');
   } catch (error) {
     console.error('在前端初始化 Whisper 失败:', error);
     throw error;
@@ -3256,13 +3332,6 @@ async function transcribeAudioInFrontend(audioBuffer, onProgress) {
     const totalDuration = monoAudio.length / 16000;
     console.log('转换后音频样本数:', monoAudio.length, '时长:', totalDuration.toFixed(1), '秒');
 
-    // 手动构造 forced_decoder_ids（中文转写）
-    // token IDs: 50258=<|startoftranscript|>, 50260=<|zh|>, 50359=<|transcribe|>
-    const forcedDecoderIds = [
-      [1, 50260],  // position 1: Chinese language token
-      [2, 50359],  // position 2: transcribe task token
-    ];
-
     const CHUNK_SECONDS = 30;    // 每块 30 秒（Whisper 最大输入）
     const STRIDE_SECONDS = 10;   // 块间重叠 10 秒（更大重叠减少吞句）
     const SAMPLE_RATE = 16000;
@@ -3279,7 +3348,7 @@ async function transcribeAudioInFrontend(audioBuffer, onProgress) {
       const { input_features } = await frontendWhisperProcessor(monoAudio);
       if (onProgress) onProgress(55, '开始转写音频...');
 
-      return await transcribeSingleChunk(input_features, forcedDecoderIds, 0, onProgress);
+      return await transcribeSingleChunk(input_features, 0, onProgress);
     }
 
     // 长音频：分块处理
@@ -3301,18 +3370,26 @@ async function transcribeAudioInFrontend(audioBuffer, onProgress) {
 
       console.log(`处理第 ${i + 1}/${numChunks} 块, 偏移: ${timeOffset.toFixed(1)}秒, 样本: ${start}-${end}`);
 
-      // 提取特征
-      const { input_features } = await frontendWhisperProcessor(audioChunk);
+      try {
+        // 提取特征
+        const { input_features } = await frontendWhisperProcessor(audioChunk);
 
-      // 转写单个块
-      const chunkResult = await transcribeSingleChunk(input_features, forcedDecoderIds, timeOffset, null);
+        // 转写单个块
+        const chunkResult = await transcribeSingleChunk(input_features, timeOffset, null);
 
-      if (chunkResult.chunks.length > 0) {
-        allChunks.push(...chunkResult.chunks);
+        if (chunkResult.chunks.length > 0) {
+          allChunks.push(...chunkResult.chunks);
+        }
+        if (chunkResult.text) {
+          allTexts.push(cleanTranscriptionText(chunkResult.text));
+        }
+      } catch (chunkError) {
+        // OOM 等错误时跳过当前块，继续处理后续块
+        console.warn(`第 ${i + 1} 块处理失败（可能内存不足），跳过:`, chunkError.message);
       }
-      if (chunkResult.text) {
-        allTexts.push(cleanTranscriptionText(chunkResult.text));
-      }
+
+      // 每块处理后释放内存，等待 GC 回收 WASM tensor
+      await new Promise(resolve => setTimeout(resolve, 500));
     }
 
     if (onProgress) onProgress(95, '合并去重中...');
@@ -3339,22 +3416,29 @@ async function transcribeAudioInFrontend(audioBuffer, onProgress) {
 /**
  * 转写单个音频块（30 秒以内）
  * @param {Tensor} input_features - 提取的特征
- * @param {Array} forcedDecoderIds - 语言/任务 token
  * @param {number} timeOffset - 该块在完整音频中的时间偏移（秒）
  * @param {Function} onProgress - 进度回调
  * @returns {Promise<{text: string, chunks: Array, srtContent: string}>}
  */
-async function transcribeSingleChunk(input_features, forcedDecoderIds, timeOffset, onProgress) {
+async function transcribeSingleChunk(input_features, timeOffset, onProgress) {
   // 带时间戳推理
   let chunks = [];
   let text = '';
 
   try {
-    const outputWithTimestamps = await frontendWhisperModel.generate(input_features, {
-      max_new_tokens: 1024,
-      forced_decoder_ids: forcedDecoderIds,
-      return_timestamps: true,
-    });
+    const outputWithTimestamps = await frontendWhisperModel.generate(
+      { input_features },
+      {
+        max_new_tokens: 448,
+        forced_decoder_ids: [
+          [1, 50260],  // 中文
+          [2, 50359],  // 转写任务
+        ],
+        language: 'chinese',
+        task: 'transcribe',
+        return_timestamps: true,
+      },
+    );
     const decodedChunks = frontendWhisperTokenizer.batch_decode(outputWithTimestamps, {
       skip_special_tokens: false,
       decode_with_timestamps: true,
@@ -3379,10 +3463,18 @@ async function transcribeSingleChunk(input_features, forcedDecoderIds, timeOffse
   // 如果没有拿到带时间戳的结果，用纯文本模式
   if (chunks.length === 0) {
     try {
-      const output = await frontendWhisperModel.generate(input_features, {
-        max_new_tokens: 1024,
-        forced_decoder_ids: forcedDecoderIds,
-      });
+      const output = await frontendWhisperModel.generate(
+        { input_features },
+        {
+          max_new_tokens: 448,
+          forced_decoder_ids: [
+            [1, 50260],  // 中文
+            [2, 50359],  // 转写任务
+          ],
+          language: 'chinese',
+          task: 'transcribe',
+        },
+      );
       const decoded = frontendWhisperTokenizer.batch_decode(output, { skip_special_tokens: true });
       text = cleanTranscriptionText(decoded[0] || '');
     } catch (e) {
@@ -3392,7 +3484,8 @@ async function transcribeSingleChunk(input_features, forcedDecoderIds, timeOffse
     text = chunks.map(c => c.text).join('\n');
   }
 
-  return { text, chunks, srtContent: '' };
+  const srtContent = chunks.length > 0 ? convertToSRT(chunks) : text;
+  return { text, chunks, srtContent };
 }
 
 /**

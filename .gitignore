@@ -20,3 +20,5 @@ bin-release/
 # Whisper ONNX 模型文件（太大无法提交到 Git，需手动下载）
 models/whisper-small/onnx/
 models/whisper-base/onnx/
+models/whisper-medium/onnx/
+models/whisper-large-v3-turbo/onnx/
