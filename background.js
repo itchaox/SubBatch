@@ -2563,29 +2563,36 @@ async function downloadViaContentScript(audioUrl, tabId, backupUrls, onProgress)
         target: { tabId },
         world: 'MAIN',
         func: (fallbackUrl, apiBackupUrls) => {
-          // 从 __playinfo__ 获取音频 URL（和 B站播放器用同一个 URL）
-          let audioUrl = null;
-          let audioUrls = []; // 备选 URL 列表
-          try {
-            const playInfo = window.__playinfo__;
-            if (playInfo && playInfo.data && playInfo.data.dash) {
-              const audio = playInfo.data.dash.audio;
-              if (audio && audio.length > 0) {
-                audioUrl = audio[0].baseUrl;
-                // 收集所有备选音频 URL（包括 backupUrl）
-                for (const a of audio) {
-                  audioUrls.push(a.baseUrl);
-                  if (a.backupUrl) audioUrls.push(a.backupUrl);
-                }
-                console.log('[SubBatch] 从 __playinfo__ 获取音频 URL，共', audioUrls.length, '个备选');
-              }
-            }
-          } catch (e) {}
+          // 优先使用 API 返回的 URL（已对应正确的 bvid/cid）
+          // __playinfo__ 是浏览器当前播放视频的数据，可能是别的视频，不能优先用
+          let audioUrl = fallbackUrl || null;
+          let audioUrls = apiBackupUrls ? [...apiBackupUrls] : [];
 
-          // 如果 __playinfo__ 没有音频 URL，尝试从 __NEXT_DATA__ 或 playerMetadata 获取
+          if (audioUrl) {
+            console.log('[SubBatch] 使用 API 返回的音频 URL（对应目标视频）');
+          }
+
+          // 仅当 API URL 不可用时，才从 __playinfo__ 获取作为备选
           if (!audioUrl) {
             try {
-              // 尝试从页面全局变量获取
+              const playInfo = window.__playinfo__;
+              if (playInfo && playInfo.data && playInfo.data.dash) {
+                const audio = playInfo.data.dash.audio;
+                if (audio && audio.length > 0) {
+                  audioUrl = audio[0].baseUrl;
+                  for (const a of audio) {
+                    audioUrls.push(a.baseUrl);
+                    if (a.backupUrl) audioUrls.push(a.backupUrl);
+                  }
+                  console.log('[SubBatch] API URL 不可用，从 __playinfo__ 获取音频 URL');
+                }
+              }
+            } catch (e) {}
+          }
+
+          // 如果仍然没有，尝试 playerMetadata
+          if (!audioUrl) {
+            try {
               if (window.playerMetadata && window.playerMetadata.video) {
                 const dash = window.playerMetadata.video.dash;
                 if (dash && dash.audio && dash.audio.length > 0) {
@@ -2596,11 +2603,6 @@ async function downloadViaContentScript(audioUrl, tabId, backupUrls, onProgress)
             } catch (e) {}
           }
 
-          if (!audioUrl && fallbackUrl) {
-            audioUrl = fallbackUrl;
-            console.log('[SubBatch] 使用 API 返回的 URL');
-          }
-
           if (!audioUrl) {
             window.postMessage({ __subbatch: true, type: 'ERROR', error: '无法获取音频 URL，请确保视频正在播放' }, '*');
             return;
@@ -2608,7 +2610,7 @@ async function downloadViaContentScript(audioUrl, tabId, backupUrls, onProgress)
 
           console.log('[SubBatch] 开始下载音频（页面上下文）');
 
-          // 尝试下载的 URL 列表：优先 __playinfo__ URL，再 API 返回的 URL
+          // 尝试下载的 URL 列表：API 返回的 URL + 备选 URL
           const urlsToTry = [audioUrl];
           for (const url of audioUrls) {
             if (url !== audioUrl) urlsToTry.push(url);
@@ -2966,7 +2968,7 @@ class WhisperTranscriber {
       env.useBrowserCache = true;
 
       // 获取模型路径
-      const modelPath = chrome.runtime.getURL('models/whisper-base');
+      const modelPath = chrome.runtime.getURL('models/whisper-small');
       console.log('模型路径:', modelPath);
 
       // 创建语音识别 pipeline

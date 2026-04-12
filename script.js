@@ -2650,11 +2650,10 @@ document.addEventListener('DOMContentLoaded', function () {
     // 将字幕文本按行分割
     const lines = subtitleText.split('\n');
     let txtContent = '';
-    let contentLine = '';
 
     // 遍历每一行，提取内容文本
     for (let i = 0; i < lines.length; i++) {
-      const line = lines[i].trim();
+      let line = lines[i].trim();
 
       // 跳过空行
       if (line === '') continue;
@@ -2665,14 +2664,47 @@ document.addEventListener('DOMContentLoaded', function () {
       // 跳过时间轴行（含 --> 格式的行）
       if (line.includes(' --> ')) continue;
 
-      // 其余行都是内容，添加到结果中
-      contentLine = line;
-      if (contentLine) {
-        txtContent += contentLine + '\n';
+      // 清理残余的 <|X.XX|> 时间戳标记和繁体字
+      line = cleanTranscriptionText(line);
+
+      if (line) {
+        // 按标点符号分句，确保每句话单独一行
+        const segments = splitTextToSentences(line);
+        txtContent += segments + '\n';
       }
     }
 
-    return txtContent;
+    return removeDuplicateTextLines(txtContent);
+  }
+
+  // 按中文标点符号将文本分句，每句单独一行
+  // 对于没有标点的长文本，强制按最大字数换行
+  function splitTextToSentences(text) {
+    if (!text) return '';
+    const MAX_CHARS = 15; // 每行最多字数
+    const result = [];
+    // 先按句末标点（。！？!?；;）分句
+    const sentences = text.split(/(?<=[。！？!?；;])/);
+    for (const sentence of sentences) {
+      const trimmed = sentence.trim();
+      if (!trimmed) continue;
+      // 再按逗号（，,、）进一步拆分
+      const parts = trimmed.split(/(?<=[，,、])/);
+      for (const part of parts) {
+        const p = part.trim();
+        if (!p) continue;
+        // 如果拆分后仍然超长（Whisper 经常输出无标点的长文本），强制截断换行
+        if (p.length > MAX_CHARS) {
+          for (let i = 0; i < p.length; i += MAX_CHARS) {
+            const chunk = p.substring(i, Math.min(i + MAX_CHARS, p.length)).trim();
+            if (chunk) result.push(chunk);
+          }
+        } else {
+          result.push(p);
+        }
+      }
+    }
+    return result.join('\n');
   }
 
   // 清空表格
@@ -3186,18 +3218,18 @@ async function initFrontendWhisper(onProgress) {
 
     // 直接用 AutoModelForSpeechSeq2Seq 加载（不走 pipeline 的 fallback 逻辑）
     console.log('开始加载 Whisper 模型...');
-    frontendWhisperModel = await AutoModelForSpeechSeq2Seq.from_pretrained('whisper-base', {
+    frontendWhisperModel = await AutoModelForSpeechSeq2Seq.from_pretrained('whisper-small', {
       progress_callback: progressCallback,
     });
     console.log('Whisper 模型加载完成');
 
     if (onProgress) onProgress(35, '加载处理器和分词器...');
 
-    frontendWhisperProcessor = await AutoProcessor.from_pretrained('whisper-base');
+    frontendWhisperProcessor = await AutoProcessor.from_pretrained('whisper-small');
     console.log('Whisper 处理器加载完成');
 
     // 加载 Tokenizer 用于解码（batch_decode 是 tokenizer 的方法，不是 processor 的）
-    frontendWhisperTokenizer = await AutoTokenizer.from_pretrained('whisper-base');
+    frontendWhisperTokenizer = await AutoTokenizer.from_pretrained('whisper-small');
     console.log('Whisper 分词器加载完成');
   } catch (error) {
     console.error('在前端初始化 Whisper 失败:', error);
@@ -3206,7 +3238,8 @@ async function initFrontendWhisper(onProgress) {
 }
 
 /**
- * 在前端转写音频
+ * 在前端转写音频（支持长音频分块处理）
+ * Whisper 模型最大处理 30 秒，超过的需要分块再合并
  * @param {AudioBuffer} audioBuffer - 解码后的音频
  * @param {Function} onProgress - 进度回调
  * @returns {Promise<{text: string, chunks: Array, srtContent: string}>}
@@ -3220,14 +3253,8 @@ async function transcribeAudioInFrontend(audioBuffer, onProgress) {
 
     // 转换音频为 16kHz 单声道
     const monoAudio = audioBufferTo16kHzMono(audioBuffer);
-    console.log('转换后音频样本数:', monoAudio.length);
-
-    if (onProgress) onProgress(50, '处理音频特征...');
-
-    // 使用 processor 提取特征
-    const { input_features } = await frontendWhisperProcessor(monoAudio);
-
-    if (onProgress) onProgress(55, '开始转写音频...');
+    const totalDuration = monoAudio.length / 16000;
+    console.log('转换后音频样本数:', monoAudio.length, '时长:', totalDuration.toFixed(1), '秒');
 
     // 手动构造 forced_decoder_ids（中文转写）
     // token IDs: 50258=<|startoftranscript|>, 50260=<|zh|>, 50359=<|transcribe|>
@@ -3236,51 +3263,136 @@ async function transcribeAudioInFrontend(audioBuffer, onProgress) {
       [2, 50359],  // position 2: transcribe task token
     ];
 
-    // 模型推理（generate 的第一个参数是 Tensor，第二个参数是生成配置）
-    const output = await frontendWhisperModel.generate(input_features, {
-      max_new_tokens: 448,
-      forced_decoder_ids: forcedDecoderIds,
-    });
+    const CHUNK_SECONDS = 30;    // 每块 30 秒（Whisper 最大输入）
+    const STRIDE_SECONDS = 10;   // 块间重叠 10 秒（更大重叠减少吞句）
+    const SAMPLE_RATE = 16000;
+    const chunkSamples = CHUNK_SECONDS * SAMPLE_RATE;
+    const strideSamples = STRIDE_SECONDS * SAMPLE_RATE;
+    const stepSamples = chunkSamples - strideSamples; // 实际步进 20 秒
 
-    if (onProgress) onProgress(85, '解码文本...');
+    const allChunks = [];
+    const allTexts = [];
 
-    // 解码输出（batch_decode 是 tokenizer 的方法）
-    const decoded = frontendWhisperTokenizer.batch_decode(output, { skip_special_tokens: true });
-    const text = decoded[0] || '';
-    console.log('转写完成, 文本:', text.substring(0, 100));
+    // 如果音频 <= 30 秒，直接处理
+    if (monoAudio.length <= chunkSamples) {
+      if (onProgress) onProgress(50, '处理音频特征...');
+      const { input_features } = await frontendWhisperProcessor(monoAudio);
+      if (onProgress) onProgress(55, '开始转写音频...');
 
-    if (onProgress) onProgress(95, '转写完成');
-
-    // 用带时间戳的方式再跑一次（用于生成 SRT）
-    let chunks = [];
-    try {
-      const outputWithTimestamps = await frontendWhisperModel.generate(input_features, {
-        max_new_tokens: 448,
-        forced_decoder_ids: forcedDecoderIds,
-        return_timestamps: true,
-      });
-      const decodedChunks = frontendWhisperTokenizer.batch_decode(outputWithTimestamps, {
-        skip_special_tokens: false,
-        decode_with_timestamps: true,
-      });
-      // 解析时间戳 chunks
-      chunks = parseTimestampChunks(decodedChunks[0] || '');
-    } catch (tsError) {
-      console.warn('获取时间戳失败，使用纯文本:', tsError.message);
+      return await transcribeSingleChunk(input_features, forcedDecoderIds, 0, onProgress);
     }
 
-    // 转换为 SRT 格式
-    const srtContent = chunks.length > 0 ? convertToSRT(chunks) : text;
+    // 长音频：分块处理
+    const numChunks = Math.ceil(monoAudio.length / stepSamples);
+    console.log('音频分块处理:', numChunks, '块, 每块', CHUNK_SECONDS, '秒, 重叠', STRIDE_SECONDS, '秒');
+
+    for (let i = 0; i < numChunks; i++) {
+      const start = i * stepSamples;
+      const end = Math.min(start + chunkSamples, monoAudio.length);
+      const audioChunk = monoAudio.slice(start, end);
+
+      // 计算该块在整个音频中的时间偏移
+      const timeOffset = start / SAMPLE_RATE;
+
+      const progressBase = 50;
+      const progressRange = 45; // 50% ~ 95%
+      const chunkProgress = progressBase + (i / numChunks) * progressRange;
+      if (onProgress) onProgress(chunkProgress, `转写中... 第 ${i + 1}/${numChunks} 块`);
+
+      console.log(`处理第 ${i + 1}/${numChunks} 块, 偏移: ${timeOffset.toFixed(1)}秒, 样本: ${start}-${end}`);
+
+      // 提取特征
+      const { input_features } = await frontendWhisperProcessor(audioChunk);
+
+      // 转写单个块
+      const chunkResult = await transcribeSingleChunk(input_features, forcedDecoderIds, timeOffset, null);
+
+      if (chunkResult.chunks.length > 0) {
+        allChunks.push(...chunkResult.chunks);
+      }
+      if (chunkResult.text) {
+        allTexts.push(cleanTranscriptionText(chunkResult.text));
+      }
+    }
+
+    if (onProgress) onProgress(95, '合并去重中...');
+
+    // 对重叠区域的片段进行去重（基于时间戳）
+    const deduplicatedChunks = deduplicateChunksByTime(allChunks);
+
+    const fullText = allTexts.join('\n');
+    const srtContent = deduplicatedChunks.length > 0 ? convertToSRT(deduplicatedChunks) : fullText;
+
+    console.log('全部转写完成, 共', allChunks.length, '个片段, 文本长度:', fullText.length);
 
     return {
-      text: text,
-      chunks: chunks,
+      text: fullText,
+      chunks: allChunks,
       srtContent: srtContent,
     };
   } catch (error) {
     console.error('前端转写失败:', error);
     throw error;
   }
+}
+
+/**
+ * 转写单个音频块（30 秒以内）
+ * @param {Tensor} input_features - 提取的特征
+ * @param {Array} forcedDecoderIds - 语言/任务 token
+ * @param {number} timeOffset - 该块在完整音频中的时间偏移（秒）
+ * @param {Function} onProgress - 进度回调
+ * @returns {Promise<{text: string, chunks: Array, srtContent: string}>}
+ */
+async function transcribeSingleChunk(input_features, forcedDecoderIds, timeOffset, onProgress) {
+  // 带时间戳推理
+  let chunks = [];
+  let text = '';
+
+  try {
+    const outputWithTimestamps = await frontendWhisperModel.generate(input_features, {
+      max_new_tokens: 1024,
+      forced_decoder_ids: forcedDecoderIds,
+      return_timestamps: true,
+    });
+    const decodedChunks = frontendWhisperTokenizer.batch_decode(outputWithTimestamps, {
+      skip_special_tokens: false,
+      decode_with_timestamps: true,
+    });
+    // 解析时间戳并加上块偏移
+    const rawChunks = parseTimestampChunks(decodedChunks[0] || '');
+    // 去除 Whisper 幻觉导致的重复片段
+    const dedupedRawChunks = removeWhisperDuplicates(rawChunks);
+    for (const chunk of dedupedRawChunks) {
+      chunks.push({
+        text: chunk.text,
+        timestamp: [
+          chunk.timestamp[0] + timeOffset,
+          chunk.timestamp[1] + timeOffset,
+        ],
+      });
+    }
+  } catch (tsError) {
+    console.warn('时间戳转写失败，尝试纯文本:', tsError.message);
+  }
+
+  // 如果没有拿到带时间戳的结果，用纯文本模式
+  if (chunks.length === 0) {
+    try {
+      const output = await frontendWhisperModel.generate(input_features, {
+        max_new_tokens: 1024,
+        forced_decoder_ids: forcedDecoderIds,
+      });
+      const decoded = frontendWhisperTokenizer.batch_decode(output, { skip_special_tokens: true });
+      text = cleanTranscriptionText(decoded[0] || '');
+    } catch (e) {
+      console.warn('纯文本转写也失败:', e.message);
+    }
+  } else {
+    text = chunks.map(c => c.text).join('\n');
+  }
+
+  return { text, chunks, srtContent: '' };
 }
 
 /**
@@ -3304,8 +3416,319 @@ function parseTimestampChunks(text) {
     const textEnd = matches[i + 1] ? matches[i + 1].index : text.length;
     const chunkText = text.substring(textStart, textEnd).trim();
     if (chunkText) {
-      chunks.push({ text: chunkText, timestamp: [start, end] });
+      chunks.push({ text: traditionalToSimplified(chunkText), timestamp: [start, end] });
     }
   }
   return chunks;
+}
+
+/**
+ * 繁体中文转简体中文
+ * Whisper 模型有时会输出繁体字，需要后处理转成简体
+ * @param {string} text - 包含繁体字的文本
+ * @returns {string} 简体中文文本
+ */
+function traditionalToSimplified(text) {
+  if (!text) return text;
+  const map = {
+    '強':'强','驚':'惊','寫':'写','驗':'验','錯':'错','誤':'误','執':'执','絕':'绝',
+    '體':'体','嚴':'严','穩':'稳','總':'总','結':'结','構':'构','創':'创','確':'确',
+    '認':'认','壓':'压','證':'证','權':'权','離':'离','實':'实','調':'调','規':'规',
+    '處':'处','將':'将','過':'过','個':'个','當':'当','發':'发','為':'为','對':'对',
+    '從':'从','會':'会','時':'时','說':'说','長':'长','開':'开','種':'种','還':'还',
+    '進':'进','間':'间','問':'问','無':'无','點':'点','經':'经','動':'动','現':'现',
+    '這':'这','樣':'样','機':'机','電':'电','讓':'让','該':'该','應':'应','關':'关',
+    '斷':'断','號':'号','業':'业','產':'产','辦':'办','場':'场','帶':'带','運':'运',
+    '連':'连','選':'选','達':'达','須':'须','據':'据','備':'备','餘':'余','環':'环',
+    '紀':'纪','錄':'录','養':'养','續':'续','語':'语','課':'课','請':'请','論':'论',
+    '講':'讲','謝':'谢','護':'护','讀':'读','變':'变','豐':'丰','費':'费','資':'资',
+    '質':'质','購':'购','車':'车','軍':'军','軟':'软','輕':'轻','輛':'辆','轉':'转',
+    '輸':'输','辨':'辨','迴':'回','週':'周','鈎':'钩','銀':'银','銅':'铜','鏡':'镜',
+    '鐘':'钟','鐵':'铁','門':'门','閉':'闭','陽':'阳','際':'际','隨':'随','險':'险',
+    '雜':'杂','雙':'双','雞':'鸡','難':'难','雲':'云','靜':'静','靈':'灵','響':'响',
+    '頁':'页','頂':'顶','項':'项','順':'顺','預':'预','頻':'频','題':'题','顧':'顾',
+    '額':'额','願':'愿','類':'类','顏':'颜','風':'风','飛':'飞','飯':'饭','飲':'饮',
+    '饋':'馈','館':'馆','馬':'马','馮':'冯','駐':'驻','驅':'驱','駕':'驾','驗':'验',
+    '骯':'脏','髒':'脏','體':'体','高':'高','髮':'发','鬥':'斗','鬧':'闹','鹽':'盐',
+    '麗':'丽','麥':'麦','黃':'黄','點':'点','齊':'齐','齒':'齿','齡':'龄','龍':'龙',
+    '龜':'龟','鑑':'鉴','鑒':'鉴','鑰':'钥','鐵':'铁','鎮':'镇','鏈':'链','鎖':'锁',
+    '鍊':'链','鍋':'锅','鍾':'钟','鍵':'键','鍛':'锻','鎢':'钨','鎳':'镍','鎖':'锁',
+    '鎮':'镇','鐳':'镭','鐵':'铁','鑄':'铸','鑒':'鉴','鑰':'钥','鑽':'钻','鑾':'銮',
+    '門':'门','閃':'闪','閉':'闭','開':'开','閏':'闰','閑':'闲','閒':'闲','間':'间',
+    '閣':'阁','閥':'阀','閨':'闺','閩':'闽','閫':'阃','閬':'阆','閭':'闾','閱':'阅',
+    '閶':'阊','閹':'阉','閻':'阎','閼':'阏','閽':'阍','閾':'阈','閿':'阌','闆':'板',
+    '闈':'闱','闊':'阔','闋':'阕','闌':'阑','闍':'阇','闐':'阗','闒':'闼','闓':'闿',
+    '闔':'阖','闕':'阙','闖':'闯','闗':'关','闘':'斗','關':'关','闚':'窥','闛':'闶',
+    '關':'关','闞':'阚','闟':'闿','闠':'闳','闡':'阐','闢':'辟','闤':'闳','闥':'闼',
+    '鹵':'卤','鹹':'咸','麗':'丽','麵':'面','麻':'麻','黃':'黄','黌':'黉','黎':'黎',
+    '點':'点','齊':'齐','齋':'斋','齎':'赍','齏':'齑','齒':'齿','齕':'龁','齗':'龂',
+    '齙':'龅','齚':'龁','齛':'龁','齜':'龇','齝':'龁','齞':'龁','齟':'龃','齠':'龆',
+    '齡':'龄','齣':'出','齦':'龈','齧':'啮','齨':'龁','齩':'咬','齪':'龊','齬':'龉',
+    '齮':'龁','齯':'龁','齲':'龋','齳':'龁','齴':'龁','齵':'龁','齶':'腭','齷':'龌',
+    '龍':'龙','龐':'庞','龑':'龑','龔':'龚','龕':'龛','龗':'龗','龘':'龘','龜':'龟',
+    '龠':'龠','龢':'和','龣':'龣','龤':'龤','龥':'龥',
+    '裡':'里','後':'后','裏':'里','於':'于','幾':'几','與':'与','沒':'没','來':'来',
+    '歲':'岁','歷':'历','書':'书','東':'东','兩':'两','區':'区','國':'国','報':'报',
+    '準':'准','術':'术','條':'条','機':'机','極':'极','標':'标','檢':'检','欄':'栏',
+    '歸':'归','歷':'历','殘':'残','殺':'杀','殼':'壳','毀':'毁','每':'每','比':'比',
+    '畢':'毕','異':'异','當':'当','痙':'痉','痛':'痛','發':'发','盡':'尽','監':'监',
+    '盤':'盘','目':'目','直':'直','相':'相','省':'省','看':'看','真':'真','著':'着',
+    '視':'视','計':'计','討':'讨','訓':'训','設':'设','許':'许','訴':'诉','診':'诊',
+    '註':'注','評':'评','証':'证','詞':'词','詢':'询','試':'试','詩':'诗','話':'话',
+    '該':'该','詳':'详','語':'语','誠':'诚','誤':'误','說':'说','誰':'谁','課':'课',
+    '調':'调','談':'谈','請':'请','論':'论','諸':'诸','諾':'诺','謀':'谋','謁':'谒',
+    '謂':'谓','謊':'谎','謝':'谢','講':'讲','證':'证','識':'识','譜':'谱','警':'警',
+    '議':'议','護':'护','讀':'读','變':'变','讓':'让','豐':'丰','豬':'猪','貓':'猫',
+    '財':'财','責':'责','販':'贩','貫':'贯','貨':'货','質':'质','購':'购','貪':'贪',
+    '貧':'贫','貫':'贯','貳':'贰','貴':'贵','貶':'贬','貸':'贷','貿':'贸','費':'费',
+    '賀':'贺','賊':'贼','賓':'宾','賜':'赐','賞':'赏','賠':'赔','賢':'贤','賣':'卖',
+    '賦':'赋','賭':'赌','賴':'赖','賺':'赚','賻':'赙','購':'购','賽':'赛','贊':'赞',
+    '贈':'赠','贊':'赞','贏':'赢','赤':'赤','趕':'赶','趙':'赵','趨':'趋','躍':'跃',
+    '身':'身','車':'车','軌':'轨','軍':'军','軟':'软','軸':'轴','較':'较','載':'载',
+    '輔':'辅','輕':'轻','輛':'辆','輝':'辉','輥':'辊','輦':'辇','輩':'辈','輪':'轮',
+    '輯':'辑','輸':'输','輻':'辐','輳':'辏','輾':'辗','轄':'辖','轅':'辕','轉':'转',
+    '轆':'辘','轉':'转','轎':'轿','轔':'辚','轟':'轰','轡':'辔','轢':'轹','轡':'辔',
+    '轣':'辚','轤':'轳','車':'车',
+  };
+  return text.split('').map(c => map[c] || c).join('');
+}
+
+/**
+ * 清理转写文本：移除 <|X.XX|> 时间戳标记、多余空白
+ * @param {string} text - 原始转写文本
+ * @returns {string} 清理后的文本
+ */
+function cleanTranscriptionText(text) {
+  if (!text) return text;
+  // 移除 <|X.XX|> 时间戳标记
+  let cleaned = text.replace(/<\|\d+\.\d+\|>/g, '');
+  // 繁体转简体
+  cleaned = traditionalToSimplified(cleaned);
+  // 移除多余空格
+  cleaned = cleaned.replace(/\s+/g, ' ').trim();
+  return cleaned;
+}
+
+/**
+ * 基于时间戳对重叠区域的转写片段去重
+ * 当多个音频块有重叠时，同一段语音可能被转写两次，需要去除重复
+ * @param {Array<{text: string, timestamp: [number, number]}>} chunks
+ * @returns {Array} 去重后的片段数组
+ */
+function deduplicateChunksByTime(chunks) {
+  if (!chunks || chunks.length <= 1) return chunks;
+
+  // 按开始时间排序
+  const sorted = [...chunks].sort((a, b) => a.timestamp[0] - b.timestamp[0]);
+  const result = [];
+
+  for (const chunk of sorted) {
+    const start = chunk.timestamp[0];
+    const end = chunk.timestamp[1];
+    const duration = end - start;
+
+    // 跳过无效片段（时长为0或负数）
+    if (duration <= 0) continue;
+
+    // 检查是否与已添加的片段有超过 50% 的时间重叠
+    let isDuplicate = false;
+    for (let i = result.length - 1; i >= 0; i--) {
+      const existing = result[i];
+      // 只检查时间接近的片段（优化性能）
+      if (existing.timestamp[1] < start - 2) break;
+
+      const overlapStart = Math.max(start, existing.timestamp[0]);
+      const overlapEnd = Math.min(end, existing.timestamp[1]);
+      const overlapDuration = Math.max(0, overlapEnd - overlapStart);
+
+      // 如果重叠超过片段时长的 50%，认为是重复
+      if (duration > 0 && overlapDuration / duration > 0.5) {
+        // 如果新片段文本更长，替换旧的
+        if (chunk.text.length > existing.text.length) {
+          result[i] = chunk;
+        }
+        isDuplicate = true;
+        break;
+      }
+    }
+
+    if (!isDuplicate) {
+      result.push(chunk);
+    }
+  }
+
+  console.log(`去重: ${chunks.length} 个片段 → ${result.length} 个片段`);
+  return result;
+}
+
+/**
+ * 去除 Whisper 幻觉产生的重复片段
+ * Whisper 常见幻觉模式：在块末尾重复已输出的文本，或输出前缀重叠的内容
+ * @param {Array<{text: string, timestamp: [number, number]}>} chunks
+ * @returns {Array} 去重后的片段
+ */
+function removeWhisperDuplicates(chunks) {
+  if (!chunks || chunks.length <= 1) return chunks;
+  const result = [chunks[0]];
+  const normalize = (t) => t.replace(/[，,。！？!?；;、\s]/g, '');
+
+  for (let i = 1; i < chunks.length; i++) {
+    const current = chunks[i];
+    const prev = result[result.length - 1];
+    const currText = current.text.trim();
+    const prevText = prev.text.trim();
+    const currNorm = normalize(currText);
+    const prevNorm = normalize(prevText);
+
+    // 1. 完全相同（原文或标准化后）
+    if (currText === prevText || (currNorm === prevNorm && currNorm.length >= 4)) {
+      console.log('Whisper去重: 完全重复:', currText.substring(0, 30));
+      continue;
+    }
+
+    // 长度比率（避免长文本误杀短文本）
+    const minLen = Math.min(currNorm.length, prevNorm.length);
+    const maxLen = Math.max(currNorm.length, prevNorm.length);
+    const lenRatio = minLen / maxLen;
+
+    // 2. 子串包含：仅当短文本占长文本 60% 以上
+    if (minLen >= 6 && lenRatio > 0.6) {
+      if (currNorm.includes(prevNorm)) {
+        console.log('Whisper去重: 用更长的片段替换');
+        result[result.length - 1] = current;
+        continue;
+      }
+      if (prevNorm.includes(currNorm)) {
+        console.log('Whisper去重: 保留更长的已有片段');
+        continue;
+      }
+    }
+
+    // 3. 模糊匹配：仅当长度接近（比率>0.5）且都 >= 8 字符，阈值 0.8
+    if (minLen >= 8 && lenRatio > 0.5) {
+      const similarity = computeTextSimilarity(currNorm, prevNorm);
+      if (similarity > 0.8) {
+        console.log('Whisper去重: 模糊匹配:', similarity.toFixed(2), currText.substring(0, 20));
+        if (currText.length >= prevText.length) {
+          result[result.length - 1] = current;
+        }
+        continue;
+      }
+    }
+
+    result.push(current);
+  }
+
+  return result;
+}
+
+/**
+ * 去除文本中连续重复的行（TXT 导出的安全网）
+ * @param {string} text
+ * @returns {string}
+ */
+function removeDuplicateTextLines(text) {
+  if (!text) return text;
+  const lines = text.split('\n');
+  const result = [];
+  const normalizedResults = [];
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      if (result.length > 0 && result[result.length - 1].trim() !== '') {
+        result.push('');
+        normalizedResults.push('');
+      }
+      continue;
+    }
+
+    // 标准化：去除所有标点和空格
+    const normalized = trimmed.replace(/[，,。！？!?；;、\s\n:：""''""''（）()\【】[\]{}·…—\-_]/g, '');
+    if (!normalized) {
+      result.push(line);
+      normalizedResults.push(normalized);
+      continue;
+    }
+
+    let isDuplicate = false;
+
+    // 只检查最近 3 行（避免长文本误杀远处的短句）
+    const windowStart = Math.max(0, result.length - 3);
+    for (let j = result.length - 1; j >= windowStart; j--) {
+      const prevNormalized = normalizedResults[j];
+      if (!prevNormalized || prevNormalized.length < 4) continue;
+
+      // 1. 标准化后完全相同 → 一定是重复
+      if (normalized === prevNormalized) {
+        isDuplicate = true;
+        break;
+      }
+
+      // 计算长度比率（短/长），只有长度接近才做子串和模糊匹配
+      const minLen = Math.min(normalized.length, prevNormalized.length);
+      const maxLen = Math.max(normalized.length, prevNormalized.length);
+      const lenRatio = minLen / maxLen;
+
+      // 2. 子串包含：仅当短文本占长文本 70% 以上时才视为重复
+      //    这样可以避免100字长行包含8字短句被误删
+      if (minLen >= 10 && lenRatio > 0.7) {
+        if (prevNormalized.includes(normalized)) {
+          isDuplicate = true;
+          break;
+        }
+        if (normalized.includes(prevNormalized)) {
+          result[j] = line;
+          normalizedResults[j] = normalized;
+          isDuplicate = true;
+          break;
+        }
+      }
+
+      // 3. 模糊匹配：仅当长度比率 > 0.6 且都 >= 10 字符
+      if (minLen >= 10 && lenRatio > 0.6) {
+        const similarity = computeTextSimilarity(normalized, prevNormalized);
+        if (similarity > 0.8) {
+          if (trimmed.length >= result[j].trim().length) {
+            result[j] = line;
+            normalizedResults[j] = normalized;
+          }
+          isDuplicate = true;
+          break;
+        }
+      }
+    }
+
+    if (!isDuplicate) {
+      result.push(line);
+      normalizedResults.push(normalized);
+    }
+  }
+
+  return result.join('\n');
+}
+
+/**
+ * 计算两段文本的字符级相似度（基于字符频率的交集）
+ * 用于检测 Whisper 输出中只有个别字符差异的重复句
+ * @param {string} a
+ * @param {string} b
+ * @returns {number} 0~1 的相似度
+ */
+function computeTextSimilarity(a, b) {
+  if (!a || !b) return 0;
+  if (a === b) return 1;
+  const aChars = [...a];
+  const bChars = [...b];
+  // 统计字符频率
+  const freqA = {};
+  for (const c of aChars) freqA[c] = (freqA[c] || 0) + 1;
+  const freqB = {};
+  for (const c of bChars) freqB[c] = (freqB[c] || 0) + 1;
+  // 计算交集
+  let common = 0;
+  for (const c in freqA) {
+    if (freqB[c]) common += Math.min(freqA[c], freqB[c]);
+  }
+  return common / Math.max(aChars.length, bChars.length);
 }
