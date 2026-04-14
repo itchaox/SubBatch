@@ -3325,9 +3325,12 @@ async function initFrontendWhisper(onProgress) {
  * @returns {Promise<{text: string, chunks: Array, srtContent: string}>}
  */
 async function transcribeAudioInFrontend(audioBuffer, onProgress) {
+  console.time('⏱️ 转写总耗时');
   try {
     // 初始化 Whisper
+    console.time('⏱️ 模型加载');
     await initFrontendWhisper(onProgress);
+    console.timeEnd('⏱️ 模型加载');
 
     if (onProgress) onProgress(40, '模型加载完成，开始转写...');
 
@@ -3359,7 +3362,13 @@ async function transcribeAudioInFrontend(audioBuffer, onProgress) {
     const numChunks = Math.ceil(monoAudio.length / stepSamples);
     console.log('音频分块处理:', numChunks, '块, 每块', CHUNK_SECONDS, '秒, 重叠', STRIDE_SECONDS, '秒');
 
+    let lastBlockEnd = performance.now();
+
     for (let i = 0; i < numChunks; i++) {
+      const blockStart = performance.now();
+      console.log(`[块${i + 1}] ⏱ 块间等待: ${(blockStart - lastBlockEnd).toFixed(0)} ms`);
+      console.time(`[块${i + 1}] 🔵 整块总耗时`);
+
       const start = i * stepSamples;
       const end = Math.min(start + chunkSamples, monoAudio.length);
       const audioChunk = monoAudio.slice(start, end);
@@ -3376,17 +3385,21 @@ async function transcribeAudioInFrontend(audioBuffer, onProgress) {
 
       try {
         // 提取特征
+        console.time(`[块${i + 1}] extract_features`);
         const { input_features } = await frontendWhisperProcessor(audioChunk);
+        console.timeEnd(`[块${i + 1}] extract_features`);
 
         // 转写单个块
-        const chunkResult = await transcribeSingleChunk(input_features, timeOffset, null);
+        const chunkResult = await transcribeSingleChunk(input_features, timeOffset, null, i + 1);
 
+        console.time(`[块${i + 1}] 后处理`);
         if (chunkResult.chunks.length > 0) {
           allChunks.push(...chunkResult.chunks);
         }
         if (chunkResult.text) {
           allTexts.push(cleanTranscriptionText(chunkResult.text));
         }
+        console.timeEnd(`[块${i + 1}] 后处理`);
       } catch (chunkError) {
         // OOM 等错误时跳过当前块，继续处理后续块
         console.warn(`第 ${i + 1} 块处理失败（可能内存不足），跳过:`, chunkError.message);
@@ -3394,6 +3407,9 @@ async function transcribeAudioInFrontend(audioBuffer, onProgress) {
 
       // 每块处理后释放内存，等待 GC 回收 WASM tensor
       await new Promise((resolve) => setTimeout(resolve, 500));
+
+      console.timeEnd(`[块${i + 1}] 🔵 整块总耗时`);
+      lastBlockEnd = performance.now();
     }
 
     if (onProgress) onProgress(95, '合并去重中...');
@@ -3405,6 +3421,7 @@ async function transcribeAudioInFrontend(audioBuffer, onProgress) {
     const srtContent = deduplicatedChunks.length > 0 ? convertToSRT(deduplicatedChunks) : fullText;
 
     console.log('全部转写完成, 共', allChunks.length, '个片段, 文本长度:', fullText.length);
+    console.timeEnd('⏱️ 转写总耗时');
 
     return {
       text: fullText,
@@ -3424,32 +3441,38 @@ async function transcribeAudioInFrontend(audioBuffer, onProgress) {
  * @param {Function} onProgress - 进度回调
  * @returns {Promise<{text: string, chunks: Array, srtContent: string}>}
  */
-async function transcribeSingleChunk(input_features, timeOffset, onProgress) {
-  // 带时间戳推理
+async function transcribeSingleChunk(input_features, timeOffset, onProgress, chunkIndex) {
   let chunks = [];
   let text = '';
+  const tag = chunkIndex ? `[块${chunkIndex}]` : '[单块]';
 
+  // 只跑一次 generate（带时间戳），不再 fallback 二次推理
+  console.time(`${tag} generate`);
+  const output = await frontendWhisperModel.generate(
+    { input_features },
+    {
+      max_new_tokens: 448,
+      forced_decoder_ids: [
+        [1, 50260], // 中文
+        [2, 50359], // 转写任务
+      ],
+      language: 'chinese',
+      task: 'transcribe',
+      return_timestamps: true,
+      num_beams: 1,
+      do_sample: false,
+    },
+  );
+  console.timeEnd(`${tag} generate`);
+
+  console.time(`${tag} decode`);
   try {
-    const outputWithTimestamps = await frontendWhisperModel.generate(
-      { input_features },
-      {
-        max_new_tokens: 448,
-        forced_decoder_ids: [
-          [1, 50260], // 中文
-          [2, 50359], // 转写任务
-        ],
-        language: 'chinese',
-        task: 'transcribe',
-        return_timestamps: true,
-      },
-    );
-    const decodedChunks = frontendWhisperTokenizer.batch_decode(outputWithTimestamps, {
+    // 尝试带时间戳解码
+    const decodedWithTs = frontendWhisperTokenizer.batch_decode(output, {
       skip_special_tokens: false,
       decode_with_timestamps: true,
     });
-    // 解析时间戳并加上块偏移
-    const rawChunks = parseTimestampChunks(decodedChunks[0] || '');
-    // 去除 Whisper 幻觉导致的重复片段
+    const rawChunks = parseTimestampChunks(decodedWithTs[0] || '');
     const dedupedRawChunks = removeWhisperDuplicates(rawChunks);
     for (const chunk of dedupedRawChunks) {
       chunks.push({
@@ -3458,32 +3481,17 @@ async function transcribeSingleChunk(input_features, timeOffset, onProgress) {
       });
     }
   } catch (tsError) {
-    console.warn('时间戳转写失败，尝试纯文本:', tsError.message);
+    console.warn(tag, '时间戳解析失败:', tsError.message);
   }
 
-  // 如果没有拿到带时间戳的结果，用纯文本模式
+  // 如果时间戳解析没产出 chunks，直接从第一次 output 提取纯文本（不重新推理）
   if (chunks.length === 0) {
-    try {
-      const output = await frontendWhisperModel.generate(
-        { input_features },
-        {
-          max_new_tokens: 448,
-          forced_decoder_ids: [
-            [1, 50260], // 中文
-            [2, 50359], // 转写任务
-          ],
-          language: 'chinese',
-          task: 'transcribe',
-        },
-      );
-      const decoded = frontendWhisperTokenizer.batch_decode(output, { skip_special_tokens: true });
-      text = cleanTranscriptionText(decoded[0] || '');
-    } catch (e) {
-      console.warn('纯文本转写也失败:', e.message);
-    }
+    const decoded = frontendWhisperTokenizer.batch_decode(output, { skip_special_tokens: true });
+    text = cleanTranscriptionText(decoded[0] || '');
   } else {
     text = chunks.map((c) => c.text).join('\n');
   }
+  console.timeEnd(`${tag} decode`);
 
   const srtContent = chunks.length > 0 ? convertToSRT(chunks) : text;
   return { text, chunks, srtContent };
