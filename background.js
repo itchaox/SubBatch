@@ -1805,19 +1805,24 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 
         // 3. 下载并解码音频
         console.log('步骤3: 下载并解码音频');
-        const audioDataResult = await fetchAndDecodeAudio(audioResult.audioUrl, tabId, audioResult.audioUrls, (progress, stage, msg) => {
-          // 发送进度更新
-          try {
-            chrome.runtime.sendMessage({
-              action: 'transcribeProgress',
-              progress: progress,
-              stage: stage,
-              message: msg,
-            });
-          } catch (e) {
-            console.warn('发送进度消息失败:', e);
-          }
-        });
+        const audioDataResult = await fetchAndDecodeAudio(
+          audioResult.audioUrl,
+          tabId,
+          audioResult.audioUrls,
+          (progress, stage, msg) => {
+            // 发送进度更新
+            try {
+              chrome.runtime.sendMessage({
+                action: 'transcribeProgress',
+                progress: progress,
+                stage: stage,
+                message: msg,
+              });
+            } catch (e) {
+              console.warn('发送进度消息失败:', e);
+            }
+          },
+        );
 
         if (!audioDataResult.success) {
           sendResponse({
@@ -1886,7 +1891,6 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           chunks: transcribeResult.chunks,
           duration: audioResult.duration,
         });
-
       } catch (error) {
         console.error('音频转字幕出错:', error);
         sendResponse({
@@ -2392,7 +2396,7 @@ async function fetchAudioStreamUrl(bvid, cid) {
     const params = {
       bvid: bvid,
       cid: cid,
-      fnval: 16,  // DASH 格式
+      fnval: 16, // DASH 格式
       fnver: 0,
       fourk: 1,
     };
@@ -2407,11 +2411,12 @@ async function fetchAudioStreamUrl(bvid, cid) {
     const response = await fetch(url, {
       method: 'GET',
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
-        'Referer': 'https://www.bilibili.com/',
-        'Cookie': bilibiliCookie,
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+        Referer: 'https://www.bilibili.com/',
+        Cookie: bilibiliCookie,
       },
-      credentials: 'omit',  // 改为 omit 避免 CORS 问题
+      credentials: 'omit', // 改为 omit 避免 CORS 问题
     });
 
     console.log('音频流 API 响应状态:', response.status);
@@ -2460,11 +2465,10 @@ async function fetchAudioStreamUrl(bvid, cid) {
     return {
       success: true,
       audioUrl: audioStream.baseUrl,
-      audioUrls: audioUrls,  // 所有可用 URL 列表
+      audioUrls: audioUrls, // 所有可用 URL 列表
       duration: dashData.duration || audioStream.duration,
       mimeType: audioStream.mimeType || 'audio/mp4',
     };
-
   } catch (error) {
     console.error('获取音频流 URL 出错:', error);
     return {
@@ -2533,150 +2537,162 @@ async function downloadViaContentScript(audioUrl, tabId, backupUrls, onProgress)
     chrome.runtime.onMessage.addListener(messageHandler);
 
     // Step 1: 注入 ISOLATED world 监听器（中转 postMessage → sendMessage）
-    chrome.scripting.executeScript({
-      target: { tabId },
-      func: () => {
-        window.addEventListener('message', (event) => {
-          if (event.source !== window) return;
-          if (!event.data || event.data.__subbatch !== true) return;
-
-          if (event.data.type === 'CHUNK') {
-            // postMessage 用 structured clone 传 Uint8Array 很高效
-            // sendMessage 用 JSON，需要转成普通数组
-            chrome.runtime.sendMessage({
-              action: 'audioChunk',
-              data: Array.from(event.data.data),
-            });
-          } else if (event.data.type === 'COMPLETE') {
-            chrome.runtime.sendMessage({ action: 'audioDataComplete' });
-          } else if (event.data.type === 'ERROR') {
-            chrome.runtime.sendMessage({
-              action: 'audioDataError',
-              error: event.data.error,
-            });
-          }
-        });
-      },
-    }).then(() => {
-      // Step 2: 注入 MAIN world 脚本（从页面上下文下载音频）
-      return chrome.scripting.executeScript({
+    chrome.scripting
+      .executeScript({
         target: { tabId },
-        world: 'MAIN',
-        func: (fallbackUrl, apiBackupUrls) => {
-          // 优先使用 API 返回的 URL（已对应正确的 bvid/cid）
-          // __playinfo__ 是浏览器当前播放视频的数据，可能是别的视频，不能优先用
-          let audioUrl = fallbackUrl || null;
-          let audioUrls = apiBackupUrls ? [...apiBackupUrls] : [];
+        func: () => {
+          window.addEventListener('message', (event) => {
+            if (event.source !== window) return;
+            if (!event.data || event.data.__subbatch !== true) return;
 
-          if (audioUrl) {
-            console.log('[SubBatch] 使用 API 返回的音频 URL（对应目标视频）');
-          }
-
-          // 仅当 API URL 不可用时，才从 __playinfo__ 获取作为备选
-          if (!audioUrl) {
-            try {
-              const playInfo = window.__playinfo__;
-              if (playInfo && playInfo.data && playInfo.data.dash) {
-                const audio = playInfo.data.dash.audio;
-                if (audio && audio.length > 0) {
-                  audioUrl = audio[0].baseUrl;
-                  for (const a of audio) {
-                    audioUrls.push(a.baseUrl);
-                    if (a.backupUrl) audioUrls.push(a.backupUrl);
-                  }
-                  console.log('[SubBatch] API URL 不可用，从 __playinfo__ 获取音频 URL');
-                }
-              }
-            } catch (e) {}
-          }
-
-          // 如果仍然没有，尝试 playerMetadata
-          if (!audioUrl) {
-            try {
-              if (window.playerMetadata && window.playerMetadata.video) {
-                const dash = window.playerMetadata.video.dash;
-                if (dash && dash.audio && dash.audio.length > 0) {
-                  audioUrl = dash.audio[0].baseUrl;
-                  console.log('[SubBatch] 从 playerMetadata 获取音频 URL');
-                }
-              }
-            } catch (e) {}
-          }
-
-          if (!audioUrl) {
-            window.postMessage({ __subbatch: true, type: 'ERROR', error: '无法获取音频 URL，请确保视频正在播放' }, '*');
-            return;
-          }
-
-          console.log('[SubBatch] 开始下载音频（页面上下文）');
-
-          // 尝试下载的 URL 列表：API 返回的 URL + 备选 URL
-          const urlsToTry = [audioUrl];
-          for (const url of audioUrls) {
-            if (url !== audioUrl) urlsToTry.push(url);
-          }
-          // 加入 API 返回的备用 URL
-          if (apiBackupUrls && apiBackupUrls.length > 0) {
-            for (const url of apiBackupUrls) {
-              if (!urlsToTry.includes(url)) urlsToTry.push(url);
+            if (event.data.type === 'CHUNK') {
+              // postMessage 用 structured clone 传 Uint8Array 很高效
+              // sendMessage 用 JSON，需要转成普通数组
+              chrome.runtime.sendMessage({
+                action: 'audioChunk',
+                data: Array.from(event.data.data),
+              });
+            } else if (event.data.type === 'COMPLETE') {
+              chrome.runtime.sendMessage({ action: 'audioDataComplete' });
+            } else if (event.data.type === 'ERROR') {
+              chrome.runtime.sendMessage({
+                action: 'audioDataError',
+                error: event.data.error,
+              });
             }
-          }
-          if (fallbackUrl && !urlsToTry.includes(fallbackUrl)) {
-            urlsToTry.push(fallbackUrl);
-          }
-
-          console.log('[SubBatch] 共', urlsToTry.length, '个 URL 可尝试');
-
-          async function tryDownload(url) {
-            // B站 CDN 需要正确的 Referer
-            const response = await fetch(url, {
-              referrer: 'https://www.bilibili.com/',
-              referrerPolicy: 'no-referrer-when-downgrade',
-            });
-            if (!response.ok) throw new Error('HTTP ' + response.status);
-            return await response.arrayBuffer();
-          }
-
-          // 依次尝试各个 URL
-          (async () => {
-            for (let i = 0; i < urlsToTry.length; i++) {
-              try {
-                console.log('[SubBatch] 尝试下载第', (i + 1), '个 URL');
-                const buffer = await tryDownload(urlsToTry[i]);
-                const uint8 = new Uint8Array(buffer);
-                // 分 2MB 块发送，避免 postMessage/sendMessage 超限
-                const CHUNK = 2 * 1024 * 1024;
-                for (let j = 0; j < uint8.length; j += CHUNK) {
-                  window.postMessage({
-                    __subbatch: true,
-                    type: 'CHUNK',
-                    data: uint8.slice(j, j + CHUNK),
-                  }, '*');
-                }
-                window.postMessage({ __subbatch: true, type: 'COMPLETE' }, '*');
-                return; // 成功，退出
-              } catch (err) {
-                console.warn('[SubBatch] 第', (i + 1), '个 URL 下载失败:', err.message);
-                if (i === urlsToTry.length - 1) {
-                  // 所有 URL 都失败
-                  window.postMessage({
-                    __subbatch: true,
-                    type: 'ERROR',
-                    error: '下载失败: ' + err.message,
-                  }, '*');
-                }
-              }
-            }
-          })();
+          });
         },
-        args: [audioUrl, backupUrls || []],
+      })
+      .then(() => {
+        // Step 2: 注入 MAIN world 脚本（从页面上下文下载音频）
+        return chrome.scripting.executeScript({
+          target: { tabId },
+          world: 'MAIN',
+          func: (fallbackUrl, apiBackupUrls) => {
+            // 优先使用 API 返回的 URL（已对应正确的 bvid/cid）
+            // __playinfo__ 是浏览器当前播放视频的数据，可能是别的视频，不能优先用
+            let audioUrl = fallbackUrl || null;
+            let audioUrls = apiBackupUrls ? [...apiBackupUrls] : [];
+
+            if (audioUrl) {
+              console.log('[SubBatch] 使用 API 返回的音频 URL（对应目标视频）');
+            }
+
+            // 仅当 API URL 不可用时，才从 __playinfo__ 获取作为备选
+            if (!audioUrl) {
+              try {
+                const playInfo = window.__playinfo__;
+                if (playInfo && playInfo.data && playInfo.data.dash) {
+                  const audio = playInfo.data.dash.audio;
+                  if (audio && audio.length > 0) {
+                    audioUrl = audio[0].baseUrl;
+                    for (const a of audio) {
+                      audioUrls.push(a.baseUrl);
+                      if (a.backupUrl) audioUrls.push(a.backupUrl);
+                    }
+                    console.log('[SubBatch] API URL 不可用，从 __playinfo__ 获取音频 URL');
+                  }
+                }
+              } catch (e) {}
+            }
+
+            // 如果仍然没有，尝试 playerMetadata
+            if (!audioUrl) {
+              try {
+                if (window.playerMetadata && window.playerMetadata.video) {
+                  const dash = window.playerMetadata.video.dash;
+                  if (dash && dash.audio && dash.audio.length > 0) {
+                    audioUrl = dash.audio[0].baseUrl;
+                    console.log('[SubBatch] 从 playerMetadata 获取音频 URL');
+                  }
+                }
+              } catch (e) {}
+            }
+
+            if (!audioUrl) {
+              window.postMessage(
+                { __subbatch: true, type: 'ERROR', error: '无法获取音频 URL，请确保视频正在播放' },
+                '*',
+              );
+              return;
+            }
+
+            console.log('[SubBatch] 开始下载音频（页面上下文）');
+
+            // 尝试下载的 URL 列表：API 返回的 URL + 备选 URL
+            const urlsToTry = [audioUrl];
+            for (const url of audioUrls) {
+              if (url !== audioUrl) urlsToTry.push(url);
+            }
+            // 加入 API 返回的备用 URL
+            if (apiBackupUrls && apiBackupUrls.length > 0) {
+              for (const url of apiBackupUrls) {
+                if (!urlsToTry.includes(url)) urlsToTry.push(url);
+              }
+            }
+            if (fallbackUrl && !urlsToTry.includes(fallbackUrl)) {
+              urlsToTry.push(fallbackUrl);
+            }
+
+            console.log('[SubBatch] 共', urlsToTry.length, '个 URL 可尝试');
+
+            async function tryDownload(url) {
+              // B站 CDN 需要正确的 Referer
+              const response = await fetch(url, {
+                referrer: 'https://www.bilibili.com/',
+                referrerPolicy: 'no-referrer-when-downgrade',
+              });
+              if (!response.ok) throw new Error('HTTP ' + response.status);
+              return await response.arrayBuffer();
+            }
+
+            // 依次尝试各个 URL
+            (async () => {
+              for (let i = 0; i < urlsToTry.length; i++) {
+                try {
+                  console.log('[SubBatch] 尝试下载第', i + 1, '个 URL');
+                  const buffer = await tryDownload(urlsToTry[i]);
+                  const uint8 = new Uint8Array(buffer);
+                  // 分 2MB 块发送，避免 postMessage/sendMessage 超限
+                  const CHUNK = 2 * 1024 * 1024;
+                  for (let j = 0; j < uint8.length; j += CHUNK) {
+                    window.postMessage(
+                      {
+                        __subbatch: true,
+                        type: 'CHUNK',
+                        data: uint8.slice(j, j + CHUNK),
+                      },
+                      '*',
+                    );
+                  }
+                  window.postMessage({ __subbatch: true, type: 'COMPLETE' }, '*');
+                  return; // 成功，退出
+                } catch (err) {
+                  console.warn('[SubBatch] 第', i + 1, '个 URL 下载失败:', err.message);
+                  if (i === urlsToTry.length - 1) {
+                    // 所有 URL 都失败
+                    window.postMessage(
+                      {
+                        __subbatch: true,
+                        type: 'ERROR',
+                        error: '下载失败: ' + err.message,
+                      },
+                      '*',
+                    );
+                  }
+                }
+              }
+            })();
+          },
+          args: [audioUrl, backupUrls || []],
+        });
+      })
+      .catch((error) => {
+        clearTimeout(timeoutId);
+        cleanup();
+        console.error('executeScript 错误:', error);
+        reject(error);
       });
-    }).catch(error => {
-      clearTimeout(timeoutId);
-      cleanup();
-      console.error('executeScript 错误:', error);
-      reject(error);
-    });
   });
 }
 
@@ -2702,14 +2718,14 @@ async function downloadAudioDirectly(audioUrl, backupUrls) {
 
   for (let i = 0; i < urlsToTry.length; i++) {
     const url = urlsToTry[i];
-    console.log('直接下载尝试第', (i + 1), '个 URL');
+    console.log('直接下载尝试第', i + 1, '个 URL');
     try {
       const response = await fetch(url, {
         method: 'GET',
         referrer: 'https://www.bilibili.com/',
         referrerPolicy: 'unsafe-url',
         headers: {
-          'Cookie': cookie,
+          Cookie: cookie,
         },
         credentials: 'omit',
       });
@@ -2790,7 +2806,9 @@ async function getAllBilibiliCookies() {
     .map((c) => `${c.name}=${c.value}`)
     .join('; ');
 
-  console.log(`获取到完整 Cookie (${allCookies.length} 个, 去重后 ${uniqueMap.size} 个), 包含 SESSDATA: ${cookieString.includes('SESSDATA')}`);
+  console.log(
+    `获取到完整 Cookie (${allCookies.length} 个, 去重后 ${uniqueMap.size} 个), 包含 SESSDATA: ${cookieString.includes('SESSDATA')}`,
+  );
   return cookieString;
 }
 
@@ -2825,7 +2843,9 @@ async function fetchAndDecodeAudio(audioUrl, tabId, audioUrls, onProgress) {
         try {
           arrayBuffer = await downloadAudioDirectly(audioUrl, audioUrls);
         } catch (directError) {
-          throw new Error('音频下载失败（MAIN world: ' + mainWorldError.message + '，直接下载: ' + directError.message + '）');
+          throw new Error(
+            '音频下载失败（MAIN world: ' + mainWorldError.message + '，直接下载: ' + directError.message + '）',
+          );
         }
       }
     } else {
@@ -2880,7 +2900,6 @@ async function fetchAndDecodeAudio(audioUrl, tabId, audioUrls, onProgress) {
       audioBuffer: audioBuffer,
       needsProcessing: false,
     };
-
   } catch (error) {
     console.error('下载和解码音频出错:', error);
     return {
@@ -2984,7 +3003,6 @@ class WhisperTranscriber {
 
       this.initialized = true;
       console.log('Whisper 模型初始化完成');
-
     } catch (error) {
       console.error('初始化 Whisper 模型失败:', error);
       throw error;
@@ -3018,9 +3036,11 @@ class WhisperTranscriber {
       const result = await this.pipeline(int16Array, {
         top_k: 0,
         do_sample: false,
-        language: 'zh',  // 优先中文
+        language: 'zh', // 优先中文
         task: 'transcribe',
         return_timestamps: true,
+        num_beams: 1, // ← 加这个，明确贪心，最快
+        do_sample: false, // ← 加这个，关闭采样
       });
 
       console.log('转写完成, 结果:', result);
@@ -3031,7 +3051,6 @@ class WhisperTranscriber {
         text: result.text || '',
         chunks: result.chunks || [],
       };
-
     } catch (error) {
       console.error('Whisper 转写失败:', error);
       throw error;
