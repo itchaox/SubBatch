@@ -496,7 +496,9 @@ document.addEventListener('DOMContentLoaded', function () {
       }
 
       // 创建Blob对象
-      const finalText = prependVideoInfo ? prependVideoInfoText(subtitleText, currentVideoInfo?.title, currentVideoInfo?.bvid) : subtitleText;
+      const finalText = prependVideoInfo
+        ? prependVideoInfoText(subtitleText, currentVideoInfo?.title, currentVideoInfo?.bvid)
+        : subtitleText;
       const blob = new Blob([finalText], { type: 'text/plain;charset=utf-8' });
 
       // 创建下载链接
@@ -2094,9 +2096,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
       try {
         // 获取第一个未获取成功字幕的视频
-        const videoToTranscribe = videoList.find(
-          (v) => v.subtitleStatus !== '获取成功' && v.bvid && v.cid
-        );
+        const videoToTranscribe = videoList.find((v) => v.subtitleStatus !== '获取成功' && v.bvid && v.cid);
 
         if (!videoToTranscribe) {
           showError('没有需要转写的视频（所有视频都已获取字幕或信息不完整）');
@@ -2740,10 +2740,12 @@ document.addEventListener('DOMContentLoaded', function () {
     if (result.defaultExportFormat) {
       defaultExportFormat = result.defaultExportFormat;
       if (formatSelectedText) {
-        const matchOption = document.querySelector(`#formatSelectDropdown .custom-select-option[data-value="${defaultExportFormat}"]`);
+        const matchOption = document.querySelector(
+          `#formatSelectDropdown .custom-select-option[data-value="${defaultExportFormat}"]`,
+        );
         if (matchOption) {
           formatSelectedText.textContent = matchOption.textContent;
-          formatSelectOptions.forEach(o => o.classList.remove('selected'));
+          formatSelectOptions.forEach((o) => o.classList.remove('selected'));
           matchOption.classList.add('selected');
         }
       }
@@ -2776,7 +2778,7 @@ document.addEventListener('DOMContentLoaded', function () {
         const value = option.getAttribute('data-value');
         defaultExportFormat = value;
         formatSelectedText.textContent = option.textContent;
-        formatSelectOptions.forEach(o => o.classList.remove('selected'));
+        formatSelectOptions.forEach((o) => o.classList.remove('selected'));
         option.classList.add('selected');
         formatSelectTrigger.classList.remove('active');
         formatSelectDropdown.classList.remove('active');
@@ -2805,10 +2807,12 @@ document.addEventListener('DOMContentLoaded', function () {
     if (result.defaultFileNameFormat) {
       defaultFileNameFormat = result.defaultFileNameFormat;
       if (fileNameSelectedText) {
-        const matchOption = document.querySelector(`#fileNameSelectDropdown .custom-select-option[data-value="${defaultFileNameFormat}"]`);
+        const matchOption = document.querySelector(
+          `#fileNameSelectDropdown .custom-select-option[data-value="${defaultFileNameFormat}"]`,
+        );
         if (matchOption) {
           fileNameSelectedText.textContent = matchOption.textContent;
-          fileNameSelectOptions.forEach(o => o.classList.remove('selected'));
+          fileNameSelectOptions.forEach((o) => o.classList.remove('selected'));
           matchOption.classList.add('selected');
         }
       }
@@ -2832,7 +2836,7 @@ document.addEventListener('DOMContentLoaded', function () {
         const value = option.getAttribute('data-value');
         defaultFileNameFormat = value;
         fileNameSelectedText.textContent = option.textContent;
-        fileNameSelectOptions.forEach(o => o.classList.remove('selected'));
+        fileNameSelectOptions.forEach((o) => o.classList.remove('selected'));
         option.classList.add('selected');
         fileNameSelectTrigger.classList.remove('active');
         fileNameSelectDropdown.classList.remove('active');
@@ -2890,8 +2894,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
     helpIcon.addEventListener('mouseenter', function () {
       const rect = this.getBoundingClientRect();
-      tooltip.style.top = (rect.top - 8) + 'px';
-      tooltip.style.left = (rect.left + rect.width / 2) + 'px';
+      tooltip.style.top = rect.top - 8 + 'px';
+      tooltip.style.left = rect.left + rect.width / 2 + 'px';
       tooltip.style.transform = 'translateX(-50%) translateY(-100%)';
       tooltip.classList.add('show');
     });
@@ -3288,8 +3292,8 @@ async function initFrontendWhisper(onProgress) {
     // 模型默认可能是英文 (50259)，必须覆盖为中文 (50260)
     // token IDs: 50260=<|zh|>, 50359=<|transcribe|>
     frontendWhisperModel.generation_config.forced_decoder_ids = [
-      [1, 50260],  // 中文
-      [2, 50359],  // 转写任务
+      [1, 50260], // 中文
+      [2, 50359], // 转写任务
     ];
 
     // Monkey-patch _retrieve_init_tokens 确保中文语言设置不被覆盖
@@ -3332,8 +3336,8 @@ async function transcribeAudioInFrontend(audioBuffer, onProgress) {
     const totalDuration = monoAudio.length / 16000;
     console.log('转换后音频样本数:', monoAudio.length, '时长:', totalDuration.toFixed(1), '秒');
 
-    const CHUNK_SECONDS = 30;    // 每块 30 秒（Whisper 最大输入）
-    const STRIDE_SECONDS = 10;   // 块间重叠 10 秒（更大重叠减少吞句）
+    const CHUNK_SECONDS = 30; // 每块 30 秒（Whisper 最大输入）
+    const STRIDE_SECONDS = 6; // 块间重叠 6 秒（10秒重叠导致大量重复，6秒足够衔接）
     const SAMPLE_RATE = 16000;
     const chunkSamples = CHUNK_SECONDS * SAMPLE_RATE;
     const strideSamples = STRIDE_SECONDS * SAMPLE_RATE;
@@ -3389,7 +3393,7 @@ async function transcribeAudioInFrontend(audioBuffer, onProgress) {
       }
 
       // 每块处理后释放内存，等待 GC 回收 WASM tensor
-      await new Promise(resolve => setTimeout(resolve, 500));
+      await new Promise((resolve) => setTimeout(resolve, 500));
     }
 
     if (onProgress) onProgress(95, '合并去重中...');
@@ -3431,8 +3435,8 @@ async function transcribeSingleChunk(input_features, timeOffset, onProgress) {
       {
         max_new_tokens: 448,
         forced_decoder_ids: [
-          [1, 50260],  // 中文
-          [2, 50359],  // 转写任务
+          [1, 50260], // 中文
+          [2, 50359], // 转写任务
         ],
         language: 'chinese',
         task: 'transcribe',
@@ -3450,10 +3454,7 @@ async function transcribeSingleChunk(input_features, timeOffset, onProgress) {
     for (const chunk of dedupedRawChunks) {
       chunks.push({
         text: chunk.text,
-        timestamp: [
-          chunk.timestamp[0] + timeOffset,
-          chunk.timestamp[1] + timeOffset,
-        ],
+        timestamp: [chunk.timestamp[0] + timeOffset, chunk.timestamp[1] + timeOffset],
       });
     }
   } catch (tsError) {
@@ -3468,8 +3469,8 @@ async function transcribeSingleChunk(input_features, timeOffset, onProgress) {
         {
           max_new_tokens: 448,
           forced_decoder_ids: [
-            [1, 50260],  // 中文
-            [2, 50359],  // 转写任务
+            [1, 50260], // 中文
+            [2, 50359], // 转写任务
           ],
           language: 'chinese',
           task: 'transcribe',
@@ -3481,7 +3482,7 @@ async function transcribeSingleChunk(input_features, timeOffset, onProgress) {
       console.warn('纯文本转写也失败:', e.message);
     }
   } else {
-    text = chunks.map(c => c.text).join('\n');
+    text = chunks.map((c) => c.text).join('\n');
   }
 
   const srtContent = chunks.length > 0 ? convertToSRT(chunks) : text;
@@ -3524,66 +3525,467 @@ function parseTimestampChunks(text) {
 function traditionalToSimplified(text) {
   if (!text) return text;
   const map = {
-    '強':'强','驚':'惊','寫':'写','驗':'验','錯':'错','誤':'误','執':'执','絕':'绝',
-    '體':'体','嚴':'严','穩':'稳','總':'总','結':'结','構':'构','創':'创','確':'确',
-    '認':'认','壓':'压','證':'证','權':'权','離':'离','實':'实','調':'调','規':'规',
-    '處':'处','將':'将','過':'过','個':'个','當':'当','發':'发','為':'为','對':'对',
-    '從':'从','會':'会','時':'时','說':'说','長':'长','開':'开','種':'种','還':'还',
-    '進':'进','間':'间','問':'问','無':'无','點':'点','經':'经','動':'动','現':'现',
-    '這':'这','樣':'样','機':'机','電':'电','讓':'让','該':'该','應':'应','關':'关',
-    '斷':'断','號':'号','業':'业','產':'产','辦':'办','場':'场','帶':'带','運':'运',
-    '連':'连','選':'选','達':'达','須':'须','據':'据','備':'备','餘':'余','環':'环',
-    '紀':'纪','錄':'录','養':'养','續':'续','語':'语','課':'课','請':'请','論':'论',
-    '講':'讲','謝':'谢','護':'护','讀':'读','變':'变','豐':'丰','費':'费','資':'资',
-    '質':'质','購':'购','車':'车','軍':'军','軟':'软','輕':'轻','輛':'辆','轉':'转',
-    '輸':'输','辨':'辨','迴':'回','週':'周','鈎':'钩','銀':'银','銅':'铜','鏡':'镜',
-    '鐘':'钟','鐵':'铁','門':'门','閉':'闭','陽':'阳','際':'际','隨':'随','險':'险',
-    '雜':'杂','雙':'双','雞':'鸡','難':'难','雲':'云','靜':'静','靈':'灵','響':'响',
-    '頁':'页','頂':'顶','項':'项','順':'顺','預':'预','頻':'频','題':'题','顧':'顾',
-    '額':'额','願':'愿','類':'类','顏':'颜','風':'风','飛':'飞','飯':'饭','飲':'饮',
-    '饋':'馈','館':'馆','馬':'马','馮':'冯','駐':'驻','驅':'驱','駕':'驾','驗':'验',
-    '骯':'脏','髒':'脏','體':'体','高':'高','髮':'发','鬥':'斗','鬧':'闹','鹽':'盐',
-    '麗':'丽','麥':'麦','黃':'黄','點':'点','齊':'齐','齒':'齿','齡':'龄','龍':'龙',
-    '龜':'龟','鑑':'鉴','鑒':'鉴','鑰':'钥','鐵':'铁','鎮':'镇','鏈':'链','鎖':'锁',
-    '鍊':'链','鍋':'锅','鍾':'钟','鍵':'键','鍛':'锻','鎢':'钨','鎳':'镍','鎖':'锁',
-    '鎮':'镇','鐳':'镭','鐵':'铁','鑄':'铸','鑒':'鉴','鑰':'钥','鑽':'钻','鑾':'銮',
-    '門':'门','閃':'闪','閉':'闭','開':'开','閏':'闰','閑':'闲','閒':'闲','間':'间',
-    '閣':'阁','閥':'阀','閨':'闺','閩':'闽','閫':'阃','閬':'阆','閭':'闾','閱':'阅',
-    '閶':'阊','閹':'阉','閻':'阎','閼':'阏','閽':'阍','閾':'阈','閿':'阌','闆':'板',
-    '闈':'闱','闊':'阔','闋':'阕','闌':'阑','闍':'阇','闐':'阗','闒':'闼','闓':'闿',
-    '闔':'阖','闕':'阙','闖':'闯','闗':'关','闘':'斗','關':'关','闚':'窥','闛':'闶',
-    '關':'关','闞':'阚','闟':'闿','闠':'闳','闡':'阐','闢':'辟','闤':'闳','闥':'闼',
-    '鹵':'卤','鹹':'咸','麗':'丽','麵':'面','麻':'麻','黃':'黄','黌':'黉','黎':'黎',
-    '點':'点','齊':'齐','齋':'斋','齎':'赍','齏':'齑','齒':'齿','齕':'龁','齗':'龂',
-    '齙':'龅','齚':'龁','齛':'龁','齜':'龇','齝':'龁','齞':'龁','齟':'龃','齠':'龆',
-    '齡':'龄','齣':'出','齦':'龈','齧':'啮','齨':'龁','齩':'咬','齪':'龊','齬':'龉',
-    '齮':'龁','齯':'龁','齲':'龋','齳':'龁','齴':'龁','齵':'龁','齶':'腭','齷':'龌',
-    '龍':'龙','龐':'庞','龑':'龑','龔':'龚','龕':'龛','龗':'龗','龘':'龘','龜':'龟',
-    '龠':'龠','龢':'和','龣':'龣','龤':'龤','龥':'龥',
-    '裡':'里','後':'后','裏':'里','於':'于','幾':'几','與':'与','沒':'没','來':'来',
-    '歲':'岁','歷':'历','書':'书','東':'东','兩':'两','區':'区','國':'国','報':'报',
-    '準':'准','術':'术','條':'条','機':'机','極':'极','標':'标','檢':'检','欄':'栏',
-    '歸':'归','歷':'历','殘':'残','殺':'杀','殼':'壳','毀':'毁','每':'每','比':'比',
-    '畢':'毕','異':'异','當':'当','痙':'痉','痛':'痛','發':'发','盡':'尽','監':'监',
-    '盤':'盘','目':'目','直':'直','相':'相','省':'省','看':'看','真':'真','著':'着',
-    '視':'视','計':'计','討':'讨','訓':'训','設':'设','許':'许','訴':'诉','診':'诊',
-    '註':'注','評':'评','証':'证','詞':'词','詢':'询','試':'试','詩':'诗','話':'话',
-    '該':'该','詳':'详','語':'语','誠':'诚','誤':'误','說':'说','誰':'谁','課':'课',
-    '調':'调','談':'谈','請':'请','論':'论','諸':'诸','諾':'诺','謀':'谋','謁':'谒',
-    '謂':'谓','謊':'谎','謝':'谢','講':'讲','證':'证','識':'识','譜':'谱','警':'警',
-    '議':'议','護':'护','讀':'读','變':'变','讓':'让','豐':'丰','豬':'猪','貓':'猫',
-    '財':'财','責':'责','販':'贩','貫':'贯','貨':'货','質':'质','購':'购','貪':'贪',
-    '貧':'贫','貫':'贯','貳':'贰','貴':'贵','貶':'贬','貸':'贷','貿':'贸','費':'费',
-    '賀':'贺','賊':'贼','賓':'宾','賜':'赐','賞':'赏','賠':'赔','賢':'贤','賣':'卖',
-    '賦':'赋','賭':'赌','賴':'赖','賺':'赚','賻':'赙','購':'购','賽':'赛','贊':'赞',
-    '贈':'赠','贊':'赞','贏':'赢','赤':'赤','趕':'赶','趙':'赵','趨':'趋','躍':'跃',
-    '身':'身','車':'车','軌':'轨','軍':'军','軟':'软','軸':'轴','較':'较','載':'载',
-    '輔':'辅','輕':'轻','輛':'辆','輝':'辉','輥':'辊','輦':'辇','輩':'辈','輪':'轮',
-    '輯':'辑','輸':'输','輻':'辐','輳':'辏','輾':'辗','轄':'辖','轅':'辕','轉':'转',
-    '轆':'辘','轉':'转','轎':'轿','轔':'辚','轟':'轰','轡':'辔','轢':'轹','轡':'辔',
-    '轣':'辚','轤':'轳','車':'车',
+    強: '强',
+    驚: '惊',
+    寫: '写',
+    驗: '验',
+    錯: '错',
+    誤: '误',
+    執: '执',
+    絕: '绝',
+    體: '体',
+    嚴: '严',
+    穩: '稳',
+    總: '总',
+    結: '结',
+    構: '构',
+    創: '创',
+    確: '确',
+    認: '认',
+    壓: '压',
+    證: '证',
+    權: '权',
+    離: '离',
+    實: '实',
+    調: '调',
+    規: '规',
+    處: '处',
+    將: '将',
+    過: '过',
+    個: '个',
+    當: '当',
+    發: '发',
+    為: '为',
+    對: '对',
+    從: '从',
+    會: '会',
+    時: '时',
+    說: '说',
+    長: '长',
+    開: '开',
+    種: '种',
+    還: '还',
+    進: '进',
+    間: '间',
+    問: '问',
+    無: '无',
+    點: '点',
+    經: '经',
+    動: '动',
+    現: '现',
+    這: '这',
+    樣: '样',
+    機: '机',
+    電: '电',
+    讓: '让',
+    該: '该',
+    應: '应',
+    關: '关',
+    斷: '断',
+    號: '号',
+    業: '业',
+    產: '产',
+    辦: '办',
+    場: '场',
+    帶: '带',
+    運: '运',
+    連: '连',
+    選: '选',
+    達: '达',
+    須: '须',
+    據: '据',
+    備: '备',
+    餘: '余',
+    環: '环',
+    紀: '纪',
+    錄: '录',
+    養: '养',
+    續: '续',
+    語: '语',
+    課: '课',
+    請: '请',
+    論: '论',
+    講: '讲',
+    謝: '谢',
+    護: '护',
+    讀: '读',
+    變: '变',
+    豐: '丰',
+    費: '费',
+    資: '资',
+    質: '质',
+    購: '购',
+    車: '车',
+    軍: '军',
+    軟: '软',
+    輕: '轻',
+    輛: '辆',
+    轉: '转',
+    輸: '输',
+    辨: '辨',
+    迴: '回',
+    週: '周',
+    鈎: '钩',
+    銀: '银',
+    銅: '铜',
+    鏡: '镜',
+    鐘: '钟',
+    鐵: '铁',
+    門: '门',
+    閉: '闭',
+    陽: '阳',
+    際: '际',
+    隨: '随',
+    險: '险',
+    雜: '杂',
+    雙: '双',
+    雞: '鸡',
+    難: '难',
+    雲: '云',
+    靜: '静',
+    靈: '灵',
+    響: '响',
+    頁: '页',
+    頂: '顶',
+    項: '项',
+    順: '顺',
+    預: '预',
+    頻: '频',
+    題: '题',
+    顧: '顾',
+    額: '额',
+    願: '愿',
+    類: '类',
+    顏: '颜',
+    風: '风',
+    飛: '飞',
+    飯: '饭',
+    飲: '饮',
+    饋: '馈',
+    館: '馆',
+    馬: '马',
+    馮: '冯',
+    駐: '驻',
+    驅: '驱',
+    駕: '驾',
+    驗: '验',
+    骯: '脏',
+    髒: '脏',
+    體: '体',
+    高: '高',
+    髮: '发',
+    鬥: '斗',
+    鬧: '闹',
+    鹽: '盐',
+    麗: '丽',
+    麥: '麦',
+    黃: '黄',
+    點: '点',
+    齊: '齐',
+    齒: '齿',
+    齡: '龄',
+    龍: '龙',
+    龜: '龟',
+    鑑: '鉴',
+    鑒: '鉴',
+    鑰: '钥',
+    鐵: '铁',
+    鎮: '镇',
+    鏈: '链',
+    鎖: '锁',
+    鍊: '链',
+    鍋: '锅',
+    鍾: '钟',
+    鍵: '键',
+    鍛: '锻',
+    鎢: '钨',
+    鎳: '镍',
+    鎖: '锁',
+    鎮: '镇',
+    鐳: '镭',
+    鐵: '铁',
+    鑄: '铸',
+    鑒: '鉴',
+    鑰: '钥',
+    鑽: '钻',
+    鑾: '銮',
+    門: '门',
+    閃: '闪',
+    閉: '闭',
+    開: '开',
+    閏: '闰',
+    閑: '闲',
+    閒: '闲',
+    間: '间',
+    閣: '阁',
+    閥: '阀',
+    閨: '闺',
+    閩: '闽',
+    閫: '阃',
+    閬: '阆',
+    閭: '闾',
+    閱: '阅',
+    閶: '阊',
+    閹: '阉',
+    閻: '阎',
+    閼: '阏',
+    閽: '阍',
+    閾: '阈',
+    閿: '阌',
+    闆: '板',
+    闈: '闱',
+    闊: '阔',
+    闋: '阕',
+    闌: '阑',
+    闍: '阇',
+    闐: '阗',
+    闒: '闼',
+    闓: '闿',
+    闔: '阖',
+    闕: '阙',
+    闖: '闯',
+    闗: '关',
+    闘: '斗',
+    關: '关',
+    闚: '窥',
+    闛: '闶',
+    關: '关',
+    闞: '阚',
+    闟: '闿',
+    闠: '闳',
+    闡: '阐',
+    闢: '辟',
+    闤: '闳',
+    闥: '闼',
+    鹵: '卤',
+    鹹: '咸',
+    麗: '丽',
+    麵: '面',
+    麻: '麻',
+    黃: '黄',
+    黌: '黉',
+    黎: '黎',
+    點: '点',
+    齊: '齐',
+    齋: '斋',
+    齎: '赍',
+    齏: '齑',
+    齒: '齿',
+    齕: '龁',
+    齗: '龂',
+    齙: '龅',
+    齚: '龁',
+    齛: '龁',
+    齜: '龇',
+    齝: '龁',
+    齞: '龁',
+    齟: '龃',
+    齠: '龆',
+    齡: '龄',
+    齣: '出',
+    齦: '龈',
+    齧: '啮',
+    齨: '龁',
+    齩: '咬',
+    齪: '龊',
+    齬: '龉',
+    齮: '龁',
+    齯: '龁',
+    齲: '龋',
+    齳: '龁',
+    齴: '龁',
+    齵: '龁',
+    齶: '腭',
+    齷: '龌',
+    龍: '龙',
+    龐: '庞',
+    龑: '龑',
+    龔: '龚',
+    龕: '龛',
+    龗: '龗',
+    龘: '龘',
+    龜: '龟',
+    龠: '龠',
+    龢: '和',
+    龣: '龣',
+    龤: '龤',
+    龥: '龥',
+    裡: '里',
+    後: '后',
+    裏: '里',
+    於: '于',
+    幾: '几',
+    與: '与',
+    沒: '没',
+    來: '来',
+    歲: '岁',
+    歷: '历',
+    書: '书',
+    東: '东',
+    兩: '两',
+    區: '区',
+    國: '国',
+    報: '报',
+    準: '准',
+    術: '术',
+    條: '条',
+    機: '机',
+    極: '极',
+    標: '标',
+    檢: '检',
+    欄: '栏',
+    歸: '归',
+    歷: '历',
+    殘: '残',
+    殺: '杀',
+    殼: '壳',
+    毀: '毁',
+    每: '每',
+    比: '比',
+    畢: '毕',
+    異: '异',
+    當: '当',
+    痙: '痉',
+    痛: '痛',
+    發: '发',
+    盡: '尽',
+    監: '监',
+    盤: '盘',
+    目: '目',
+    直: '直',
+    相: '相',
+    省: '省',
+    看: '看',
+    真: '真',
+    著: '着',
+    視: '视',
+    計: '计',
+    討: '讨',
+    訓: '训',
+    設: '设',
+    許: '许',
+    訴: '诉',
+    診: '诊',
+    註: '注',
+    評: '评',
+    証: '证',
+    詞: '词',
+    詢: '询',
+    試: '试',
+    詩: '诗',
+    話: '话',
+    該: '该',
+    詳: '详',
+    語: '语',
+    誠: '诚',
+    誤: '误',
+    說: '说',
+    誰: '谁',
+    課: '课',
+    調: '调',
+    談: '谈',
+    請: '请',
+    論: '论',
+    諸: '诸',
+    諾: '诺',
+    謀: '谋',
+    謁: '谒',
+    謂: '谓',
+    謊: '谎',
+    謝: '谢',
+    講: '讲',
+    證: '证',
+    識: '识',
+    譜: '谱',
+    警: '警',
+    議: '议',
+    護: '护',
+    讀: '读',
+    變: '变',
+    讓: '让',
+    豐: '丰',
+    豬: '猪',
+    貓: '猫',
+    財: '财',
+    責: '责',
+    販: '贩',
+    貫: '贯',
+    貨: '货',
+    質: '质',
+    購: '购',
+    貪: '贪',
+    貧: '贫',
+    貫: '贯',
+    貳: '贰',
+    貴: '贵',
+    貶: '贬',
+    貸: '贷',
+    貿: '贸',
+    費: '费',
+    賀: '贺',
+    賊: '贼',
+    賓: '宾',
+    賜: '赐',
+    賞: '赏',
+    賠: '赔',
+    賢: '贤',
+    賣: '卖',
+    賦: '赋',
+    賭: '赌',
+    賴: '赖',
+    賺: '赚',
+    賻: '赙',
+    購: '购',
+    賽: '赛',
+    贊: '赞',
+    贈: '赠',
+    贊: '赞',
+    贏: '赢',
+    赤: '赤',
+    趕: '赶',
+    趙: '赵',
+    趨: '趋',
+    躍: '跃',
+    身: '身',
+    車: '车',
+    軌: '轨',
+    軍: '军',
+    軟: '软',
+    軸: '轴',
+    較: '较',
+    載: '载',
+    輔: '辅',
+    輕: '轻',
+    輛: '辆',
+    輝: '辉',
+    輥: '辊',
+    輦: '辇',
+    輩: '辈',
+    輪: '轮',
+    輯: '辑',
+    輸: '输',
+    輻: '辐',
+    輳: '辏',
+    輾: '辗',
+    轄: '辖',
+    轅: '辕',
+    轉: '转',
+    轆: '辘',
+    轉: '转',
+    轎: '轿',
+    轔: '辚',
+    轟: '轰',
+    轡: '辔',
+    轢: '轹',
+    轡: '辔',
+    轣: '辚',
+    轤: '轳',
+    車: '车',
   };
-  return text.split('').map(c => map[c] || c).join('');
+  return text
+    .split('')
+    .map((c) => map[c] || c)
+    .join('');
 }
 
 /**
