@@ -2885,23 +2885,25 @@ document.addEventListener('DOMContentLoaded', function () {
   updateVideoTable();
 
   // 感叹号图标 fixed 定位 tooltip
-  const helpIcon = document.querySelector('.status-help-icon');
-  if (helpIcon) {
+  const helpIcons = document.querySelectorAll('.status-help-icon[data-tooltip]');
+  if (helpIcons.length > 0) {
     const tooltip = document.createElement('div');
     tooltip.className = 'status-fixed-tooltip';
-    tooltip.textContent = helpIcon.getAttribute('data-tooltip');
     document.body.appendChild(tooltip);
 
-    helpIcon.addEventListener('mouseenter', function () {
-      const rect = this.getBoundingClientRect();
-      tooltip.style.top = rect.top - 8 + 'px';
-      tooltip.style.left = rect.left + rect.width / 2 + 'px';
-      tooltip.style.transform = 'translateX(-50%) translateY(-100%)';
-      tooltip.classList.add('show');
-    });
+    helpIcons.forEach((icon) => {
+      icon.addEventListener('mouseenter', function () {
+        tooltip.textContent = this.getAttribute('data-tooltip');
+        const rect = this.getBoundingClientRect();
+        tooltip.style.top = rect.top - 8 + 'px';
+        tooltip.style.left = rect.left + rect.width / 2 + 'px';
+        tooltip.style.transform = 'translateX(-50%) translateY(-100%)';
+        tooltip.classList.add('show');
+      });
 
-    helpIcon.addEventListener('mouseleave', function () {
-      tooltip.classList.remove('show');
+      icon.addEventListener('mouseleave', function () {
+        tooltip.classList.remove('show');
+      });
     });
   }
 
