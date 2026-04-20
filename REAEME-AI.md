@@ -174,8 +174,9 @@ getBilibiliSubtitle(cid, bvid)
   → 通过 Content Script 在 B站页面内下载音频（绕过 CDN Origin 检查）
   → 解码为 AudioBuffer → 重采样为 16kHz 单声道
   → 分块（30 秒/块，6 秒重叠）
-  → 逐块：特征提取 → Whisper 推理 → 解码 → 去重
-  → 合并所有块 → 生成 SRT/TXT
+  → 逐块：特征提取 → Whisper 推理 → 解码 → 单块去重
+  → 合并所有块：时间戳去重 + TXT 边界重叠裁剪
+  → 生成 SRT/TXT
 ```
 
 ### 1. 音频流获取
@@ -252,8 +253,58 @@ for (let i = 0; i < numChunks; i++) {
 |------|------|------|
 | 单块内去重 | `removeWhisperDuplicates()` | 精确匹配 + 子串包含 + 模糊匹配（相似度 > 0.8） |
 | 跨块去重 | `deduplicateChunksByTime()` | 按时间戳排序，50%+ 时长重叠则去重 |
+| TXT 边界去重 | `trimLeadingOverlapText()` | 只比较“上一块尾部 vs 当前块开头”，命中后裁掉当前块前缀重复段 |
 | 文本行去重 | `removeDuplicateTextLines()` | TXT 导出的安全网，滑动窗口检查连续重复行 |
 | 繁简转换 | `traditionalToSimplified()` | 1000+ 字符映射表，处理 Whisper 输出的繁体字 |
+
+#### TXT 边界去重算法说明
+
+这套去重的目标不是“全文搜索相似句然后删除”，而是专门处理 **30 秒分块 + 6 秒重叠** 带来的块边界重复。因为重复通常都集中在“上一块的结尾”和“下一块的开头”，所以算法只盯这一个位置，精度会比全局模糊去重高很多。
+
+**核心思路：**
+
+1. **只在块边界处理**
+   合并长音频文本时，不直接把 `chunkResult.text` 追加到总文本后面，而是先拿“已合并文本的尾部”和“当前块文本的开头”做一次重叠检测。
+
+2. **先标准化，再匹配**
+   `buildNormalizedTextIndexMap()` 会先对文本做轻量清洗：移除时间戳、空格和常见标点，但保留字符顺序；同时记录每个“标准化字符”在原文中的位置索引 `indexMap`。
+
+3. **优先精确匹配**
+   `findChunkTextOverlapLength()` 会从长到短扫描“上一块后缀”和“当前块前缀”，只要发现大段完全一致，就直接判定为重叠。
+
+4. **精确命不中，再做高阈值模糊匹配**
+   对 Whisper 常见的轻微错字、漏字场景，算法会再检查：
+   - 两段文本前缀已经对上较长一段
+   - 字符频率相似度 `>= 0.86`
+
+   只有同时满足，才认为这是同一段被重复转写，而不是两句真的不同的话。
+
+5. **匹配用标准化文本，裁剪用原始文本**
+   一旦找到重叠长度，就利用 `indexMap` 反推回原始文本的切割位置，只裁掉“当前块开头已经出现过的部分”，后面的新内容全部保留。
+
+**为什么这套方案会比较准：**
+
+- 它只处理“块边界重复”，不会在全文里到处删相似句，所以不容易误删正文里真实存在的重复表达。
+- 它删的是“当前块开头的重复前缀”，不是整句替换，也不是全局改写，因此能保住原有语义和顺序。
+- 它对 Whisper 常见的“小范围错字但整体内容相同”比较宽容，所以像“上一块尾巴和下一块开头大段一致、仅个别字不同”的情况也能命中。
+
+**简化示例：**
+
+```text
+上一块尾部：
+其代表作有串联酒精灯火箭暴力......博主在B站有两个账号
+
+下一块开头：
+其代表作有串联酒精灯火箭暴力......博主在B站有两个账号大号是......
+```
+
+算法不会删除整块，而是只裁掉下一块开头那段已重复的前缀，最终只保留：
+
+```text
+大号是......
+```
+
+这也是它在 TXT 导出场景下效果特别好的原因：去掉了分块重叠导致的重复，但不会破坏正文逻辑。
 
 ### 6. SRT/TXT 导出
 
@@ -276,19 +327,22 @@ for (let i = 0; i < numChunks; i++) {
 | `audioBufferTo16kHzMono` | background.js / script.js | 2917 / 3070 | 重采样为 16kHz 单声道 Float32Array |
 | `WhisperTranscriber` | background.js | 2959 | 后台 Whisper 推理类（Offscreen 模式） |
 | `initFrontendWhisper` | script.js | 3202 | 前端模型加载（WebGPU + WASM 双路径） |
-| `isWebGPUAvailable` | script.js | 3186 | WebGPU 支持检测 |
-| `transcribeAudioInFrontend` | script.js | 3327 | 前端完整转写流程（分块 + 推理 + 合并） |
-| `transcribeSingleChunk` | script.js | 3444 | 单块推理（generate + decode + 去重） |
-| `parseTimestampChunks` | script.js | 3505 | 解析 Whisper `<\|X.XX\|>` 时间戳输出 |
-| `convertToSRT` | script.js | 3129 | Whisper 输出 → SRT 格式 |
+| `isWebGPUAvailable` | script.js | 3188 | WebGPU 支持检测 |
+| `transcribeAudioInFrontend` | script.js | 3329 | 前端完整转写流程（分块 + 推理 + 合并） |
+| `transcribeSingleChunk` | script.js | 3450 | 单块推理（generate + decode + 去重） |
+| `parseTimestampChunks` | script.js | 3511 | 解析 Whisper `<\|X.XX\|>` 时间戳输出 |
+| `convertToSRT` | script.js | 3131 | Whisper 输出 → SRT 格式 |
 | `convertToSrtFormat` | script.js | 2596 | B站字幕 → SRT 格式 |
 | `convertToTxtFormat` | script.js | 2647 | 字幕 → TXT 格式（去时间戳、分句） |
-| `removeWhisperDuplicates` | script.js | 4073 | 单块内幻觉去重 |
-| `deduplicateChunksByTime` | script.js | 4021 | 跨块时间戳去重 |
-| `removeDuplicateTextLines` | script.js | 4133 | 文本行去重（TXT 安全网） |
-| `computeTextSimilarity` | script.js | 4221 | 字符频率相似度计算 |
-| `traditionalToSimplified` | script.js | 3533 | 繁简转换（1000+ 字符映射） |
-| `cleanTranscriptionText` | script.js | 4004 | 转写文本清理 |
+| `cleanTranscriptionText` | script.js | 4010 | 转写文本清理 |
+| `buildNormalizedTextIndexMap` | script.js | 4027 | 构建标准化文本与原文位置映射 |
+| `findChunkTextOverlapLength` | script.js | 4070 | 计算相邻块文本的重叠长度 |
+| `trimLeadingOverlapText` | script.js | 4110 | 裁剪当前块开头的重复前缀 |
+| `deduplicateChunksByTime` | script.js | 4144 | 跨块时间戳去重 |
+| `removeWhisperDuplicates` | script.js | 4196 | 单块内幻觉去重 |
+| `removeDuplicateTextLines` | script.js | 4256 | 文本行去重（TXT 安全网） |
+| `computeTextSimilarity` | script.js | 4344 | 字符频率相似度计算 |
+| `traditionalToSimplified` | script.js | 3539 | 繁简转换（1000+ 字符映射） |
 
 ### 模型配置
 

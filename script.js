@@ -3349,7 +3349,7 @@ async function transcribeAudioInFrontend(audioBuffer, onProgress) {
     const stepSamples = chunkSamples - strideSamples; // 实际步进 24 秒
 
     const allChunks = [];
-    const allTexts = [];
+    let mergedText = '';
 
     // 如果音频 <= 30 秒，直接处理
     if (monoAudio.length <= chunkSamples) {
@@ -3399,7 +3399,14 @@ async function transcribeAudioInFrontend(audioBuffer, onProgress) {
           allChunks.push(...chunkResult.chunks);
         }
         if (chunkResult.text) {
-          allTexts.push(cleanTranscriptionText(chunkResult.text));
+          const cleanedChunkText = cleanTranscriptionText(chunkResult.text);
+          const deduplicatedChunkText = mergedText
+            ? trimLeadingOverlapText(mergedText, cleanedChunkText)
+            : cleanedChunkText;
+
+          if (deduplicatedChunkText) {
+            mergedText = mergedText ? `${mergedText}\n${deduplicatedChunkText}` : deduplicatedChunkText;
+          }
         }
         console.timeEnd(`[块${i + 1}] 后处理`);
       } catch (chunkError) {
@@ -3416,7 +3423,7 @@ async function transcribeAudioInFrontend(audioBuffer, onProgress) {
     // 对重叠区域的片段进行去重（基于时间戳）
     const deduplicatedChunks = deduplicateChunksByTime(allChunks);
 
-    const fullText = allTexts.join('\n');
+    const fullText = mergedText;
     const srtContent = deduplicatedChunks.length > 0 ? convertToSRT(deduplicatedChunks) : fullText;
 
     console.log('全部转写完成, 共', allChunks.length, '个片段, 文本长度:', fullText.length);
@@ -4009,6 +4016,123 @@ function cleanTranscriptionText(text) {
   // 移除多余空格
   cleaned = cleaned.replace(/\s+/g, ' ').trim();
   return cleaned;
+}
+
+/**
+ * 构建文本去重用的标准化索引映射
+ * 便于找到“标准化后重叠部分”在原始文本中的裁剪位置
+ * @param {string} text
+ * @returns {{cleaned: string, normalized: string, indexMap: number[]}}
+ */
+function buildNormalizedTextIndexMap(text) {
+  const cleaned = cleanTranscriptionText(text || '');
+  const normalizedChars = [];
+  const indexMap = [];
+
+  for (let i = 0; i < cleaned.length; i++) {
+    const char = cleaned[i];
+    if (/[\s，,。！？!?；;、:："“”'‘’（）()【】\[\]{}·…—\-_]/.test(char)) {
+      continue;
+    }
+    normalizedChars.push(char);
+    indexMap.push(i);
+  }
+
+  return {
+    cleaned,
+    normalized: normalizedChars.join(''),
+    indexMap,
+  };
+}
+
+/**
+ * 计算两段文本公共前缀长度
+ * @param {string} a
+ * @param {string} b
+ * @returns {number}
+ */
+function getCommonPrefixLength(a, b) {
+  const maxLength = Math.min(a.length, b.length);
+  let i = 0;
+  while (i < maxLength && a[i] === b[i]) {
+    i++;
+  }
+  return i;
+}
+
+/**
+ * 查找相邻音频块文本的重叠长度
+ * 先做精确匹配，再做“公共前缀 + 高相似度”的模糊匹配
+ * @param {string} previousNormalized
+ * @param {string} currentNormalized
+ * @returns {number}
+ */
+function findChunkTextOverlapLength(previousNormalized, currentNormalized) {
+  const MIN_EXACT_OVERLAP = 10;
+  const MIN_FUZZY_OVERLAP = 14;
+  const MAX_OVERLAP_SCAN = 160;
+  const FUZZY_SIMILARITY_THRESHOLD = 0.86;
+
+  if (!previousNormalized || !currentNormalized) return 0;
+
+  const maxOverlap = Math.min(previousNormalized.length, currentNormalized.length, MAX_OVERLAP_SCAN);
+  if (maxOverlap < MIN_EXACT_OVERLAP) return 0;
+
+  for (let len = maxOverlap; len >= MIN_EXACT_OVERLAP; len--) {
+    const previousSuffix = previousNormalized.slice(-len);
+    const currentPrefix = currentNormalized.slice(0, len);
+
+    if (previousSuffix === currentPrefix) {
+      return len;
+    }
+
+    if (len >= MIN_FUZZY_OVERLAP) {
+      const commonPrefixLength = getCommonPrefixLength(previousSuffix, currentPrefix);
+      if (commonPrefixLength >= Math.min(10, len - 2)) {
+        const similarity = computeTextSimilarity(previousSuffix, currentPrefix);
+        if (similarity >= FUZZY_SIMILARITY_THRESHOLD) {
+          return len;
+        }
+      }
+    }
+  }
+
+  return 0;
+}
+
+/**
+ * 裁剪当前音频块开头与上一块重叠的文本
+ * 在 6 秒重叠不变的前提下，尽量减少 TXT 中的重复内容
+ * @param {string} previousText
+ * @param {string} currentText
+ * @returns {string}
+ */
+function trimLeadingOverlapText(previousText, currentText) {
+  const previousIndexMap = buildNormalizedTextIndexMap((previousText || '').slice(-320));
+  const currentIndexMap = buildNormalizedTextIndexMap(currentText);
+
+  if (!previousIndexMap.normalized || !currentIndexMap.normalized) {
+    return currentIndexMap.cleaned;
+  }
+
+  const overlapLength = findChunkTextOverlapLength(previousIndexMap.normalized, currentIndexMap.normalized);
+  if (overlapLength <= 0) {
+    return currentIndexMap.cleaned;
+  }
+
+  if (overlapLength >= currentIndexMap.indexMap.length) {
+    console.log(`TXT重叠裁剪: 当前块完全重复，跳过 ${overlapLength} 个归一化字符`);
+    return '';
+  }
+
+  const cutIndex = currentIndexMap.indexMap[overlapLength - 1] + 1;
+  const trimmed = currentIndexMap.cleaned.slice(cutIndex).trim();
+
+  if (trimmed) {
+    console.log(`TXT重叠裁剪: 删除 ${overlapLength} 个归一化字符`);
+  }
+
+  return trimmed;
 }
 
 /**
