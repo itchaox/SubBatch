@@ -3346,7 +3346,7 @@ async function transcribeAudioInFrontend(audioBuffer, onProgress) {
     const SAMPLE_RATE = 16000;
     const chunkSamples = CHUNK_SECONDS * SAMPLE_RATE;
     const strideSamples = STRIDE_SECONDS * SAMPLE_RATE;
-    const stepSamples = chunkSamples - strideSamples; // 实际步进 20 秒
+    const stepSamples = chunkSamples - strideSamples; // 实际步进 24 秒
 
     const allChunks = [];
     const allTexts = [];
@@ -3406,9 +3406,6 @@ async function transcribeAudioInFrontend(audioBuffer, onProgress) {
         // OOM 等错误时跳过当前块，继续处理后续块
         console.warn(`第 ${i + 1} 块处理失败（可能内存不足），跳过:`, chunkError.message);
       }
-
-      // 每块处理后释放内存，等待 GC 回收 WASM tensor
-      await new Promise((resolve) => setTimeout(resolve, 500));
 
       console.timeEnd(`[块${i + 1}] 🔵 整块总耗时`);
       lastBlockEnd = performance.now();
