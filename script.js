@@ -2677,11 +2677,25 @@ document.addEventListener('DOMContentLoaded', function () {
     return removeDuplicateTextLines(txtContent);
   }
 
+  const TXT_WRAP_PREFERRED_CHARS = 17;
+  const TXT_WRAP_MAX_CHARS = 20;
+  const PROTECTED_INLINE_TOKENS = [
+    'YouTube', 'Python', 'ChatGPT', 'AIGC', 'AI工具', 'AI', 'B站', 'UP主', 'up主',
+  ];
+  const PROTECTED_FUNCTION_PHRASES = [
+    '只有', '一个', '这种', '这个', '那个', '不是', '因为', '如果', '但是', '不过',
+    '以及', '为了', '可以', '我们', '你们', '他们', '大家', '还有', '已经', '还是',
+    '不会', '不能', '不要', '然后', '就是',
+  ];
+  const FORBIDDEN_LEADING_LINE_CHARS = '的了是在和与及并而';
+  const WEAK_TRAILING_CHARS = '只很太更最把被给向跟和与在对的了着过地得';
+  const DANGLING_ACTION_CHARS = '去点看说做开找拿问提学讲写读听想用带发';
+
   // 按中文标点符号将文本分句，每句单独一行
-  // 对于没有标点的长文本，强制按最大字数换行
-  function splitTextToSentences(text) {
+  // 对于没有标点的长文本，优先寻找自然断点，避免简单按固定字数硬切
+  function splitTextToSentences(text, maxChars = 18) {
     if (!text) return '';
-    const MAX_CHARS = 15; // 每行最多字数
+    const MAX_CHARS = maxChars; // 更接近 B 站短字幕观感，默认按 18 字做软约束
     const result = [];
     // 先按句末标点（。！？!?；;）分句
     const sentences = text.split(/(?<=[。！？!?；;])/);
@@ -2693,19 +2707,400 @@ document.addEventListener('DOMContentLoaded', function () {
       for (const part of parts) {
         const p = part.trim();
         if (!p) continue;
-        // 如果拆分后仍然超长（Whisper 经常输出无标点的长文本），强制截断换行
+        // 如果拆分后仍然超长（Whisper 经常输出无标点的长文本），尽量按自然断点换行
         if (p.length > MAX_CHARS) {
-          for (let i = 0; i < p.length; i += MAX_CHARS) {
-            const chunk = p.substring(i, Math.min(i + MAX_CHARS, p.length)).trim();
-            if (chunk) result.push(chunk);
-          }
+          result.push(...softWrapTextByMeaning(p, MAX_CHARS));
         } else {
           result.push(p);
         }
       }
     }
-    return result.join('\n');
+    return repairWrappedLines(result, Math.min(TXT_WRAP_MAX_CHARS, MAX_CHARS + 2)).join('\n');
   }
+
+  // 对无标点长文本做软换行：通过候选断点评分，尽量找到更像人话的断句位置
+  function softWrapTextByMeaning(text, maxChars = 18) {
+    const trimmed = text.trim();
+    if (!trimmed) return [];
+    if (trimmed.length <= maxChars) return [trimmed];
+
+    const result = [];
+    let remaining = trimmed;
+    const preferredChars = Math.min(18, Math.max(16, maxChars - 1));
+
+    while (remaining.length > maxChars) {
+      const splitIndex = findBestWrapIndex(remaining, maxChars, preferredChars);
+      const head = remaining.slice(0, splitIndex).trim();
+      if (head) result.push(head);
+      remaining = remaining.slice(splitIndex).trim();
+      if (!remaining) break;
+    }
+
+    if (remaining) result.push(remaining);
+    return result;
+  }
+
+  function findBestWrapIndex(text, maxChars, preferredChars = TXT_WRAP_PREFERRED_CHARS) {
+    const searchEnd = Math.min(text.length - 1, maxChars);
+    if (searchEnd <= 1) return Math.min(maxChars, text.length);
+
+    const minChars = Math.max(4, preferredChars - 8);
+    const protectedSpans = collectProtectedSpans(text);
+    const candidateIndexes = collectWrapCandidateIndexes(text, minChars, searchEnd);
+    let bestIndex = -1;
+    let bestScore = Number.NEGATIVE_INFINITY;
+
+    for (const i of candidateIndexes) {
+      const score = scoreWrapCandidate(text, i, preferredChars, protectedSpans);
+      if (score > bestScore) {
+        bestScore = score;
+        bestIndex = i;
+      }
+    }
+
+    if (bestIndex > 0 && Number.isFinite(bestScore)) {
+      return bestIndex;
+    }
+
+    let fallbackIndex = -1;
+    let fallbackDistance = Number.POSITIVE_INFINITY;
+    for (const i of candidateIndexes) {
+      if (isForbiddenSplitPoint(text, i, protectedSpans)) continue;
+      const head = text.slice(0, i).trim();
+      const tail = text.slice(i).trim();
+      if (!head || !tail) continue;
+
+      const distance = Math.abs(head.length - preferredChars);
+      if (distance < fallbackDistance) {
+        fallbackDistance = distance;
+        fallbackIndex = i;
+      }
+    }
+
+    if (fallbackIndex > 0) {
+      return fallbackIndex;
+    }
+
+    for (let i = searchEnd; i >= minChars; i--) {
+      const head = text.slice(0, i).trim();
+      const tail = text.slice(i).trim();
+      if (!head || !tail) continue;
+      return i;
+    }
+
+    return Math.min(maxChars, text.length);
+  }
+
+  function collectWrapCandidateIndexes(text, minChars, searchEnd) {
+    const candidates = new Set();
+    const segmenterBoundaries = collectSegmenterBoundaryIndexes(text, minChars, searchEnd);
+
+    for (const index of segmenterBoundaries) {
+      candidates.add(index);
+    }
+
+    if (candidates.size === 0) {
+      for (let i = minChars; i <= searchEnd; i++) {
+        candidates.add(i);
+      }
+    }
+
+    return Array.from(candidates).sort((a, b) => a - b);
+  }
+
+  function collectSegmenterBoundaryIndexes(text, minChars, searchEnd) {
+    if (typeof Intl === 'undefined' || typeof Intl.Segmenter !== 'function') {
+      return [];
+    }
+
+    try {
+      const segmenter = new Intl.Segmenter('zh-CN', { granularity: 'word' });
+      const boundaries = [];
+      for (const part of segmenter.segment(text)) {
+        const end = part.index + part.segment.length;
+        if (end >= minChars && end <= searchEnd) {
+          boundaries.push(end);
+        }
+      }
+      return boundaries;
+    } catch (error) {
+      return [];
+    }
+  }
+
+  function scoreWrapCandidate(text, index, preferredChars, protectedSpans) {
+    if (isForbiddenSplitPoint(text, index, protectedSpans)) {
+      return Number.NEGATIVE_INFINITY;
+    }
+
+    const head = text.slice(0, index).trim();
+    const tail = text.slice(index).trim();
+    if (!head || !tail) {
+      return Number.NEGATIVE_INFINITY;
+    }
+
+    const headLen = head.length;
+    const tailLen = tail.length;
+    const headLastChar = head.slice(-1);
+    const tailFirstChar = tail[0];
+    let score = 140 - Math.abs(headLen - preferredChars) * 6;
+
+    if (/[。！？!?；;]/.test(headLastChar)) {
+      score += 120;
+    } else if (/[，,、：:；;]/.test(headLastChar)) {
+      score += 70;
+    }
+
+    if (startsWithSentenceStarter(tail)) {
+      score += 45;
+    }
+
+    if (headLen >= 12 && headLen <= 18) {
+      score += 20;
+    }
+
+    if (tailLen <= 2 || headLen <= 2) {
+      score -= 160;
+    } else if (tailLen <= 4) {
+      score -= 90;
+    } else if (tailLen <= 6) {
+      score -= 30;
+    }
+
+    if (headLen <= 4) {
+      score -= 50;
+    }
+
+    if (startsWithForbiddenLineChar(tailFirstChar)) {
+      score -= 90;
+    }
+
+    if (endsWithWeakTrailingChar(headLastChar)) {
+      score -= 90;
+    }
+
+    if (endsWithDanglingActionChar(headLastChar)) {
+      score -= 140;
+    }
+
+    if (startsWithBackwardAttachFragment(tail)) {
+      score -= 80;
+    }
+
+    if (tailLen >= 8 && tailLen <= 18) {
+      score += 10;
+    }
+
+    return score;
+  }
+
+  function isForbiddenSplitPoint(text, index, protectedSpans = collectProtectedSpans(text)) {
+    if (index <= 0 || index >= text.length) return true;
+
+    for (const span of protectedSpans) {
+      if (index > span.start && index < span.end) {
+        return true;
+      }
+    }
+
+    const previousChar = text[index - 1];
+    const nextChar = text[index];
+    if (!previousChar || !nextChar) return true;
+    if (/\s/.test(previousChar) || /\s/.test(nextChar)) return false;
+
+    if (/[A-Za-z0-9]/.test(previousChar) && /[A-Za-z0-9]/.test(nextChar)) {
+      return true;
+    }
+
+    if ((/[A-Za-z0-9]/.test(previousChar) && /[\u4e00-\u9fa5]/.test(nextChar)) ||
+        (/[\u4e00-\u9fa5]/.test(previousChar) && /[A-Za-z0-9]/.test(nextChar))) {
+      return true;
+    }
+
+    if ('的了着过地得们'.includes(nextChar)) {
+      return true;
+    }
+
+    if (WEAK_TRAILING_CHARS.includes(previousChar)) {
+      return true;
+    }
+
+    if (endsWithDanglingActionChar(previousChar) && /[\u4e00-\u9fa5A-Za-z0-9]/.test(nextChar)) {
+      return true;
+    }
+
+    return false;
+  }
+
+  function collectProtectedSpans(text) {
+    const spans = [];
+    const protectedTokens = [...PROTECTED_INLINE_TOKENS, '315'];
+    const protectedPhrases = PROTECTED_FUNCTION_PHRASES;
+    const asciiTokenRegex = /[A-Za-z0-9]+/g;
+
+    let match;
+    while ((match = asciiTokenRegex.exec(text)) !== null) {
+      if (match[0].length >= 2) {
+        spans.push({ start: match.index, end: match.index + match[0].length });
+      }
+    }
+
+    for (const token of [...protectedTokens, ...protectedPhrases]) {
+      let searchStart = 0;
+      while (searchStart < text.length) {
+        const index = text.indexOf(token, searchStart);
+        if (index === -1) break;
+        spans.push({ start: index, end: index + token.length });
+        searchStart = index + token.length;
+      }
+    }
+
+    spans.sort((a, b) => a.start - b.start);
+    const merged = [];
+    for (const span of spans) {
+      const last = merged[merged.length - 1];
+      if (!last || span.start > last.end) {
+        merged.push({ ...span });
+      } else {
+        last.end = Math.max(last.end, span.end);
+      }
+    }
+
+    return merged;
+  }
+
+  function repairWrappedLines(lines, maxChars = TXT_WRAP_MAX_CHARS) {
+    if (!Array.isArray(lines) || lines.length === 0) return [];
+
+    let repaired = lines.map((line) => line.trim()).filter(Boolean);
+    repaired = repairWrappedLinesPass(repaired, maxChars);
+    repaired = repairWrappedLinesPass(repaired, maxChars);
+    return repaired;
+  }
+
+  function repairWrappedLinesPass(lines, maxChars) {
+    const workingLines = [...lines];
+    const result = [];
+
+    for (let i = 0; i < workingLines.length; i++) {
+      const current = (workingLines[i] || '').trim();
+      if (!current) continue;
+
+      const previous = result[result.length - 1];
+      const next = i + 1 < workingLines.length ? (workingLines[i + 1] || '').trim() : '';
+
+      if (shouldMergeLineIntoPrevious(current, previous, maxChars)) {
+        result[result.length - 1] = `${previous}${current}`;
+        continue;
+      }
+
+      if (shouldMergeLineIntoNext(current, next, previous, maxChars)) {
+        workingLines[i + 1] = `${current}${next}`;
+        continue;
+      }
+
+      result.push(current);
+    }
+
+    return result;
+  }
+
+  function shouldMergeLineIntoPrevious(current, previous, maxChars) {
+    if (!previous || isNaturalShortLine(current)) return false;
+
+    if (current.length <= 2) {
+      return previous.length < maxChars - 2 && !/[。！？!?；;]$/.test(previous);
+    }
+
+    if (current.length <= 8 && endsWithDanglingActionChar(previous.slice(-1))) {
+      return previous.length <= maxChars + 2 && !/[。！？!?；;]$/.test(previous);
+    }
+
+    if (current.length <= 4 && endsWithWeakTrailingChar(previous.slice(-1))) {
+      return previous.length <= maxChars + 2 && !/[。！？!?；;]$/.test(previous);
+    }
+
+    if (current.length <= 4 && startsWithBackwardAttachFragment(current)) {
+      return previous.length <= maxChars + 2;
+    }
+
+    return false;
+  }
+
+  function shouldMergeLineIntoNext(current, next, previous, maxChars) {
+    if (!next || isNaturalShortLine(current)) return false;
+
+    if (current.length <= 2) {
+      return endsWithWeakTrailingChar(current.slice(-1)) || !previous || previous.length >= maxChars - 2;
+    }
+
+    if (current.length <= 4 && startsWithForwardConnector(current)) {
+      return true;
+    }
+
+    if (current.length <= 4 && endsWithWeakTrailingChar(current.slice(-1))) {
+      return true;
+    }
+
+    if (current.length <= 8 && endsWithDanglingActionChar(current.slice(-1))) {
+      return true;
+    }
+
+    return false;
+  }
+
+  function startsWithSentenceStarter(text) {
+    return /^(但是|不过|然后|所以|因此|另外|后来|最后|于是|那么|其实|比如|如果|因为|接下来|好那|那我们)/.test(text || '');
+  }
+
+  function startsWithForbiddenLineChar(char) {
+    return FORBIDDEN_LEADING_LINE_CHARS.includes(char || '');
+  }
+
+  function endsWithWeakTrailingChar(char) {
+    return WEAK_TRAILING_CHARS.includes(char || '');
+  }
+
+  function endsWithDanglingActionChar(char) {
+    return DANGLING_ACTION_CHARS.includes(char || '');
+  }
+
+  function startsWithBackwardAttachFragment(text) {
+    return /^(的|了|着|过|地|得|们)/.test(text || '');
+  }
+
+  function startsWithForwardConnector(text) {
+    return /^(而且|但是|然后|所以|因此|不过|另外|接着|于是|那么|并且|以及|和|与|及|并|而)/.test(text || '');
+  }
+
+  function isNaturalShortLine(text) {
+    const trimmed = (text || '').trim();
+    if (!trimmed) return false;
+
+    return /^(先叠个假|谢谢大家|拜拜|大家好|好的|好吧|行吧|对吧|没错|当然|可以)$/.test(trimmed);
+  }
+
+  function formatReadableChunksForTxt(chunks, maxChars = 18) {
+    if (!Array.isArray(chunks) || chunks.length === 0) return '';
+
+    const lines = [];
+    for (const chunk of chunks) {
+      const text = cleanTranscriptionText(chunk?.text || '');
+      if (!text) continue;
+
+      const wrapped = splitTextToSentences(text, maxChars)
+        .split('\n')
+        .map((line) => line.trim())
+        .filter(Boolean);
+
+      lines.push(...wrapped);
+    }
+
+    return repairWrappedLines(lines, Math.min(TXT_WRAP_MAX_CHARS, maxChars + 2)).join('\n');
+  }
+
+  // 让外层前端转写流程也能复用 TXT 格式化逻辑
+  window.formatReadableChunksForTxt = formatReadableChunksForTxt;
 
   // 清空表格
   function clearTable() {
@@ -3291,12 +3686,14 @@ async function initFrontendWhisper(onProgress) {
     }
 
     // 强制覆盖模型默认的 forced_decoder_ids 为中文转写
-    // 模型默认可能是英文 (50259)，必须覆盖为中文 (50260)
-    // token IDs: 50260=<|zh|>, 50359=<|transcribe|>
+    // 不写死 token id，直接从模型 generation_config 读取，避免不同模型配置不一致
+    const chineseTokenId = frontendWhisperModel.generation_config?.lang_to_id?.['<|zh|>'] ?? 50260;
+    const transcribeTokenId = frontendWhisperModel.generation_config?.task_to_id?.transcribe ?? 50360;
     frontendWhisperModel.generation_config.forced_decoder_ids = [
-      [1, 50260], // 中文
-      [2, 50359], // 转写任务
+      [1, chineseTokenId],
+      [2, transcribeTokenId],
     ];
+    frontendWhisperModel.generation_config.return_timestamps = true;
 
     // Monkey-patch _retrieve_init_tokens 确保中文语言设置不被覆盖
     // Transformers.js v3 的 generate() 内部会调用此方法来决定语言 token
@@ -3307,6 +3704,7 @@ async function initFrontendWhisper(onProgress) {
         // 强制注入中文语言参数
         generationConfig.language = 'chinese';
         generationConfig.task = 'transcribe';
+        generationConfig.return_timestamps = true;
         return originalRetrieve.call(this, generationConfig, ...args);
       };
       console.log('已 patch _retrieve_init_tokens 强制使用中文');
@@ -3357,7 +3755,22 @@ async function transcribeAudioInFrontend(audioBuffer, onProgress) {
       const { input_features } = await frontendWhisperProcessor(monoAudio);
       if (onProgress) onProgress(55, '开始转写音频...');
 
-      return await transcribeSingleChunk(input_features, 0, onProgress);
+      const singleChunkResult = await transcribeSingleChunk(input_features, 0, onProgress);
+      if (singleChunkResult.chunks.length > 0) {
+        const readableChunks = buildReadableChunksFromTimestamps(singleChunkResult.chunks);
+        if (readableChunks.length > 0) {
+          const formattedText = typeof window.formatReadableChunksForTxt === 'function'
+            ? window.formatReadableChunksForTxt(readableChunks)
+            : readableChunks.map((chunk) => chunk.text).join('\n');
+          return {
+            text: formattedText,
+            chunks: readableChunks,
+            srtContent: convertToSRT(readableChunks),
+          };
+        }
+      }
+
+      return singleChunkResult;
     }
 
     // 长音频：分块处理
@@ -3423,15 +3836,29 @@ async function transcribeAudioInFrontend(audioBuffer, onProgress) {
     // 对重叠区域的片段进行去重（基于时间戳）
     const deduplicatedChunks = deduplicateChunksByTime(allChunks);
 
-    const fullText = mergedText;
-    const srtContent = deduplicatedChunks.length > 0 ? convertToSRT(deduplicatedChunks) : fullText;
+    const readableChunks = deduplicatedChunks.length > 0 ? buildReadableChunksFromTimestamps(deduplicatedChunks) : [];
+    const fullText = readableChunks.length > 0
+      ? (
+        typeof window.formatReadableChunksForTxt === 'function'
+          ? window.formatReadableChunksForTxt(readableChunks)
+          : readableChunks.map((chunk) => chunk.text).join('\n')
+      )
+      : mergedText;
+    const srtContent = readableChunks.length > 0 ? convertToSRT(readableChunks) : fullText;
 
-    console.log('全部转写完成, 共', allChunks.length, '个片段, 文本长度:', fullText.length);
+    console.log(
+      '全部转写完成, 原始片段:',
+      allChunks.length,
+      '个, 可读分段:',
+      readableChunks.length,
+      '个, 文本长度:',
+      fullText.length,
+    );
     console.timeEnd('⏱️ 转写总耗时');
 
     return {
       text: fullText,
-      chunks: allChunks,
+      chunks: readableChunks.length > 0 ? readableChunks : allChunks,
       srtContent: srtContent,
     };
   } catch (error) {
@@ -3451,6 +3878,8 @@ async function transcribeSingleChunk(input_features, timeOffset, onProgress, chu
   let chunks = [];
   let text = '';
   const tag = chunkIndex ? `[块${chunkIndex}]` : '[单块]';
+  const chineseTokenId = frontendWhisperModel.generation_config?.lang_to_id?.['<|zh|>'] ?? 50260;
+  const transcribeTokenId = frontendWhisperModel.generation_config?.task_to_id?.transcribe ?? 50360;
 
   // 只跑一次 generate（带时间戳），不再 fallback 二次推理
   console.time(`${tag} generate`);
@@ -3459,8 +3888,8 @@ async function transcribeSingleChunk(input_features, timeOffset, onProgress, chu
     {
       max_new_tokens: 448,
       forced_decoder_ids: [
-        [1, 50260], // 中文
-        [2, 50359], // 转写任务
+        [1, chineseTokenId],
+        [2, transcribeTokenId],
       ],
       language: 'chinese',
       task: 'transcribe',
@@ -3473,18 +3902,16 @@ async function transcribeSingleChunk(input_features, timeOffset, onProgress, chu
 
   console.time(`${tag} decode`);
   try {
-    // 尝试带时间戳解码
-    const decodedWithTs = frontendWhisperTokenizer.batch_decode(output, {
-      skip_special_tokens: false,
-      decode_with_timestamps: true,
-    });
-    const rawChunks = parseTimestampChunks(decodedWithTs[0] || '');
+    const rawChunks = decodeWhisperTimestampChunks(output);
     const dedupedRawChunks = removeWhisperDuplicates(rawChunks);
     for (const chunk of dedupedRawChunks) {
       chunks.push({
         text: chunk.text,
         timestamp: [chunk.timestamp[0] + timeOffset, chunk.timestamp[1] + timeOffset],
       });
+    }
+    if (chunks.length > 0) {
+      console.log(`${tag} 时间戳解析成功:`, chunks.length, '段');
     }
   } catch (tsError) {
     console.warn(tag, '时间戳解析失败:', tsError.message);
@@ -3501,6 +3928,326 @@ async function transcribeSingleChunk(input_features, timeOffset, onProgress, chu
 
   const srtContent = chunks.length > 0 ? convertToSRT(chunks) : text;
   return { text, chunks, srtContent };
+}
+
+/**
+ * 提取 Whisper generate 输出中的 token ids
+ * 兼容 Tensor 和 return_dict_in_generate 风格的返回结构
+ * @param {*} output
+ * @returns {number[]}
+ */
+function extractWhisperTokenIds(output) {
+  const sequences = output?.sequences || output;
+  if (!sequences) return [];
+
+  if (typeof sequences.tolist === 'function') {
+    const values = sequences.tolist();
+    return Array.isArray(values[0]) ? values[0].map((v) => Number(v)) : values.map((v) => Number(v));
+  }
+
+  if (Array.isArray(sequences)) {
+    return (Array.isArray(sequences[0]) ? sequences[0] : sequences).map((v) => Number(v));
+  }
+
+  return [];
+}
+
+/**
+ * Whisper 时间戳 token 的时间精度（秒）
+ * Transformers.js 管线内部也是按 chunk_length / max_source_positions 计算
+ * @returns {number}
+ */
+function getWhisperTimePrecision() {
+  const chunkLength = frontendWhisperProcessor?.feature_extractor?.config?.chunk_length || 30;
+  const maxSourcePositions = frontendWhisperModel?.config?.max_source_positions || 1500;
+  return chunkLength / maxSourcePositions;
+}
+
+/**
+ * 规范化 Whisper 时间戳分段
+ * 某些分段的结束时间可能缺失，这里会优先用下一段开始时间补齐
+ * @param {Array<{text: string, timestamp: [number, number]}>} chunks
+ * @returns {Array<{text: string, timestamp: [number, number]}>}
+ */
+function normalizeWhisperTimestampChunks(chunks) {
+  if (!Array.isArray(chunks) || chunks.length === 0) return [];
+
+  const normalized = [];
+  for (let i = 0; i < chunks.length; i++) {
+    const current = chunks[i];
+    const cleanedText = cleanTranscriptionText(current?.text || '');
+    if (!cleanedText) continue;
+
+    let start = Array.isArray(current?.timestamp) ? current.timestamp[0] : null;
+    let end = Array.isArray(current?.timestamp) ? current.timestamp[1] : null;
+    const nextStart = Array.isArray(chunks[i + 1]?.timestamp) ? chunks[i + 1].timestamp[0] : null;
+
+    if (typeof start !== 'number' || Number.isNaN(start)) continue;
+
+    if (typeof end !== 'number' || Number.isNaN(end) || end <= start) {
+      if (typeof nextStart === 'number' && nextStart > start) {
+        end = nextStart;
+      } else {
+        const estimatedDuration = Math.min(4, Math.max(0.6, cleanedText.length * 0.18));
+        end = start + estimatedDuration;
+      }
+    }
+
+    normalized.push({
+      text: cleanedText,
+      timestamp: [start, end],
+    });
+  }
+
+  return normalized;
+}
+
+/**
+ * 使用 Transformers.js 内置 Whisper ASR 解码拿结构化时间戳
+ * 如果官方路径失败，再降级到字符串时间戳解析
+ * @param {*} output
+ * @returns {Array<{text: string, timestamp: [number, number]}>}
+ */
+function decodeWhisperTimestampChunks(output) {
+  const tokenIds = extractWhisperTokenIds(output);
+  if (tokenIds.length === 0) return [];
+
+  const tokenizer = frontendWhisperTokenizer;
+  const timePrecision = getWhisperTimePrecision();
+
+  if (tokenizer && typeof tokenizer._decode_asr === 'function') {
+    try {
+      const [, metadata] = tokenizer._decode_asr(
+        [{ tokens: tokenIds }],
+        {
+          time_precision: timePrecision,
+          return_timestamps: true,
+          force_full_sequences: false,
+        },
+      );
+      const officialChunks = normalizeWhisperTimestampChunks(metadata?.chunks || []);
+      if (officialChunks.length > 0) {
+        return officialChunks;
+      }
+    } catch (officialError) {
+      console.warn('Whisper 官方时间戳解码失败，回退到字符串解析:', officialError.message);
+    }
+  }
+
+  const decodedWithTs = tokenizer.batch_decode(output, {
+    skip_special_tokens: false,
+    decode_with_timestamps: true,
+    time_precision: timePrecision,
+  });
+  return normalizeWhisperTimestampChunks(parseTimestampChunks(decodedWithTs[0] || ''));
+}
+
+/**
+ * 按停顿、长度和常见连接词将时间戳片段整理成更可读的分段
+ * 目标不是做正式字幕，而是让 TXT 导出更接近自然语义断句
+ * @param {Array<{text: string, timestamp: [number, number]}>} chunks
+ * @returns {Array<{text: string, timestamp: [number, number]}>}
+ */
+function buildReadableChunksFromTimestamps(chunks) {
+  if (!Array.isArray(chunks) || chunks.length === 0) return [];
+
+  const sortedChunks = [...chunks]
+    .filter((chunk) => chunk?.text && Array.isArray(chunk?.timestamp) && typeof chunk.timestamp[0] === 'number')
+    .sort((a, b) => a.timestamp[0] - b.timestamp[0]);
+
+  if (sortedChunks.length === 0) return [];
+
+  const STRONG_BREAK_GAP = 0.78;
+  const SOFT_BREAK_GAP = 0.36;
+  const TARGET_CHARS = 18;
+  const MAX_CHARS = 22;
+  const MAX_DURATION = 5.2;
+  const sentenceStarters = ['但是', '不过', '所以', '因此', '另外', '后来', '最后', '与此同时', '总之', '接下来', '然后', '那'];
+
+  const result = [];
+  let current = null;
+
+  for (const chunk of sortedChunks) {
+    const text = cleanTranscriptionText(chunk.text);
+    if (!text) continue;
+
+    const [start, end] = chunk.timestamp;
+
+    if (!current) {
+      current = {
+        text,
+        timestamp: [start, end],
+      };
+      continue;
+    }
+
+    const gap = Math.max(0, start - current.timestamp[1]);
+    const currentDuration = Math.max(0, current.timestamp[1] - current.timestamp[0]);
+    const currentText = current.text;
+    const shouldBreakBefore =
+      /[。！？!?；;]$/.test(currentText) ||
+      gap >= STRONG_BREAK_GAP ||
+      currentText.length >= MAX_CHARS ||
+      currentDuration >= MAX_DURATION ||
+      (gap >= SOFT_BREAK_GAP && currentText.length >= TARGET_CHARS) ||
+      (gap >= 0.22 && currentText.length >= 16 && sentenceStarters.some((starter) => text.startsWith(starter)));
+
+    if (shouldBreakBefore) {
+      result.push(current);
+      current = {
+        text,
+        timestamp: [start, end],
+      };
+      continue;
+    }
+
+    current.text = joinReadableChunkText(current.text, text);
+    current.timestamp[1] = Math.max(current.timestamp[1], end);
+  }
+
+  if (current) {
+    result.push(current);
+  }
+
+  return polishReadableChunks(mergeShortReadableChunks(result));
+}
+
+/**
+ * 连接两个转写片段文本
+ * 中文默认直接拼接，英文/数字边界补一个空格避免粘连
+ * @param {string} previousText
+ * @param {string} currentText
+ * @returns {string}
+ */
+function joinReadableChunkText(previousText, currentText) {
+  if (!previousText) return currentText;
+  if (!currentText) return previousText;
+
+  const prevLastChar = previousText.slice(-1);
+  const currentFirstChar = currentText[0];
+  const needsSpace = /[A-Za-z0-9]$/.test(prevLastChar) && /^[A-Za-z0-9]/.test(currentFirstChar);
+
+  return `${previousText}${needsSpace ? ' ' : ''}${currentText}`;
+}
+
+/**
+ * 合并过短的可读分段，避免导出时出现碎片化短句
+ * @param {Array<{text: string, timestamp: [number, number]}>} chunks
+ * @returns {Array<{text: string, timestamp: [number, number]}>}
+ */
+function mergeShortReadableChunks(chunks) {
+  if (!Array.isArray(chunks) || chunks.length <= 1) return chunks;
+
+  const result = [];
+  for (const chunk of chunks) {
+    const last = result[result.length - 1];
+    const gap = last ? Math.max(0, chunk.timestamp[0] - last.timestamp[1]) : 0;
+
+    if (last && chunk.text.length <= 8 && gap < 0.28 && !/[。！？!?；;]$/.test(last.text)) {
+      last.text = joinReadableChunkText(last.text, chunk.text);
+      last.timestamp[1] = Math.max(last.timestamp[1], chunk.timestamp[1]);
+      continue;
+    }
+
+    result.push({
+      text: chunk.text,
+      timestamp: [...chunk.timestamp],
+    });
+  }
+
+  return result;
+}
+
+/**
+ * 再做一层语义修整，把明显孤立的短句并回前后语境
+ * 例如“与视觉”“放开下手”“最后我们来看一下”这类不应单独成行的片段
+ * @param {Array<{text: string, timestamp: [number, number]}>} chunks
+ * @returns {Array<{text: string, timestamp: [number, number]}>}
+ */
+function polishReadableChunks(chunks) {
+  if (!Array.isArray(chunks) || chunks.length <= 1) return chunks;
+
+  const result = [];
+  for (let i = 0; i < chunks.length; i++) {
+    const current = {
+      text: chunks[i].text,
+      timestamp: [...chunks[i].timestamp],
+    };
+    const previous = result[result.length - 1];
+    const next = chunks[i + 1];
+
+    if (previous && shouldMergeReadableChunkBackward(previous, current)) {
+      previous.text = joinReadableChunkText(previous.text, current.text);
+      previous.timestamp[1] = Math.max(previous.timestamp[1], current.timestamp[1]);
+      continue;
+    }
+
+    if (next && shouldMergeReadableChunkForward(current, next, previous)) {
+      result.push({
+        text: joinReadableChunkText(current.text, next.text),
+        timestamp: [current.timestamp[0], next.timestamp[1]],
+      });
+      i++;
+      continue;
+    }
+
+    result.push(current);
+  }
+
+  return result;
+}
+
+function shouldMergeReadableChunkBackward(previous, current) {
+  if (!previous || !current) return false;
+  if (/[。！？!?；;]$/.test(previous.text)) return false;
+
+  const gap = Math.max(0, current.timestamp[0] - previous.timestamp[1]);
+  const combinedText = joinReadableChunkText(previous.text, current.text);
+  const combinedDuration = Math.max(0, current.timestamp[1] - previous.timestamp[0]);
+
+  if (gap > 0.28 || combinedText.length > 32 || combinedDuration > 6.4) {
+    return false;
+  }
+
+  return (
+    current.text.length <= 6 ||
+    startsWithReadableContinuationMarker(current.text) ||
+    (current.text.length <= 12 && endsWithReadableWeakCue(previous.text)) ||
+    (current.text.length <= 10 && gap < 0.18)
+  );
+}
+
+function shouldMergeReadableChunkForward(current, next, previous) {
+  if (!current || !next) return false;
+  if (/[。！？!?；;]$/.test(current.text)) return false;
+
+  const gap = Math.max(0, next.timestamp[0] - current.timestamp[1]);
+  const combinedText = joinReadableChunkText(current.text, next.text);
+  const combinedDuration = Math.max(0, next.timestamp[1] - current.timestamp[0]);
+
+  if (gap > 0.22 || combinedText.length > 30 || combinedDuration > 6.0) {
+    return false;
+  }
+
+  return (
+    isLikelyReadableIntro(current.text) ||
+    (current.text.length <= 8 && (!previous || /[。！？!?；;]$/.test(previous.text)))
+  );
+}
+
+function startsWithReadableContinuationMarker(text) {
+  return /^(与|和|而|并|但|却|还|也|再|又|并且|而且|以及|或者|后面|同时|甚至|包括|比如|像|跟|把|让|给|向|对|从|在|将|就|都|会|要)/.test(text || '');
+}
+
+function endsWithReadableWeakCue(text) {
+  return /([的地得着了过和与及并而但把让给向对从在为被]|都有|还有|以及|或者|然后|后面|前面|通过|为了|如果|因为|就是|这个|那个)$/.test(text || '');
+}
+
+function isLikelyReadableIntro(text) {
+  const trimmed = (text || '').trim();
+  if (!trimmed || trimmed.length > 14) return false;
+
+  return /^(好|好那|那|然后|接下来|最后|下面|本周|那我们|我们先|我们再|先来看|再来看|来看一下|最后我们来看一下|好那最后)/i.test(trimmed);
 }
 
 /**
