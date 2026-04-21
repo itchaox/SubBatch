@@ -2495,7 +2495,9 @@ async function downloadViaContentScript(audioUrl, tabId, backupUrls, onProgress)
       return;
     }
 
+    const requestId = `subbatch-audio-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
     console.log('通过 MAIN world 下载音频, tabId:', tabId);
+    console.log('音频下载 requestId:', requestId);
     if (onProgress) onProgress(5, 'downloading', '准备下载音频...');
 
     const timeoutId = setTimeout(() => {
@@ -2511,6 +2513,10 @@ async function downloadViaContentScript(audioUrl, tabId, backupUrls, onProgress)
     }
 
     const messageHandler = (message, sender, sendResponse) => {
+      if (message.requestId !== requestId) {
+        return;
+      }
+
       if (message.action === 'audioChunk') {
         chunks.push(new Uint8Array(message.data));
         totalSize += message.data.length;
@@ -2541,6 +2547,11 @@ async function downloadViaContentScript(audioUrl, tabId, backupUrls, onProgress)
       .executeScript({
         target: { tabId },
         func: () => {
+          if (window.__subbatchAudioBridgeInstalled) {
+            return;
+          }
+
+          window.__subbatchAudioBridgeInstalled = true;
           window.addEventListener('message', (event) => {
             if (event.source !== window) return;
             if (!event.data || event.data.__subbatch !== true) return;
@@ -2550,13 +2561,18 @@ async function downloadViaContentScript(audioUrl, tabId, backupUrls, onProgress)
               // sendMessage 用 JSON，需要转成普通数组
               chrome.runtime.sendMessage({
                 action: 'audioChunk',
+                requestId: event.data.requestId,
                 data: Array.from(event.data.data),
               });
             } else if (event.data.type === 'COMPLETE') {
-              chrome.runtime.sendMessage({ action: 'audioDataComplete' });
+              chrome.runtime.sendMessage({
+                action: 'audioDataComplete',
+                requestId: event.data.requestId,
+              });
             } else if (event.data.type === 'ERROR') {
               chrome.runtime.sendMessage({
                 action: 'audioDataError',
+                requestId: event.data.requestId,
                 error: event.data.error,
               });
             }
@@ -2568,7 +2584,7 @@ async function downloadViaContentScript(audioUrl, tabId, backupUrls, onProgress)
         return chrome.scripting.executeScript({
           target: { tabId },
           world: 'MAIN',
-          func: (fallbackUrl, apiBackupUrls) => {
+          func: (fallbackUrl, apiBackupUrls, currentRequestId) => {
             // 优先使用 API 返回的 URL（已对应正确的 bvid/cid）
             // __playinfo__ 是浏览器当前播放视频的数据，可能是别的视频，不能优先用
             let audioUrl = fallbackUrl || null;
@@ -2611,7 +2627,12 @@ async function downloadViaContentScript(audioUrl, tabId, backupUrls, onProgress)
 
             if (!audioUrl) {
               window.postMessage(
-                { __subbatch: true, type: 'ERROR', error: '无法获取音频 URL，请确保视频正在播放' },
+                {
+                  __subbatch: true,
+                  requestId: currentRequestId,
+                  type: 'ERROR',
+                  error: '无法获取音频 URL，请确保视频正在播放',
+                },
                 '*',
               );
               return;
@@ -2659,13 +2680,21 @@ async function downloadViaContentScript(audioUrl, tabId, backupUrls, onProgress)
                     window.postMessage(
                       {
                         __subbatch: true,
+                        requestId: currentRequestId,
                         type: 'CHUNK',
                         data: uint8.slice(j, j + CHUNK),
                       },
                       '*',
                     );
                   }
-                  window.postMessage({ __subbatch: true, type: 'COMPLETE' }, '*');
+                  window.postMessage(
+                    {
+                      __subbatch: true,
+                      requestId: currentRequestId,
+                      type: 'COMPLETE',
+                    },
+                    '*',
+                  );
                   return; // 成功，退出
                 } catch (err) {
                   console.warn('[SubBatch] 第', i + 1, '个 URL 下载失败:', err.message);
@@ -2674,6 +2703,7 @@ async function downloadViaContentScript(audioUrl, tabId, backupUrls, onProgress)
                     window.postMessage(
                       {
                         __subbatch: true,
+                        requestId: currentRequestId,
                         type: 'ERROR',
                         error: '下载失败: ' + err.message,
                       },
@@ -2684,7 +2714,7 @@ async function downloadViaContentScript(audioUrl, tabId, backupUrls, onProgress)
               }
             })();
           },
-          args: [audioUrl, backupUrls || []],
+          args: [audioUrl, backupUrls || [], requestId],
         });
       })
       .catch((error) => {

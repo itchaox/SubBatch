@@ -28,6 +28,7 @@ document.addEventListener('DOMContentLoaded', function () {
   const clearTableBtn = document.getElementById('clearTableBtn');
   const batchGetSubtitleBtn = document.getElementById('batchGetSubtitleBtn');
   const transcribeAudioBtn = document.getElementById('transcribeAudioBtn');
+  const transcribeAudioBtnDefaultHtml = transcribeAudioBtn ? transcribeAudioBtn.innerHTML : '';
 
   // 进度条相关元素
   const progressContainer = document.getElementById('progressContainer');
@@ -113,6 +114,7 @@ document.addEventListener('DOMContentLoaded', function () {
   let currentSubtitleData = null;
   // 视频列表数组，用于存储添加到表格的视频
   let videoList = [];
+  let transcribeProgressContext = null;
 
   // 显示错误提示
   function showError(message) {
@@ -178,6 +180,174 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // 3秒后自动关闭
     setTimeout(closeToast, 3000);
+  }
+
+  function isSubtitleSuccessStatus(status) {
+    return ['获取成功', '已获取字幕', '已获取AI字幕'].includes(status);
+  }
+
+  function hasSubtitleContent(video) {
+    return !!(video && video.subtitleText && video.subtitleText.trim() !== '' && isSubtitleSuccessStatus(video.subtitleStatus));
+  }
+
+  function shouldAttemptAudioTranscription(video) {
+    if (!video || !video.bvid) return false;
+    if (hasSubtitleContent(video)) return false;
+
+    const status = video.subtitleStatus || '未获取';
+    if (status === '获取中' || status === 'AI转写中' || status.startsWith('信息不完整')) {
+      return false;
+    }
+
+    return true;
+  }
+
+  function getSubtitleStatusDisplayText(video) {
+    if (video?.subtitleStatus === '已获取AI字幕') {
+      return '已获取AI字幕';
+    }
+
+    return '已获取字幕';
+  }
+
+  function setTranscribeProgressContext(currentIndex, total) {
+    transcribeProgressContext = {
+      currentIndex,
+      total,
+    };
+  }
+
+  function clearTranscribeProgressContext() {
+    transcribeProgressContext = null;
+  }
+
+  function updateTranscribeProgress(localPercent, text = '转写中...') {
+    if (!transcribeProgressContext || !transcribeProgressContext.total) {
+      updateProgress(localPercent, text);
+      return;
+    }
+
+    const { currentIndex, total } = transcribeProgressContext;
+    const normalizedPercent = Math.max(0, Math.min(100, Number(localPercent) || 0));
+    const basePercent = (currentIndex / total) * 100;
+    const rangePercent = 100 / total;
+    const overallPercent = basePercent + (normalizedPercent / 100) * rangePercent;
+    const prefixedText = `当前第 ${currentIndex + 1}/${total} 个视频`;
+
+    updateProgress(overallPercent, prefixedText);
+  }
+
+  function setTranscribeAudioButtonLoading(loading) {
+    if (!transcribeAudioBtn) return;
+
+    transcribeAudioBtn.disabled = loading;
+    if (loading) {
+      transcribeAudioBtn.innerHTML = `
+        <svg viewBox="0 0 24 24" class="spin">
+          <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5.91-3c-.49 0-.9.36-.98.85C16.52 14.2 14.47 16 12 16s-4.52-1.8-4.93-4.15c-.08-.49-.49-.85-.98-.85-.61 0-1.09.54-1 1.14.49 3 2.89 5.35 5.91 5.78V20c0 .55.45 1 1 1s1-.45 1-1v-2.08c3.02-.43 5.42-2.78 5.91-5.78.1-.6-.39-1.14-1-1.14z"/>
+        </svg>
+        转写中...
+      `;
+      return;
+    }
+
+    transcribeAudioBtn.innerHTML = transcribeAudioBtnDefaultHtml;
+  }
+
+  function resolveCidFromVideoInfo(video, infoResponse) {
+    const fullData = infoResponse?.full_data;
+    const pages = Array.isArray(fullData?.pages) ? fullData.pages.filter((page) => page && page.cid) : [];
+    const normalizedPage = Number(video?.page || 0);
+    const normalizedDuration = Number(video?.duration || 0);
+
+    if (normalizedPage > 0 && pages.length > 0) {
+      const matchedPage = pages.find((page) => Number(page.page) === normalizedPage);
+      if (matchedPage?.cid) {
+        console.log(`按分P页码匹配到 CID: P${normalizedPage} -> ${matchedPage.cid}`);
+        return matchedPage.cid;
+      }
+    }
+
+    if (normalizedDuration > 0 && pages.length > 1) {
+      const matchedByDuration = pages.filter((page) => Math.abs(Number(page.duration || 0) - normalizedDuration) <= 1);
+      if (matchedByDuration.length === 1) {
+        console.log(`按时长匹配到 CID: ${normalizedDuration}s -> ${matchedByDuration[0].cid}`);
+        return matchedByDuration[0].cid;
+      }
+    }
+
+    if (pages.length === 1 && pages[0].cid) {
+      console.log(`单P视频，使用唯一 CID: ${pages[0].cid}`);
+      return pages[0].cid;
+    }
+
+    if (pages.length === 0 && infoResponse?.cid) {
+      console.log(`无 pages 数据，回退使用响应 CID: ${infoResponse.cid}`);
+      return infoResponse.cid;
+    }
+
+    if (pages.length > 1) {
+      console.warn('多P视频缺少精确定位信息，拒绝盲选第一个 CID 以避免转错音频:', {
+        title: video?.title,
+        bvid: video?.bvid,
+        page: video?.page,
+        duration: video?.duration,
+        pages: pages.map((page) => ({ page: page.page, cid: page.cid, duration: page.duration })),
+      });
+    }
+
+    return null;
+  }
+
+  async function ensureVideoCid(video) {
+    if (!video?.bvid) return false;
+    if (video.cid) return true;
+
+    try {
+      const infoResponse = await new Promise((resolve) => {
+        chrome.runtime.sendMessage(
+          {
+            action: 'fetchBilibiliInfo',
+            videoId: video.bvid,
+          },
+          resolve,
+        );
+      });
+
+      if (infoResponse && infoResponse.success) {
+        const resolvedCid = resolveCidFromVideoInfo(video, infoResponse);
+        if (!resolvedCid) {
+          return false;
+        }
+
+        video.cid = resolvedCid;
+        if (infoResponse.aid) {
+          video.aid = infoResponse.aid;
+        }
+        return true;
+      }
+    } catch (error) {
+      console.error(`补全视频 ${video.title} 的 CID 失败:`, error);
+    }
+
+    return false;
+  }
+
+  async function getCurrentBilibiliVideoTab() {
+    const activeTabs = await chrome.tabs.query({
+      active: true,
+      currentWindow: true,
+    });
+    const activeBilibiliTab = activeTabs.find((tab) => tab.url && tab.url.includes('bilibili.com/video/'));
+    if (activeBilibiliTab) {
+      return activeBilibiliTab;
+    }
+
+    const bilibiliTabs = await chrome.tabs.query({
+      url: '*://*.bilibili.com/video/*',
+      currentWindow: true,
+    });
+    return bilibiliTabs.length > 0 ? bilibiliTabs[0] : null;
   }
 
   // 从URL中提取视频ID
@@ -1706,7 +1876,7 @@ document.addEventListener('DOMContentLoaded', function () {
     // 有视频时显示计数信息
     document.getElementById('videoCountInfo').style.display = 'inline';
     // 计算已获取字幕的视频数量
-    const completedCount = videoList.filter((video) => video.subtitleStatus === '获取成功').length;
+    const completedCount = videoList.filter((video) => hasSubtitleContent(video)).length;
 
     // 更新计数器显示
     document.getElementById('totalVideoCount').textContent = videoList.length.toString();
@@ -1718,21 +1888,24 @@ document.addEventListener('DOMContentLoaded', function () {
 
       // 根据字幕状态设置样式
       let subtitleStatusHtml = '';
-      if (video.subtitleStatus === '获取成功') {
+      if (isSubtitleSuccessStatus(video.subtitleStatus)) {
         // 已获取状态显示为绿色并添加✅图标
-        subtitleStatusHtml = `<span style="color: #52c41a; font-weight: 500;">✅ 获取成功</span>`;
-      } else if (video.subtitleStatus === '获取中') {
+        subtitleStatusHtml = `<span style="color: #52c41a; font-weight: 500;">✅ ${getSubtitleStatusDisplayText(video)}</span>`;
+      } else if (video.subtitleStatus === '获取中' || video.subtitleStatus === 'AI转写中') {
         // 获取中状态显示为蓝色带动画
         subtitleStatusHtml = `<span style="color: #1890ff; display: flex; align-items: center;">
           <svg viewBox="0 0 24 24" style="width: 16px; height: 16px; margin-right: 4px; animation: spin 1.5s linear infinite;">
             <path d="M12 6v3l4-4-4-4v3c-4.42 0-8 3.58-8 8 0 1.57.46 3.03 1.24 4.26L6.7 14.8c-.45-.83-.7-1.79-.7-2.8 0-3.31 2.69-6 6-6zm6.76 1.74L17.3 9.2c.44.84.7 1.79.7 2.8 0 3.31-2.69 6-6 6v-3l-4 4 4 4v-3c4.42 0 8-3.58 8-8 0-1.57-.46-3.03-1.24-4.26z" fill="currentColor"/>
-          </svg>获取中</span>`;
+          </svg>${video.subtitleStatus}</span>`;
       } else if (video.subtitleStatus === '未获取') {
         // 未获取状态显示为灰色
         subtitleStatusHtml = `<span style="color: #666;">${video.subtitleStatus}</span>`;
       } else if (
         video.subtitleStatus &&
-        (video.subtitleStatus.includes('无外挂字幕') || video.subtitleStatus.includes('错误'))
+        (video.subtitleStatus.includes('信息不完整') ||
+          video.subtitleStatus.includes('无外挂字幕') ||
+          video.subtitleStatus.includes('错误') ||
+          video.subtitleStatus.includes('失败'))
       ) {
         // 失败状态显示为红色
         subtitleStatusHtml = `<span style="color: #ff4d4f;">${video.subtitleStatus}</span>`;
@@ -1749,7 +1922,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
       // 构建操作按钮HTML
       let actionButtonsHtml = '';
-      if (video.subtitleStatus === '获取成功') {
+      if (hasSubtitleContent(video)) {
         actionButtonsHtml += `
           <button class="table-action-btn copy-row-btn" data-index="${index}" title="复制视频脚本">
             <svg viewBox="0 0 24 24">
@@ -1905,7 +2078,7 @@ document.addEventListener('DOMContentLoaded', function () {
     let successCount = 0;
     let failCount = 0;
     const totalVideos = videoList.length;
-    const needProcessVideos = videoList.filter((v) => v.subtitleStatus !== '获取成功').length;
+    const needProcessVideos = videoList.filter((v) => !hasSubtitleContent(v)).length;
 
     showSuccess('开始批量获取字幕，请稍候...');
 
@@ -1919,7 +2092,7 @@ document.addEventListener('DOMContentLoaded', function () {
       updateProgress(currentPercent, '获取字幕中...');
 
       // 如果已经成功获取过字幕，跳过
-      if (video.subtitleStatus === '获取成功' && video.subtitleText) {
+      if (hasSubtitleContent(video)) {
         console.log(`视频 ${video.title} 已有字幕，跳过`);
         continue;
       }
@@ -2083,35 +2256,24 @@ document.addEventListener('DOMContentLoaded', function () {
         return;
       }
 
-      // 检查视频时长（30分钟 = 1800秒）
-      const hasLongVideo = videoList.some((v) => v.duration && v.duration > 1800);
-      if (hasLongVideo) {
-        showError('音频转字幕功能仅支持 30 分钟以内的视频');
-        return;
-      }
-
       // 显示进度
       showProgress(true);
-      updateProgress(0, '准备转写...');
+      updateProgress(0, '准备批量转写...');
+      setTranscribeAudioButtonLoading(true);
 
       try {
-        // 获取第一个未获取成功字幕的视频
-        const videoToTranscribe = videoList.find((v) => v.subtitleStatus !== '获取成功' && v.bvid && v.cid);
+        const videosToTranscribe = videoList.filter((video) => shouldAttemptAudioTranscription(video));
 
-        if (!videoToTranscribe) {
+        if (videosToTranscribe.length === 0) {
           showError('没有需要转写的视频（所有视频都已获取字幕或信息不完整）');
           showProgress(false);
           return;
         }
 
-        showSuccess('开始音频转写，请稍候...');
+        showSuccess(`开始批量音频转字幕，共 ${videosToTranscribe.length} 个视频...`);
 
         // 获取当前 B站 标签页用于 content script
-        const bilibiliTabs = await chrome.tabs.query({
-          url: '*://*.bilibili.com/video/*',
-          currentWindow: true,
-        });
-        const bilibiliTab = bilibiliTabs.length > 0 ? bilibiliTabs[0] : null;
+        const bilibiliTab = await getCurrentBilibiliVideoTab();
         console.log('B站 标签页:', bilibiliTab?.url, 'ID:', bilibiliTab?.id);
 
         if (!bilibiliTab) {
@@ -2120,71 +2282,107 @@ document.addEventListener('DOMContentLoaded', function () {
           return;
         }
 
-        // 发送转写请求（包括 tabId）
-        const response = await chrome.runtime.sendMessage({
-          action: 'transcribeAudio',
-          bvid: videoToTranscribe.bvid,
-          cid: videoToTranscribe.cid,
-          tabId: bilibiliTab.id,
-        });
+        let successCount = 0;
+        let failCount = 0;
 
-        console.log('音频转写响应:', response);
+        for (let i = 0; i < videosToTranscribe.length; i++) {
+          const videoToTranscribe = videosToTranscribe[i];
+          setTranscribeProgressContext(i, videosToTranscribe.length);
 
-        if (response.success) {
-          // 检查是否需要在前端处理音频
-          if (response.stage === 'needs_frontend_processing' && response.audioData) {
-            console.log('需要在前端处理音频，开始解码...');
-            updateProgress(50, '在前端解码音频...');
+          try {
+            if (videoToTranscribe.duration && videoToTranscribe.duration > 1800) {
+              videoToTranscribe.subtitleStatus = 'AI转写失败: 视频超过30分钟';
+              failCount++;
+              updateVideoTable();
+              continue;
+            }
 
-            try {
-              // 在前端解码音频
+            videoToTranscribe.subtitleStatus = 'AI转写中';
+            updateVideoTable();
+            updateTranscribeProgress(0, `准备转写：${videoToTranscribe.title}`);
+
+            const hasCid = await ensureVideoCid(videoToTranscribe);
+            if (!hasCid) {
+              videoToTranscribe.subtitleStatus = '信息不完整: 无法准确匹配CID';
+              failCount++;
+              updateVideoTable();
+              continue;
+            }
+
+            // 发送转写请求（包括 tabId）
+            const response = await chrome.runtime.sendMessage({
+              action: 'transcribeAudio',
+              bvid: videoToTranscribe.bvid,
+              cid: videoToTranscribe.cid,
+              tabId: bilibiliTab.id,
+            });
+
+            console.log('音频转写响应:', response);
+
+            if (!response.success) {
+              videoToTranscribe.subtitleStatus = `AI转写失败: ${response.message || '未知错误'}`;
+              failCount++;
+              updateVideoTable();
+              continue;
+            }
+
+            if (response.stage === 'needs_frontend_processing' && response.audioData) {
+              console.log('需要在前端处理音频，开始解码...');
+              updateTranscribeProgress(50, '在前端解码音频...');
+
               const audioBuffer = await decodeAudioInFrontend(response.audioData);
               if (!audioBuffer) {
                 throw new Error('前端音频解码失败');
               }
 
-              updateProgress(60, '音频解码完成，开始转写...');
+              updateTranscribeProgress(60, '音频解码完成，开始转写...');
 
-              // 在前端初始化 Whisper 并转写
               const transcribeResult = await transcribeAudioInFrontend(audioBuffer, (progress, msg) => {
-                updateProgress(60 + progress * 0.35, msg || '转写中...');
+                updateTranscribeProgress(progress, msg || '转写中...');
               });
 
-              updateProgress(100, '转写完成');
-
-              // 保存结果到视频对象
-              videoToTranscribe.subtitleStatus = '获取成功';
+              videoToTranscribe.subtitleStatus = '已获取AI字幕';
               videoToTranscribe.subtitleText = transcribeResult.srtContent;
-
-              // 更新表格
+              successCount++;
               updateVideoTable();
-
-              showSuccess('音频转字幕完成！可以导出或继续添加视频。');
-            } catch (frontendError) {
-              console.error('前端音频处理失败:', frontendError);
-              showError('前端音频处理失败: ' + (frontendError.message || '未知错误'));
+              continue;
             }
-          } else if (response.srtContent) {
-            updateProgress(100, '转写完成');
 
-            // 保存结果到视频对象
-            videoToTranscribe.subtitleStatus = '获取成功';
-            videoToTranscribe.subtitleText = response.srtContent;
+            if (response.srtContent) {
+              videoToTranscribe.subtitleStatus = '已获取AI字幕';
+              videoToTranscribe.subtitleText = response.srtContent;
+              successCount++;
+              updateVideoTable();
+              continue;
+            }
 
-            // 更新表格
+            videoToTranscribe.subtitleStatus = 'AI转写失败: 转写结果格式不正确';
+            failCount++;
             updateVideoTable();
-
-            showSuccess('音频转字幕完成！可以导出或继续添加视频。');
-          } else {
-            showError('转写结果格式不正确');
+          } catch (itemError) {
+            console.error(`音频转写失败: ${videoToTranscribe.title}`, itemError);
+            videoToTranscribe.subtitleStatus = `AI转写失败: ${itemError.message || '未知错误'}`;
+            failCount++;
+            updateVideoTable();
           }
+        }
+
+        clearTranscribeProgressContext();
+        updateProgress(100, '批量音频转字幕完成');
+
+        if (successCount > 0 && failCount === 0) {
+          showSuccess(`批量音频转字幕完成，成功 ${successCount} 个视频`);
+        } else if (successCount > 0 && failCount > 0) {
+          showSuccess(`批量音频转字幕完成，成功 ${successCount} 个，失败 ${failCount} 个`);
         } else {
-          showError('转写失败: ' + (response.message || '未知错误'));
+          showError(`批量音频转字幕失败，共失败 ${failCount} 个视频`);
         }
       } catch (error) {
         console.error('音频转写出错:', error);
         showError('转写出错: ' + (error.message || '未知错误'));
       } finally {
+        clearTranscribeProgressContext();
+        setTranscribeAudioButtonLoading(false);
         setTimeout(() => {
           showProgress(false);
         }, 2000);
@@ -2198,7 +2396,7 @@ document.addEventListener('DOMContentLoaded', function () {
   chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     if (message.action === 'transcribeProgress') {
       console.log('收到转写进度:', message);
-      updateProgress(message.progress || 0, message.message || '处理中...');
+      updateTranscribeProgress(message.progress || 0, message.message || '处理中...');
     }
     return true;
   });
@@ -2221,9 +2419,7 @@ document.addEventListener('DOMContentLoaded', function () {
       }
 
       // 筛选出已获取字幕的视频
-      const videosWithSubtitle = videoList.filter(
-        (video) => video.subtitleStatus === '获取成功' && video.subtitleText && video.subtitleText.trim() !== '',
-      );
+      const videosWithSubtitle = videoList.filter((video) => hasSubtitleContent(video));
 
       if (videosWithSubtitle.length === 0) {
         showError('没有可导出的字幕，请先获取字幕');
@@ -3794,7 +3990,7 @@ async function transcribeAudioInFrontend(audioBuffer, onProgress) {
       const progressBase = 50;
       const progressRange = 45; // 50% ~ 95%
       const chunkProgress = progressBase + (i / numChunks) * progressRange;
-      if (onProgress) onProgress(chunkProgress, `转写中... 第 ${i + 1}/${numChunks} 块`);
+      if (onProgress) onProgress(chunkProgress, '转写中...');
 
       console.log(`处理第 ${i + 1}/${numChunks} 块, 偏移: ${timeOffset.toFixed(1)}秒, 样本: ${start}-${end}`);
 
