@@ -29,6 +29,8 @@ document.addEventListener('DOMContentLoaded', function () {
   const batchGetSubtitleBtn = document.getElementById('batchGetSubtitleBtn');
   const transcribeAudioBtn = document.getElementById('transcribeAudioBtn');
   const transcribeAudioBtnDefaultHtml = transcribeAudioBtn ? transcribeAudioBtn.innerHTML : '';
+  const noSubtitleBanner = document.getElementById('noSubtitleBanner');
+  const noSubtitleBannerText = document.getElementById('noSubtitleBannerText');
 
   // 进度条相关元素
   const progressContainer = document.getElementById('progressContainer');
@@ -188,6 +190,24 @@ document.addEventListener('DOMContentLoaded', function () {
 
   function hasSubtitleContent(video) {
     return !!(video && video.subtitleText && video.subtitleText.trim() !== '' && isSubtitleSuccessStatus(video.subtitleStatus));
+  }
+
+  function getNoExternalSubtitleCount() {
+    return videoList.filter((video) => video?.subtitleStatus && video.subtitleStatus.includes('无外挂字幕')).length;
+  }
+
+  function updateNoSubtitleBanner() {
+    if (!noSubtitleBanner || !noSubtitleBannerText) return;
+
+    const noExternalSubtitleCount = getNoExternalSubtitleCount();
+    if (noExternalSubtitleCount <= 0) {
+      noSubtitleBanner.classList.remove('show');
+      noSubtitleBannerText.textContent = '';
+      return;
+    }
+
+    noSubtitleBannerText.textContent = `${noExternalSubtitleCount} 个视频无外挂字幕，可点击“转写无字幕”按钮生成字幕`;
+    noSubtitleBanner.classList.add('show');
   }
 
   function shouldAttemptAudioTranscription(video) {
@@ -1870,6 +1890,7 @@ document.addEventListener('DOMContentLoaded', function () {
       // 更新计数器显示
       document.getElementById('totalVideoCount').textContent = '0';
       document.getElementById('completedSubtitleCount').textContent = '0';
+      updateNoSubtitleBanner();
       return;
     }
 
@@ -1881,6 +1902,7 @@ document.addEventListener('DOMContentLoaded', function () {
     // 更新计数器显示
     document.getElementById('totalVideoCount').textContent = videoList.length.toString();
     document.getElementById('completedSubtitleCount').textContent = completedCount.toString();
+    updateNoSubtitleBanner();
 
     // 遍历视频列表，为每个视频创建表格行
     videoList.forEach((video, index) => {
@@ -2224,12 +2246,18 @@ document.addEventListener('DOMContentLoaded', function () {
       checkAndIncrementExtractCount(successCount);
     }
 
+    const noExternalSubtitleCount = getNoExternalSubtitleCount();
+    const noSubtitleFollowupText =
+      noExternalSubtitleCount > 0
+        ? ` ${noExternalSubtitleCount} 个视频无外挂字幕，可点击“转写无字幕”按钮生成字幕`
+        : '';
+
     if (successCount > 0 && failCount === 0) {
-      showSuccess(`所有字幕获取成功 (${successCount}/${videoList.length})`);
+      showSuccess(`所有字幕获取成功 (${successCount}/${videoList.length})。${noSubtitleFollowupText}`.trim());
     } else if (successCount > 0 && failCount > 0) {
-      showSuccess(`部分字幕获取成功 (成功: ${successCount}, 失败: ${failCount})`);
+      showSuccess(`部分字幕获取成功 (成功: ${successCount}, 失败: ${failCount})。${noSubtitleFollowupText}`.trim());
     } else if (successCount === 0 && failCount > 0) {
-      showError(`所有字幕获取失败 (${failCount}/${videoList.length})`);
+      showError(`所有字幕获取失败 (${failCount}/${videoList.length})。${noSubtitleFollowupText}`.trim());
     } else {
       showSuccess('没有需要获取字幕的视频');
     }
@@ -2258,19 +2286,19 @@ document.addEventListener('DOMContentLoaded', function () {
 
       // 显示进度
       showProgress(true);
-      updateProgress(0, '准备批量转写...');
+      updateProgress(0, '准备转写无字幕视频...');
       setTranscribeAudioButtonLoading(true);
 
       try {
         const videosToTranscribe = videoList.filter((video) => shouldAttemptAudioTranscription(video));
 
         if (videosToTranscribe.length === 0) {
-          showError('没有需要转写的视频（所有视频都已获取字幕或信息不完整）');
+          showError('没有需要转写的无字幕视频（所有视频都已获取字幕或信息不完整）');
           showProgress(false);
           return;
         }
 
-        showSuccess(`开始批量音频转字幕，共 ${videosToTranscribe.length} 个视频...`);
+        showSuccess(`开始批量转写无字幕视频，共 ${videosToTranscribe.length} 个视频...`);
 
         // 获取当前 B站 标签页用于 content script
         const bilibiliTab = await getCurrentBilibiliVideoTab();
@@ -2368,14 +2396,14 @@ document.addEventListener('DOMContentLoaded', function () {
         }
 
         clearTranscribeProgressContext();
-        updateProgress(100, '批量音频转字幕完成');
+        updateProgress(100, '批量转写无字幕视频完成');
 
         if (successCount > 0 && failCount === 0) {
-          showSuccess(`批量音频转字幕完成，成功 ${successCount} 个视频`);
+          showSuccess(`批量转写无字幕视频完成，成功 ${successCount} 个视频`);
         } else if (successCount > 0 && failCount > 0) {
-          showSuccess(`批量音频转字幕完成，成功 ${successCount} 个，失败 ${failCount} 个`);
+          showSuccess(`批量转写无字幕视频完成，成功 ${successCount} 个，失败 ${failCount} 个`);
         } else {
-          showError(`批量音频转字幕失败，共失败 ${failCount} 个视频`);
+          showError(`批量转写无字幕视频失败，共失败 ${failCount} 个视频`);
         }
       } catch (error) {
         console.error('音频转写出错:', error);
