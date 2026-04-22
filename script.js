@@ -117,6 +117,7 @@ document.addEventListener('DOMContentLoaded', function () {
   // 视频列表数组，用于存储添加到表格的视频
   let videoList = [];
   let transcribeProgressContext = null;
+  let skipTranscribeConfirmDialog = false;
 
   // 显示错误提示
   function showError(message) {
@@ -2272,6 +2273,142 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   }
 
+  function showTranscribeConfirmDialog(videoCount) {
+    return new Promise((resolve) => {
+      const dialogOverlay = document.createElement('div');
+      dialogOverlay.style.position = 'fixed';
+      dialogOverlay.style.top = '0';
+      dialogOverlay.style.left = '0';
+      dialogOverlay.style.width = '100%';
+      dialogOverlay.style.height = '100%';
+      dialogOverlay.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
+      dialogOverlay.style.display = 'flex';
+      dialogOverlay.style.justifyContent = 'center';
+      dialogOverlay.style.alignItems = 'center';
+      dialogOverlay.style.zIndex = '2000';
+      dialogOverlay.style.backdropFilter = 'blur(3px)';
+
+      const dialogContent = document.createElement('div');
+      dialogContent.style.backgroundColor = 'white';
+      dialogContent.style.borderRadius = '14px';
+      dialogContent.style.padding = '22px';
+      dialogContent.style.width = '420px';
+      dialogContent.style.maxWidth = '92%';
+      dialogContent.style.boxShadow = '0 10px 25px rgba(0, 0, 0, 0.15)';
+
+      const title = document.createElement('h3');
+      title.textContent = '开始转写前请注意';
+      title.style.margin = '0 0 10px 0';
+      title.style.color = '#222';
+      title.style.fontSize = '18px';
+
+      const description = document.createElement('p');
+      description.textContent = `将对当前表格中 ${videoCount} 个无外挂字幕视频进行本地转写。`;
+      description.style.margin = '0 0 14px 0';
+      description.style.color = '#666';
+      description.style.fontSize = '13px';
+      description.style.lineHeight = '1.6';
+
+      const tipsList = document.createElement('ol');
+      tipsList.style.margin = '0';
+      tipsList.style.paddingLeft = '20px';
+      tipsList.style.color = '#333';
+      tipsList.style.fontSize = '14px';
+      tipsList.style.lineHeight = '1.75';
+      tipsList.style.textAlign = 'left';
+
+      const tips = [
+        '转写准确率通常在 95% 左右，作为 AI 知识库使用基本够用',
+        '转写正确率和转写速度与本地电脑配置有关',
+        '首次转写需要加载模型，第一次会更慢',
+        '转写过程中请勿关闭插件或当前侧边栏',
+        '转写耗时可能较长，请耐心等待',
+      ];
+
+      tips.forEach((tip) => {
+        const item = document.createElement('li');
+        item.textContent = tip;
+        item.style.marginBottom = '6px';
+        tipsList.appendChild(item);
+      });
+
+      const buttonContainer = document.createElement('div');
+      buttonContainer.style.display = 'flex';
+      buttonContainer.style.justifyContent = 'flex-end';
+      buttonContainer.style.gap = '12px';
+      buttonContainer.style.marginTop = '18px';
+
+      const checkboxLabel = document.createElement('label');
+      checkboxLabel.style.display = 'flex';
+      checkboxLabel.style.alignItems = 'center';
+      checkboxLabel.style.gap = '8px';
+      checkboxLabel.style.marginTop = '16px';
+      checkboxLabel.style.color = '#666';
+      checkboxLabel.style.fontSize = '13px';
+      checkboxLabel.style.cursor = 'pointer';
+
+      const dontShowAgainCheckbox = document.createElement('input');
+      dontShowAgainCheckbox.type = 'checkbox';
+      dontShowAgainCheckbox.style.width = '14px';
+      dontShowAgainCheckbox.style.height = '14px';
+      dontShowAgainCheckbox.style.cursor = 'pointer';
+
+      const checkboxText = document.createElement('span');
+      checkboxText.textContent = '下次不再提示';
+
+      checkboxLabel.appendChild(dontShowAgainCheckbox);
+      checkboxLabel.appendChild(checkboxText);
+
+      const cancelButton = document.createElement('button');
+      cancelButton.textContent = '取消';
+      cancelButton.style.padding = '10px 18px';
+      cancelButton.style.backgroundColor = '#f0f2f5';
+      cancelButton.style.color = '#333';
+      cancelButton.style.border = 'none';
+      cancelButton.style.borderRadius = '8px';
+      cancelButton.style.cursor = 'pointer';
+      cancelButton.style.fontWeight = '500';
+
+      const confirmButton = document.createElement('button');
+      confirmButton.textContent = '确认转写';
+      confirmButton.style.padding = '10px 18px';
+      confirmButton.style.background = 'linear-gradient(to right, #722ed1, #722ed1)';
+      confirmButton.style.color = 'white';
+      confirmButton.style.border = 'none';
+      confirmButton.style.borderRadius = '8px';
+      confirmButton.style.cursor = 'pointer';
+      confirmButton.style.fontWeight = '600';
+      confirmButton.style.boxShadow = '0 4px 12px rgba(114, 46, 209, 0.25)';
+
+      function closeDialog(result) {
+        if (dialogOverlay.parentNode) {
+          document.body.removeChild(dialogOverlay);
+        }
+        resolve(result);
+      }
+
+      cancelButton.addEventListener('click', () => closeDialog({ confirmed: false, skipFuture: false }));
+      confirmButton.addEventListener('click', () =>
+        closeDialog({ confirmed: true, skipFuture: dontShowAgainCheckbox.checked }),
+      );
+      dialogOverlay.addEventListener('click', (event) => {
+        if (event.target === dialogOverlay) {
+          closeDialog({ confirmed: false, skipFuture: false });
+        }
+      });
+
+      buttonContainer.appendChild(cancelButton);
+      buttonContainer.appendChild(confirmButton);
+      dialogContent.appendChild(title);
+      dialogContent.appendChild(description);
+      dialogContent.appendChild(tipsList);
+      dialogContent.appendChild(checkboxLabel);
+      dialogContent.appendChild(buttonContainer);
+      dialogOverlay.appendChild(dialogContent);
+      document.body.appendChild(dialogOverlay);
+    });
+  }
+
   // 音频转字幕按钮事件监听
   if (transcribeAudioBtn) {
     console.log('添加音频转字幕按钮事件监听');
@@ -2284,20 +2421,32 @@ document.addEventListener('DOMContentLoaded', function () {
         return;
       }
 
+      const videosToTranscribe = videoList.filter((video) => shouldAttemptAudioTranscription(video));
+      if (videosToTranscribe.length === 0) {
+        showError('没有需要转写的无字幕视频（所有视频都已获取字幕或信息不完整）');
+        return;
+      }
+
+      let dialogResult = { confirmed: true, skipFuture: false };
+      if (!skipTranscribeConfirmDialog) {
+        dialogResult = await showTranscribeConfirmDialog(videosToTranscribe.length);
+      }
+
+      if (!dialogResult.confirmed) {
+        return;
+      }
+
+      if (dialogResult.skipFuture) {
+        skipTranscribeConfirmDialog = true;
+        chrome.storage.local.set({ skipTranscribeConfirmDialog: true });
+      }
+
       // 显示进度
       showProgress(true);
       updateProgress(0, '准备转写无字幕视频...');
       setTranscribeAudioButtonLoading(true);
 
       try {
-        const videosToTranscribe = videoList.filter((video) => shouldAttemptAudioTranscription(video));
-
-        if (videosToTranscribe.length === 0) {
-          showError('没有需要转写的无字幕视频（所有视频都已获取字幕或信息不完整）');
-          showProgress(false);
-          return;
-        }
-
         showSuccess(`开始批量转写无字幕视频，共 ${videosToTranscribe.length} 个视频...`);
 
         // 获取当前 B站 标签页用于 content script
@@ -3347,6 +3496,10 @@ document.addEventListener('DOMContentLoaded', function () {
   const settingsBtn = document.getElementById('settingsBtn');
   const settingsModal = document.getElementById('settingsModal');
   let defaultExportFormat = 'ask'; // 默认值
+
+  chrome.storage.local.get(['skipTranscribeConfirmDialog'], (result) => {
+    skipTranscribeConfirmDialog = !!result.skipTranscribeConfirmDialog;
+  });
 
   // 自定义下拉框元素
   const formatSelectTrigger = document.getElementById('formatSelectTrigger');
