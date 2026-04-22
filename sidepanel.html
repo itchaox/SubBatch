@@ -20,6 +20,10 @@
         overflow-x: hidden;
       }
 
+      body.modal-open {
+        overflow: hidden;
+      }
+
       /* 添加旋转动画 */
       @keyframes spin {
         0% {
@@ -1034,15 +1038,48 @@
         pointer-events: auto;
       }
 
+      #fileNameSelectDropdown.active {
+        max-height: 360px;
+      }
+
+      #fileNameSelectDropdown {
+        width: calc(100% + 2px);
+      }
+
       .custom-select-option {
         position: relative;
         padding: 10px 12px;
         cursor: pointer;
         transition: all 0.2s ease;
-        white-space: nowrap;
-        text-overflow: ellipsis;
         display: flex;
         align-items: center;
+      }
+
+      .custom-select-option.with-example {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 3px;
+      }
+
+      .custom-select-option-title {
+        color: inherit;
+        font-size: 14px;
+        line-height: 1.5;
+      }
+
+      .custom-select-option-example {
+        font-size: 10px;
+        line-height: 1.4;
+        color: #999;
+        width: 100%;
+        display: block;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      .custom-select-option-example::before {
+        content: '示例：';
       }
 
       .custom-select-option:hover {
@@ -1065,6 +1102,11 @@
         height: 32px;
         background-color: #3370ff;
         /* border-radius: 0 2px 2px 0; */
+      }
+
+      .custom-select-option.selected .custom-select-option-example {
+        font-weight: 400;
+        color: #999;
       }
 
       /* 添加箭头图标 */
@@ -1567,7 +1609,7 @@
           <button
             id="transcribeAudioBtn"
             class="action-btn"
-            style="background: linear-gradient(to right, #722ed1, #722ed1); color: white; margin-left: 8px;"
+            style="background: linear-gradient(to right, #722ed1, #722ed1); color: white; margin-left: 8px"
           >
             <svg viewBox="0 0 24 24">
               <path
@@ -1597,13 +1639,21 @@
             清空表格
           </button>
         </div>
-        <div id="noSubtitleBanner" class="no-subtitle-banner">
+        <div
+          id="noSubtitleBanner"
+          class="no-subtitle-banner"
+        >
           <div class="no-subtitle-banner-icon">
             <svg viewBox="0 0 24 24">
-              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 15h2v-2h-2v2zm0-4h2V7h-2v6z" />
+              <path
+                d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 15h2v-2h-2v2zm0-4h2V7h-2v6z"
+              />
             </svg>
           </div>
-          <div id="noSubtitleBannerText" class="no-subtitle-banner-text"></div>
+          <div
+            id="noSubtitleBannerText"
+            class="no-subtitle-banner-text"
+          ></div>
         </div>
       </div>
 
@@ -1917,7 +1967,7 @@
           </div>
         </div>
         <div style="display: flex; align-items: center; gap: 12px; margin-top: 16px">
-          <span style="font-size: 14px; color: #333; font-weight: 500; white-space: nowrap">文件命名</span>
+          <span style="font-size: 14px; color: #333; font-weight: 500; white-space: nowrap">文件命名格式</span>
           <div
             class="custom-select-container"
             id="fileNameSelectContainer"
@@ -1940,34 +1990,39 @@
               id="fileNameSelectDropdown"
             >
               <div
-                class="custom-select-option selected"
+                class="custom-select-option with-example selected"
                 data-value="author-title-date"
               >
-                作者—标题—日期
+                <span class="custom-select-option-title">作者—标题—日期</span>
+                <span class="custom-select-option-example">【阿超】—字幕插件—【2026-01-21】.txt</span>
               </div>
               <div
-                class="custom-select-option"
+                class="custom-select-option with-example"
                 data-value="author-date-title"
               >
-                作者—日期—标题
+                <span class="custom-select-option-title">作者—日期—标题</span>
+                <span class="custom-select-option-example">【阿超】—【2026-01-21】—字幕插件.txt</span>
               </div>
               <div
-                class="custom-select-option"
+                class="custom-select-option with-example"
                 data-value="title-author-date"
               >
-                标题—作者—日期
+                <span class="custom-select-option-title">标题—作者—日期</span>
+                <span class="custom-select-option-example">字幕插件—【阿超】—【2026-01-21】.txt</span>
               </div>
               <div
-                class="custom-select-option"
+                class="custom-select-option with-example"
                 data-value="title-date"
               >
-                标题—日期
+                <span class="custom-select-option-title">标题—日期</span>
+                <span class="custom-select-option-example">字幕插件—【2026-01-21】.txt</span>
               </div>
               <div
-                class="custom-select-option"
+                class="custom-select-option with-example"
                 data-value="date-title"
               >
-                日期—标题
+                <span class="custom-select-option-title">日期—标题</span>
+                <span class="custom-select-option-example">【2026-01-21】—字幕插件.txt</span>
               </div>
             </div>
           </div>

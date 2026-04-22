@@ -2789,10 +2789,10 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   // 根据设置生成文件名
-  function buildFileName(safeAuthor, safeTitle, formattedDate, format) {
+  function buildFileName(safeAuthor, safeTitle, formattedDate, format, namingFormat = defaultFileNameFormat) {
     const d = formattedDate ? `【${formattedDate}】` : '';
     const sep = '—';
-    switch (defaultFileNameFormat) {
+    switch (namingFormat) {
       case 'author-date-title':
         return `【${safeAuthor}】${d ? sep + d : ''}${sep}${safeTitle}.${format}`;
       case 'title-author-date':
@@ -3503,6 +3503,11 @@ document.addEventListener('DOMContentLoaded', function () {
   const formatSelectOptions = document.querySelectorAll('#formatSelectDropdown .custom-select-option');
   const formatSelectedText = document.querySelector('#formatSelectTrigger .custom-select-selected-text');
 
+  function getCustomSelectOptionLabel(option) {
+    if (!option) return '';
+    return option.querySelector('.custom-select-option-title')?.textContent?.trim() || option.textContent.trim();
+  }
+
   // 从 storage 加载设置
   chrome.storage.local.get(['defaultExportFormat'], (result) => {
     if (result.defaultExportFormat) {
@@ -3512,7 +3517,7 @@ document.addEventListener('DOMContentLoaded', function () {
           `#formatSelectDropdown .custom-select-option[data-value="${defaultExportFormat}"]`,
         );
         if (matchOption) {
-          formatSelectedText.textContent = matchOption.textContent;
+          formatSelectedText.textContent = getCustomSelectOptionLabel(matchOption);
           formatSelectOptions.forEach((o) => o.classList.remove('selected'));
           matchOption.classList.add('selected');
         }
@@ -3545,7 +3550,7 @@ document.addEventListener('DOMContentLoaded', function () {
         e.stopPropagation();
         const value = option.getAttribute('data-value');
         defaultExportFormat = value;
-        formatSelectedText.textContent = option.textContent;
+        formatSelectedText.textContent = getCustomSelectOptionLabel(option);
         formatSelectOptions.forEach((o) => o.classList.remove('selected'));
         option.classList.add('selected');
         formatSelectTrigger.classList.remove('active');
@@ -3579,7 +3584,7 @@ document.addEventListener('DOMContentLoaded', function () {
           `#fileNameSelectDropdown .custom-select-option[data-value="${defaultFileNameFormat}"]`,
         );
         if (matchOption) {
-          fileNameSelectedText.textContent = matchOption.textContent;
+          fileNameSelectedText.textContent = getCustomSelectOptionLabel(matchOption);
           fileNameSelectOptions.forEach((o) => o.classList.remove('selected'));
           matchOption.classList.add('selected');
         }
@@ -3603,7 +3608,7 @@ document.addEventListener('DOMContentLoaded', function () {
         e.stopPropagation();
         const value = option.getAttribute('data-value');
         defaultFileNameFormat = value;
-        fileNameSelectedText.textContent = option.textContent;
+        fileNameSelectedText.textContent = getCustomSelectOptionLabel(option);
         fileNameSelectOptions.forEach((o) => o.classList.remove('selected'));
         option.classList.add('selected');
         fileNameSelectTrigger.classList.remove('active');
@@ -3621,12 +3626,23 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   if (settingsBtn && settingsModal) {
-    settingsBtn.addEventListener('click', () => {
+    const openSettingsModal = () => {
       settingsModal.style.display = 'flex';
+      document.body.classList.add('modal-open');
+    };
+
+    const closeSettingsModal = () => {
+      settingsModal.style.display = 'none';
+      document.body.classList.remove('modal-open');
+    };
+
+    settingsBtn.addEventListener('click', () => {
+      openSettingsModal();
     });
+
     settingsModal.addEventListener('click', (e) => {
       if (e.target === settingsModal) {
-        settingsModal.style.display = 'none';
+        closeSettingsModal();
       }
     });
   }
