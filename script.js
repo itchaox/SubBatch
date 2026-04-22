@@ -2297,17 +2297,10 @@ document.addEventListener('DOMContentLoaded', function () {
       dialogContent.style.boxShadow = '0 10px 25px rgba(0, 0, 0, 0.15)';
 
       const title = document.createElement('h3');
-      title.textContent = '开始转写前请注意';
+      title.textContent = '转写提醒';
       title.style.margin = '0 0 10px 0';
       title.style.color = '#222';
       title.style.fontSize = '18px';
-
-      const description = document.createElement('p');
-      description.textContent = `将对当前表格中 ${videoCount} 个无外挂字幕视频进行本地转写。`;
-      description.style.margin = '0 0 14px 0';
-      description.style.color = '#666';
-      description.style.fontSize = '13px';
-      description.style.lineHeight = '1.6';
 
       const tipsList = document.createElement('ol');
       tipsList.style.margin = '0';
@@ -2318,16 +2311,20 @@ document.addEventListener('DOMContentLoaded', function () {
       tipsList.style.textAlign = 'left';
 
       const tips = [
-        '转写准确率通常在 95% 左右，作为 AI 知识库使用基本够用',
-        '转写正确率和转写速度与本地电脑配置有关',
-        '首次转写需要加载模型，第一次会更慢',
-        '转写过程中请勿关闭插件或当前侧边栏',
-        '转写耗时可能较长，请耐心等待',
+        { text: '转写准确率在 95% 左右，作为 AI 知识库基本够用' },
+        { text: '首次转写需要加载模型，第一次会更慢' },
+        { text: '转写速度和转写效果与本地电脑配置有关' },
+        { html: '转写过程中<span style="color: #ff4d4f; font-weight: 600;">请勿关闭插件侧边栏</span>' },
+        { text: '转写耗时可能较长，请耐心等待' },
       ];
 
       tips.forEach((tip) => {
         const item = document.createElement('li');
-        item.textContent = tip;
+        if (tip.html) {
+          item.innerHTML = tip.html;
+        } else {
+          item.textContent = tip.text;
+        }
         item.style.marginBottom = '6px';
         tipsList.appendChild(item);
       });
@@ -2400,7 +2397,6 @@ document.addEventListener('DOMContentLoaded', function () {
       buttonContainer.appendChild(cancelButton);
       buttonContainer.appendChild(confirmButton);
       dialogContent.appendChild(title);
-      dialogContent.appendChild(description);
       dialogContent.appendChild(tipsList);
       dialogContent.appendChild(checkboxLabel);
       dialogContent.appendChild(buttonContainer);
