@@ -1046,6 +1046,34 @@
         width: calc(100%);
       }
 
+      .settings-modal-close-btn {
+        position: absolute;
+        top: 14px;
+        right: 14px;
+        width: 28px;
+        height: 28px;
+        border: none;
+        background: transparent;
+        color: #999;
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: all 0.2s ease;
+      }
+
+      .settings-modal-close-btn:hover {
+        background: #f5f7fa;
+        color: #666;
+      }
+
+      .settings-modal-close-btn svg {
+        width: 16px;
+        height: 16px;
+        fill: currentColor;
+      }
+
       .custom-select-option {
         position: relative;
         padding: 10px 12px;
@@ -1919,8 +1947,19 @@
           width: 85%;
           max-width: 370px;
           box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
+          position: relative;
         "
       >
+        <button
+          id="settingsModalCloseBtn"
+          class="settings-modal-close-btn"
+          type="button"
+          aria-label="关闭设置弹窗"
+        >
+          <svg viewBox="0 0 24 24">
+            <path d="M18.3 5.71L12 12l6.3 6.29-1.41 1.41L10.59 13.41 4.29 19.7 2.88 18.29 9.17 12 2.88 5.71 4.29 4.3l6.3 6.29 6.29-6.3z" />
+          </svg>
+        </button>
         <h3 style="margin: 0 0 20px 0; font-size: 16px; font-weight: 600">设置</h3>
         <div style="display: flex; align-items: center; gap: 12px">
           <span style="font-size: 14px; color: #333; font-weight: 500; white-space: nowrap">导出格式</span>

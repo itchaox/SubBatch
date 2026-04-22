@@ -3491,6 +3491,7 @@ document.addEventListener('DOMContentLoaded', function () {
   // 设置按钮事件
   const settingsBtn = document.getElementById('settingsBtn');
   const settingsModal = document.getElementById('settingsModal');
+  const settingsModalCloseBtn = document.getElementById('settingsModalCloseBtn');
   let defaultExportFormat = 'ask'; // 默认值
 
   chrome.storage.local.get(['skipTranscribeConfirmDialog'], (result) => {
@@ -3506,6 +3507,13 @@ document.addEventListener('DOMContentLoaded', function () {
   function getCustomSelectOptionLabel(option) {
     if (!option) return '';
     return option.querySelector('.custom-select-option-title')?.textContent?.trim() || option.textContent.trim();
+  }
+
+  function closeAllSettingsDropdowns() {
+    if (formatSelectTrigger) formatSelectTrigger.classList.remove('active');
+    if (formatSelectDropdown) formatSelectDropdown.classList.remove('active');
+    if (fileNameSelectTrigger) fileNameSelectTrigger.classList.remove('active');
+    if (fileNameSelectDropdown) fileNameSelectDropdown.classList.remove('active');
   }
 
   // 从 storage 加载设置
@@ -3527,14 +3535,6 @@ document.addEventListener('DOMContentLoaded', function () {
 
   // 自定义下拉框交互
   if (formatSelectTrigger && formatSelectDropdown) {
-    // 关闭所有设置下拉框
-    function closeAllSettingsDropdowns() {
-      formatSelectTrigger.classList.remove('active');
-      formatSelectDropdown.classList.remove('active');
-      if (fileNameSelectTrigger) fileNameSelectTrigger.classList.remove('active');
-      if (fileNameSelectDropdown) fileNameSelectDropdown.classList.remove('active');
-    }
-
     formatSelectTrigger.addEventListener('click', (e) => {
       e.stopPropagation();
       const wasOpen = formatSelectTrigger.classList.contains('active');
@@ -3632,6 +3632,7 @@ document.addEventListener('DOMContentLoaded', function () {
     };
 
     const closeSettingsModal = () => {
+      closeAllSettingsDropdowns();
       settingsModal.style.display = 'none';
       document.body.classList.remove('modal-open');
     };
@@ -3642,6 +3643,18 @@ document.addEventListener('DOMContentLoaded', function () {
 
     settingsModal.addEventListener('click', (e) => {
       if (e.target === settingsModal) {
+        closeSettingsModal();
+      }
+    });
+
+    if (settingsModalCloseBtn) {
+      settingsModalCloseBtn.addEventListener('click', () => {
+        closeSettingsModal();
+      });
+    }
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && settingsModal.style.display === 'flex') {
         closeSettingsModal();
       }
     });
