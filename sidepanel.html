@@ -907,8 +907,8 @@
 
       .progress-circle {
         position: relative;
-        width: 220px;
-        height: 220px;
+        width: 240px;
+        min-height: 220px;
         display: flex;
         flex-direction: column;
         justify-content: center;
@@ -957,6 +957,26 @@
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
+      }
+
+      .transcribe-progress-reminder {
+        display: none;
+        margin-top: 16px;
+        max-width: 220px;
+        color: #8c8c8c;
+        font-size: 13px;
+        line-height: 1.5;
+        text-align: center;
+        white-space: nowrap;
+      }
+
+      .transcribe-progress-reminder.show {
+        display: block;
+      }
+
+      .transcribe-progress-reminder-highlight {
+        color: #ff4d4f;
+        font-weight: 600;
       }
 
       a {
@@ -2139,6 +2159,12 @@
           class="progress-sub-text"
         >
           获取字幕中...
+        </div>
+        <div
+          id="transcribeProgressReminder"
+          class="transcribe-progress-reminder"
+        >
+          转写过程中<span class="transcribe-progress-reminder-highlight">请勿关闭插件侧边栏</span>
         </div>
       </div>
     </div>

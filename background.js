@@ -508,6 +508,25 @@ async function fetchWbiRequest(url, headers) {
 }
 
 // 获取B站视频信息
+const CHARGE_EXCLUSIVE_BLOCK_REASON = 'charge-exclusive';
+const CHARGE_EXCLUSIVE_BLOCK_MESSAGE = '充电专属不可获取';
+
+function extractChargeExclusiveInfo(videoData) {
+  const isChargeExclusive = !!(videoData?.is_upower_exclusive || videoData?.rights?.is_upower_exclusive);
+  return {
+    isChargeExclusive,
+    blockReason: isChargeExclusive ? CHARGE_EXCLUSIVE_BLOCK_REASON : undefined,
+  };
+}
+
+function createChargeExclusiveBlockedResult() {
+  return {
+    success: false,
+    blockReason: CHARGE_EXCLUSIVE_BLOCK_REASON,
+    message: CHARGE_EXCLUSIVE_BLOCK_MESSAGE,
+  };
+}
+
 async function getBilibiliVideoInfo(videoId) {
   try {
     // 判断是BV号还是AV号
@@ -521,6 +540,8 @@ async function getBilibiliVideoInfo(videoId) {
     console.log('🚀 data:', data);
 
     if (data.code === 0 && data.data) {
+      const chargeExclusiveInfo = extractChargeExclusiveInfo(data.data);
+
       // 获取视频的第一个分P的cid
       let cid = data.data.cid;
 
@@ -551,6 +572,7 @@ async function getBilibiliVideoInfo(videoId) {
         cid: cid, // 使用获取到的cid
         duration: data.data.duration,
         publishDate: data.data.pubdate || data.data.ctime || 0,
+        ...chargeExclusiveInfo,
         full_data: data.data, // 添加完整数据供需要时使用
       };
     } else {
@@ -578,6 +600,17 @@ async function getBilibiliSubtitle(cid, bvid, retryCount = 2) {
     try {
       const viewInfo = await fetchWithHeaders(`https://api.bilibili.com/x/web-interface/view?bvid=${bvid}`);
       if (viewInfo.code === 0 && viewInfo.data) {
+        const chargeExclusiveInfo = extractChargeExclusiveInfo(viewInfo.data);
+        if (chargeExclusiveInfo.isChargeExclusive) {
+          console.warn('检测到充电专属视频，拦截字幕获取:', {
+            bvid,
+            cid,
+            is_upower_exclusive: viewInfo.data.is_upower_exclusive,
+            is_upower_play: viewInfo.data.is_upower_play,
+            is_upower_preview: viewInfo.data.is_upower_preview,
+          });
+          return createChargeExclusiveBlockedResult();
+        }
         aid = viewInfo.data.aid;
         console.log('成功获取aid:', aid);
       } else {
@@ -1787,6 +1820,17 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     // 创建转写任务
     (async () => {
       try {
+        try {
+          const videoInfo = await getBilibiliVideoInfo(bvid);
+          if (videoInfo?.success && videoInfo.isChargeExclusive) {
+            console.warn('检测到充电专属视频，拦截音频转字幕:', { bvid, cid });
+            sendResponse(createChargeExclusiveBlockedResult());
+            return;
+          }
+        } catch (videoInfoError) {
+          console.warn('转写前检查视频类型失败，继续后续流程:', videoInfoError);
+        }
+
         // 1. 获取音频流 URL
         console.log('步骤1: 获取音频流 URL');
         const audioResult = await fetchAudioStreamUrl(bvid, cid);

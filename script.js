@@ -37,6 +37,7 @@ document.addEventListener('DOMContentLoaded', function () {
   const progressCircleValue = document.getElementById('progressCircleValue');
   const progressText = document.getElementById('progressText');
   const progressSubText = document.getElementById('progressSubText');
+  const transcribeProgressReminder = document.getElementById('transcribeProgressReminder');
 
   // 显示和更新进度条函数
   function showProgress(show = true) {
@@ -44,7 +45,13 @@ document.addEventListener('DOMContentLoaded', function () {
       progressContainer.classList.add('show');
     } else {
       progressContainer.classList.remove('show');
+      setTranscribeProgressReminderVisible(false);
     }
+  }
+
+  function setTranscribeProgressReminderVisible(visible) {
+    if (!transcribeProgressReminder) return;
+    transcribeProgressReminder.classList.toggle('show', !!visible);
   }
 
   function updateProgress(percent, text = '获取字幕中...') {
@@ -118,6 +125,8 @@ document.addEventListener('DOMContentLoaded', function () {
   let videoList = [];
   let transcribeProgressContext = null;
   let skipTranscribeConfirmDialog = false;
+  const CHARGE_EXCLUSIVE_BLOCK_REASON = 'charge-exclusive';
+  const CHARGE_EXCLUSIVE_BLOCK_STATUS = '充电专属不可获取';
 
   // 显示错误提示
   function showError(message) {
@@ -193,6 +202,21 @@ document.addEventListener('DOMContentLoaded', function () {
     return !!(video && video.subtitleText && video.subtitleText.trim() !== '' && isSubtitleSuccessStatus(video.subtitleStatus));
   }
 
+  function isChargeExclusiveBlockedResponse(response) {
+    return !!(
+      response &&
+      (response.blockReason === CHARGE_EXCLUSIVE_BLOCK_REASON || response.isChargeExclusive === true)
+    );
+  }
+
+  function markVideoAsChargeExclusive(video) {
+    if (!video) return;
+    video.subtitleStatus = CHARGE_EXCLUSIVE_BLOCK_STATUS;
+    video.subtitleText = null;
+    video.isChargeExclusive = true;
+    video.blockReason = CHARGE_EXCLUSIVE_BLOCK_REASON;
+  }
+
   function getNoExternalSubtitleCount() {
     return videoList.filter((video) => video?.subtitleStatus && video.subtitleStatus.includes('无外挂字幕')).length;
   }
@@ -216,7 +240,12 @@ document.addEventListener('DOMContentLoaded', function () {
     if (hasSubtitleContent(video)) return false;
 
     const status = video.subtitleStatus || '未获取';
-    if (status === '获取中' || status === 'AI转写中' || status.startsWith('信息不完整')) {
+    if (
+      status === '获取中' ||
+      status === 'AI转写中' ||
+      status === CHARGE_EXCLUSIVE_BLOCK_STATUS ||
+      status.startsWith('信息不完整')
+    ) {
       return false;
     }
 
@@ -352,6 +381,61 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     return false;
+  }
+
+  async function refreshVideoExecutionInfo(video, options = {}) {
+    const { allowFallbackCid = true } = options;
+
+    if (!video?.bvid) {
+      return { success: false, message: '缺少必要参数bvid' };
+    }
+
+    try {
+      const infoResponse = await new Promise((resolve) => {
+        chrome.runtime.sendMessage(
+          {
+            action: 'fetchBilibiliInfo',
+            videoId: video.bvid,
+          },
+          resolve,
+        );
+      });
+
+      if (infoResponse && infoResponse.success) {
+        const resolvedCid = resolveCidFromVideoInfo(video, infoResponse);
+        if (resolvedCid) {
+          video.cid = resolvedCid;
+        } else if (allowFallbackCid && infoResponse.cid) {
+          video.cid = infoResponse.cid;
+        }
+
+        if (infoResponse.aid) {
+          video.aid = infoResponse.aid;
+        }
+
+        video.isChargeExclusive = !!infoResponse.isChargeExclusive;
+        video.blockReason = infoResponse.blockReason;
+
+        return {
+          success: true,
+          info: infoResponse,
+          isChargeExclusive: !!infoResponse.isChargeExclusive,
+        };
+      }
+
+      return {
+        success: false,
+        info: infoResponse,
+        isChargeExclusive: false,
+      };
+    } catch (error) {
+      console.error(`刷新视频 ${video.title} 的执行信息失败:`, error);
+      return {
+        success: false,
+        message: error.message || '获取视频信息失败',
+        isChargeExclusive: false,
+      };
+    }
   }
 
   async function getCurrentBilibiliVideoTab() {
@@ -1926,6 +2010,7 @@ document.addEventListener('DOMContentLoaded', function () {
       } else if (
         video.subtitleStatus &&
         (video.subtitleStatus.includes('信息不完整') ||
+          video.subtitleStatus.includes(CHARGE_EXCLUSIVE_BLOCK_STATUS) ||
           video.subtitleStatus.includes('无外挂字幕') ||
           video.subtitleStatus.includes('错误') ||
           video.subtitleStatus.includes('失败'))
@@ -2095,11 +2180,13 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     // 显示进度条并初始化为0%
+    setTranscribeProgressReminderVisible(false);
     showProgress(true);
     updateProgress(0, '准备获取字幕...');
 
     let successCount = 0;
     let failCount = 0;
+    let skippedCount = 0;
     const totalVideos = videoList.length;
     const needProcessVideos = videoList.filter((v) => !hasSubtitleContent(v)).length;
 
@@ -2120,45 +2207,30 @@ document.addEventListener('DOMContentLoaded', function () {
         continue;
       }
 
+      if (video.subtitleStatus === CHARGE_EXCLUSIVE_BLOCK_STATUS) {
+        console.log(`视频 ${video.title} 已标记为充电专属不可获取，跳过`);
+        skippedCount++;
+        continue;
+      }
+
       // 更新当前状态
       videoList[i].subtitleStatus = '获取中';
       updateVideoTable();
 
       try {
-        // 尝试补全缺失的CID
-        if (video.bvid && !video.cid) {
-          try {
-            console.log(`视频 ${video.title} 缺少CID，尝试获取...`);
-            updateProgress(currentPercent, '获取字幕中...');
+        const executionInfo = await refreshVideoExecutionInfo(video);
+        if (executionInfo.success) {
+          videoList[i].cid = video.cid;
+          videoList[i].aid = video.aid;
+          videoList[i].isChargeExclusive = video.isChargeExclusive;
+          videoList[i].blockReason = video.blockReason;
+        }
 
-            // 使用Promise包装，确保等待结果
-            const infoResponse = await new Promise((resolve) => {
-              chrome.runtime.sendMessage(
-                {
-                  action: 'fetchBilibiliInfo',
-                  videoId: video.bvid,
-                },
-                resolve,
-              );
-            });
-
-            if (infoResponse && infoResponse.success && infoResponse.cid) {
-              console.log(`成功获取CID: ${infoResponse.cid}`);
-              video.cid = infoResponse.cid;
-              videoList[i].cid = infoResponse.cid; // Update main list
-              currentVideoInfo.cid = infoResponse.cid;
-
-              if (infoResponse.aid) {
-                video.aid = infoResponse.aid;
-                videoList[i].aid = infoResponse.aid;
-                currentVideoInfo.aid = infoResponse.aid;
-              }
-            } else {
-              console.error('获取CID失败:', infoResponse);
-            }
-          } catch (cidError) {
-            console.error('获取CID出错:', cidError);
-          }
+        if (executionInfo.isChargeExclusive) {
+          markVideoAsChargeExclusive(videoList[i]);
+          skippedCount++;
+          updateVideoTable();
+          continue;
         }
 
         // 检查视频信息是否完整
@@ -2199,6 +2271,10 @@ document.addEventListener('DOMContentLoaded', function () {
           videoList[i].subtitleText = response.subtitleText;
           successCount++;
           console.log(`视频 ${video.title} 字幕获取成功`);
+        } else if (isChargeExclusiveBlockedResponse(response)) {
+          markVideoAsChargeExclusive(videoList[i]);
+          skippedCount++;
+          console.log(`视频 ${video.title} 因充电专属限制被跳过`);
         } else {
           // 获取失败
           const errorMessage = response?.message || '未知原因';
@@ -2252,11 +2328,16 @@ document.addEventListener('DOMContentLoaded', function () {
       noExternalSubtitleCount > 0
         ? ` ${noExternalSubtitleCount} 个视频无外挂字幕，可点击“转写无字幕”按钮生成字幕`
         : '';
+    const skippedChargeText = skippedCount > 0 ? ` 跳过: ${skippedCount}` : '';
 
     if (successCount > 0 && failCount === 0) {
-      showSuccess(`所有字幕获取成功 (${successCount}/${videoList.length})。${noSubtitleFollowupText}`.trim());
-    } else if (successCount > 0 && failCount > 0) {
-      showSuccess(`部分字幕获取成功 (成功: ${successCount}, 失败: ${failCount})。${noSubtitleFollowupText}`.trim());
+      showSuccess(
+        `所有字幕获取成功 (成功: ${successCount}${skippedChargeText})。${noSubtitleFollowupText}`.trim(),
+      );
+    } else if (successCount > 0 || skippedCount > 0) {
+      showSuccess(
+        `字幕获取完成 (成功: ${successCount}, 失败: ${failCount}, 跳过: ${skippedCount})。${noSubtitleFollowupText}`.trim(),
+      );
     } else if (successCount === 0 && failCount > 0) {
       showError(`所有字幕获取失败 (${failCount}/${videoList.length})。${noSubtitleFollowupText}`.trim());
     } else {
@@ -2419,7 +2500,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
       const videosToTranscribe = videoList.filter((video) => shouldAttemptAudioTranscription(video));
       if (videosToTranscribe.length === 0) {
-        showError('没有需要转写的无字幕视频（所有视频都已获取字幕或信息不完整）');
+        showError('没有需要转写的无字幕视频（所有视频都已获取字幕、信息不完整或充电专属不可获取）');
         return;
       }
 
@@ -2439,6 +2520,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
       // 显示进度
       showProgress(true);
+      setTranscribeProgressReminderVisible(true);
       updateProgress(0, '准备转写无字幕视频...');
       setTranscribeAudioButtonLoading(true);
 
@@ -2457,12 +2539,26 @@ document.addEventListener('DOMContentLoaded', function () {
 
         let successCount = 0;
         let failCount = 0;
+        let skippedCount = 0;
 
         for (let i = 0; i < videosToTranscribe.length; i++) {
           const videoToTranscribe = videosToTranscribe[i];
           setTranscribeProgressContext(i, videosToTranscribe.length);
 
           try {
+            const executionInfo = await refreshVideoExecutionInfo(videoToTranscribe, { allowFallbackCid: false });
+            if (executionInfo.success) {
+              videoToTranscribe.isChargeExclusive = !!executionInfo.info?.isChargeExclusive;
+              videoToTranscribe.blockReason = executionInfo.info?.blockReason;
+            }
+
+            if (executionInfo.isChargeExclusive) {
+              markVideoAsChargeExclusive(videoToTranscribe);
+              skippedCount++;
+              updateVideoTable();
+              continue;
+            }
+
             if (videoToTranscribe.duration && videoToTranscribe.duration > 1800) {
               videoToTranscribe.subtitleStatus = 'AI转写失败: 视频超过30分钟';
               failCount++;
@@ -2493,8 +2589,13 @@ document.addEventListener('DOMContentLoaded', function () {
             console.log('音频转写响应:', response);
 
             if (!response.success) {
-              videoToTranscribe.subtitleStatus = `AI转写失败: ${response.message || '未知错误'}`;
-              failCount++;
+              if (isChargeExclusiveBlockedResponse(response)) {
+                markVideoAsChargeExclusive(videoToTranscribe);
+                skippedCount++;
+              } else {
+                videoToTranscribe.subtitleStatus = `AI转写失败: ${response.message || '未知错误'}`;
+                failCount++;
+              }
               updateVideoTable();
               continue;
             }
@@ -2543,10 +2644,10 @@ document.addEventListener('DOMContentLoaded', function () {
         clearTranscribeProgressContext();
         updateProgress(100, '批量转写无字幕视频完成');
 
-        if (successCount > 0 && failCount === 0) {
+        if (successCount > 0 && failCount === 0 && skippedCount === 0) {
           showSuccess(`批量转写无字幕视频完成，成功 ${successCount} 个视频`);
-        } else if (successCount > 0 && failCount > 0) {
-          showSuccess(`批量转写无字幕视频完成，成功 ${successCount} 个，失败 ${failCount} 个`);
+        } else if (successCount > 0 || skippedCount > 0) {
+          showSuccess(`批量转写无字幕视频完成，成功 ${successCount} 个，失败 ${failCount} 个，跳过 ${skippedCount} 个`);
         } else {
           showError(`批量转写无字幕视频失败，共失败 ${failCount} 个视频`);
         }
