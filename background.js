@@ -919,6 +919,209 @@ async function getBilibiliSubtitle(cid, bvid, retryCount = 2) {
   }
 }
 
+function createSubtitleTrackId(subtitle, index) {
+  const rawId = subtitle?.id ?? subtitle?.lan ?? subtitle?.lan_doc ?? index;
+  return `${rawId}-${subtitle?.lan || 'unknown'}-${index}`;
+}
+
+function normalizeSubtitleTrack(subtitle, index) {
+  return {
+    trackId: createSubtitleTrackId(subtitle, index),
+    index,
+    id: subtitle?.id,
+    lan: subtitle?.lan || '',
+    lan_doc: subtitle?.lan_doc || subtitle?.lan || `字幕${index + 1}`,
+    subtitle_url: subtitle?.subtitle_url || '',
+    type: subtitle?.type,
+  };
+}
+
+async function getBilibiliSubtitleTracks(cid, bvid, retryCount = 2) {
+  try {
+    console.log(`正在获取字幕语言列表，cid: ${cid}, bvid: ${bvid}, 尝试次数: ${3 - retryCount}`);
+
+    let aid;
+    try {
+      const viewInfo = await fetchWithHeaders(`https://api.bilibili.com/x/web-interface/view?bvid=${bvid}`);
+      if (viewInfo.code === 0 && viewInfo.data) {
+        const chargeExclusiveInfo = extractChargeExclusiveInfo(viewInfo.data);
+        if (chargeExclusiveInfo.isChargeExclusive) {
+          console.warn('检测到充电专属视频，拦截字幕语言列表获取:', { bvid, cid });
+          return createChargeExclusiveBlockedResult();
+        }
+        aid = viewInfo.data.aid;
+      }
+    } catch (error) {
+      console.error('获取视频基本信息出错:', error);
+    }
+
+    const subtitleInfoUrl = aid
+      ? `https://api.bilibili.com/x/player/wbi/v2?aid=${aid}&cid=${cid}`
+      : `https://api.bilibili.com/x/player/v2?cid=${cid}&bvid=${bvid}`;
+
+    console.log('字幕语言列表请求URL:', subtitleInfoUrl);
+    const subtitleInfoData = await fetchWithHeaders(subtitleInfoUrl);
+
+    if (subtitleInfoData.code !== 0 || !subtitleInfoData.data) {
+      throw new Error('获取字幕信息失败: ' + (subtitleInfoData.message || '未知错误'));
+    }
+
+    const subtitles = subtitleInfoData.data.subtitle?.subtitles || [];
+    if (subtitles.length === 0) {
+      return {
+        success: false,
+        message: '该视频没有可用字幕',
+      };
+    }
+
+    const subtitleTracks = subtitles.map((subtitle, index) => normalizeSubtitleTrack(subtitle, index));
+
+    return {
+      success: true,
+      aid,
+      cid,
+      bvid,
+      subtitleTracks,
+    };
+  } catch (error) {
+    console.error('获取字幕语言列表失败:', error);
+
+    if (retryCount > 0) {
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      return getBilibiliSubtitleTracks(cid, bvid, retryCount - 1);
+    }
+
+    return {
+      success: false,
+      message: error.message || '获取字幕语言列表失败',
+    };
+  }
+}
+
+async function resolveSubtitleUrlFromTrack({ track, aid, cid, bvid }) {
+  if (track?.subtitle_url) {
+    return formatSubtitleUrl(track.subtitle_url);
+  }
+
+  if (track?.lan && track.lan.startsWith('ai-') && aid && cid) {
+    const aiSubtitleUrl = `https://api.bilibili.com/x/player/v2/ai/subtitle/search/stat?aid=${aid}&cid=${cid}`;
+    console.log('字幕轨道URL为空，尝试请求AI字幕URL:', aiSubtitleUrl);
+    const aiSubtitleData = await fetchWithHeaders(aiSubtitleUrl);
+    if (aiSubtitleData.code === 0 && aiSubtitleData.data && aiSubtitleData.data.subtitle_url) {
+      return formatSubtitleUrl(aiSubtitleData.data.subtitle_url);
+    }
+  }
+
+  console.warn('无法解析字幕轨道URL:', { track, aid, cid, bvid });
+  return '';
+}
+
+async function fetchSubtitleContentFromUrl({ subtitleUrl, track, bvid, aid }) {
+  // 字幕 CDN 不接受带自定义头的预检请求。这里保持和旧字幕下载路径一致，
+  // 使用最简单的 GET，避免触发 aisubtitle.hdslb.com 的 CORS preflight。
+  const subtitleResponse = await fetch(subtitleUrl);
+
+  if (!subtitleResponse.ok) {
+    throw new Error(`获取字幕内容失败: HTTP ${subtitleResponse.status}`);
+  }
+
+  const subtitleData = await subtitleResponse.json();
+  if (!subtitleData || !Array.isArray(subtitleData.body)) {
+    return {
+      success: false,
+      message: '解析字幕内容失败，可能是不支持的字幕格式',
+    };
+  }
+
+  if (subtitleData.body.length === 0) {
+    return {
+      success: false,
+      message: '字幕内容为空',
+    };
+  }
+
+  const metadata = {
+    lan: track?.lan || subtitleData.lang || '',
+    lan_doc: track?.lan_doc || '字幕',
+    subtitle_url: subtitleUrl,
+    trackId: track?.trackId,
+  };
+
+  const subtitleText = subtitleData.body
+    .map((item) => {
+      const startTime = formatTime(item.from);
+      const endTime = formatTime(item.to);
+      return `${startTime} --> ${endTime}\n${item.content}\n`;
+    })
+    .join('\n');
+
+  return {
+    success: true,
+    metadata,
+    subtitles: subtitleData.body,
+    subtitleText,
+  };
+}
+
+async function getBilibiliSubtitleContentByTrack({ cid, bvid, aid, track }, retryCount = 2) {
+  try {
+    if (!track) {
+      return {
+        success: false,
+        message: '缺少字幕语言信息',
+      };
+    }
+
+    let resolvedAid = aid;
+    try {
+      const viewInfo = await fetchWithHeaders(`https://api.bilibili.com/x/web-interface/view?bvid=${bvid}`);
+      if (viewInfo.code === 0 && viewInfo.data) {
+        const chargeExclusiveInfo = extractChargeExclusiveInfo(viewInfo.data);
+        if (chargeExclusiveInfo.isChargeExclusive) {
+          console.warn('检测到充电专属视频，拦截字幕内容获取:', { bvid, cid });
+          return createChargeExclusiveBlockedResult();
+        }
+        resolvedAid = resolvedAid || viewInfo.data.aid;
+      }
+    } catch (error) {
+      console.error('获取视频基本信息出错:', error);
+    }
+
+    const subtitleUrl = await resolveSubtitleUrlFromTrack({
+      track,
+      aid: resolvedAid,
+      cid,
+      bvid,
+    });
+
+    if (!subtitleUrl) {
+      return {
+        success: false,
+        message: '字幕地址无效',
+      };
+    }
+
+    return fetchSubtitleContentFromUrl({
+      subtitleUrl,
+      track,
+      bvid,
+      aid: resolvedAid,
+    });
+  } catch (error) {
+    console.error('按语言获取字幕内容失败:', error);
+
+    if (retryCount > 0) {
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+      return getBilibiliSubtitleContentByTrack({ cid, bvid, aid, track }, retryCount - 1);
+    }
+
+    return {
+      success: false,
+      message: error.message || '获取字幕内容失败',
+    };
+  }
+}
+
 // 格式化时间为 HH:MM:SS.mmm 格式
 function formatTime(seconds) {
   const hours = Math.floor(seconds / 3600);
@@ -1029,6 +1232,61 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         });
       });
     return true; // 保持消息通道开启，等待异步响应
+  }
+
+  if (message.action === 'fetchBilibiliSubtitleTracks') {
+    console.log('收到获取字幕语言列表请求:', message);
+    if (!message.cid || !message.bvid) {
+      sendResponse({
+        success: false,
+        message: '缺少必要参数cid或bvid，请确保已获取视频信息',
+      });
+      return true;
+    }
+
+    getBilibiliSubtitleTracks(message.cid, message.bvid)
+      .then((result) => {
+        console.log('字幕语言列表获取结果:', result);
+        sendResponse(result);
+      })
+      .catch((error) => {
+        console.error('获取字幕语言列表出错:', error);
+        sendResponse({
+          success: false,
+          message: error.message || '获取字幕语言列表失败',
+        });
+      });
+    return true;
+  }
+
+  if (message.action === 'fetchBilibiliSubtitleContent') {
+    console.log('收到按语言获取字幕内容请求:', message);
+    if (!message.cid || !message.bvid || !message.track) {
+      sendResponse({
+        success: false,
+        message: '缺少必要参数cid、bvid或字幕语言信息',
+      });
+      return true;
+    }
+
+    getBilibiliSubtitleContentByTrack({
+      cid: message.cid,
+      bvid: message.bvid,
+      aid: message.aid,
+      track: message.track,
+    })
+      .then((result) => {
+        console.log('按语言获取字幕内容结果:', result);
+        sendResponse(result);
+      })
+      .catch((error) => {
+        console.error('按语言获取字幕内容出错:', error);
+        sendResponse({
+          success: false,
+          message: error.message || '获取字幕内容失败',
+        });
+      });
+    return true;
   }
 
   // 处理获取B站视频字幕的消息

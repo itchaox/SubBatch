@@ -113,6 +113,7 @@ document.addEventListener('DOMContentLoaded', function () {
   // 设置表格同步滚动
   if (tableBodyContainer && tableHeaderContainer) {
     tableBodyContainer.addEventListener('scroll', function () {
+      closeSubtitleLanguageMenu();
       // 当表体水平滚动时，同步表头的水平滚动位置
       tableHeaderContainer.scrollLeft = tableBodyContainer.scrollLeft;
     });
@@ -120,11 +121,17 @@ document.addEventListener('DOMContentLoaded', function () {
     console.error('找不到表格容器元素，无法设置同步滚动');
   }
 
+  document.addEventListener('click', function (event) {
+    if (event.target.closest('.subtitle-language-select') || event.target.closest('.subtitle-language-menu')) return;
+    closeSubtitleLanguageMenu();
+  });
+
   let generatedUrl = '';
   let currentVideoInfo = null;
   let currentSubtitleData = null;
   // 视频列表数组，用于存储添加到表格的视频
   let videoList = [];
+  let activeSubtitleLanguageMenu = null;
   let transcribeProgressContext = null;
   let skipTranscribeConfirmDialog = false;
   const CHARGE_EXCLUSIVE_BLOCK_REASON = 'charge-exclusive';
@@ -200,8 +207,16 @@ document.addEventListener('DOMContentLoaded', function () {
     return ['获取成功', '已获取字幕', '已获取AI字幕', 'B站字幕', '外挂字幕', '转写字幕'].includes(status);
   }
 
+  function hasSubtitleTracks(video) {
+    return Array.isArray(video?.subtitleTracks) && video.subtitleTracks.length > 0;
+  }
+
   function hasSubtitleContent(video) {
-    return !!(video && video.subtitleText && video.subtitleText.trim() !== '' && isSubtitleSuccessStatus(video.subtitleStatus));
+    return !!(
+      video &&
+      isSubtitleSuccessStatus(video.subtitleStatus) &&
+      ((video.subtitleText && video.subtitleText.trim() !== '') || hasSubtitleTracks(video))
+    );
   }
 
   function isChargeExclusiveBlockedResponse(response) {
@@ -215,6 +230,9 @@ document.addEventListener('DOMContentLoaded', function () {
     if (!video) return;
     video.subtitleStatus = CHARGE_EXCLUSIVE_BLOCK_STATUS;
     video.subtitleText = null;
+    video.subtitleTracks = [];
+    video.selectedSubtitleTrackIds = [];
+    video.subtitleTrackContents = {};
     video.isChargeExclusive = true;
     video.blockReason = CHARGE_EXCLUSIVE_BLOCK_REASON;
   }
@@ -261,6 +279,272 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     return '外挂字幕';
+  }
+
+  function escapeHtml(value) {
+    return String(value ?? '')
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
+  }
+
+  function getSubtitleTrackId(track, index = 0) {
+    return String(track?.trackId || `${track?.id ?? track?.lan ?? 'track'}-${track?.lan || 'unknown'}-${index}`);
+  }
+
+  function getSubtitleLanguageName(track) {
+    const sourceText = String(track?.lan_doc || track?.lan || '字幕').trim();
+    const lan = String(track?.lan || '').toLowerCase();
+
+    if (/中文|简体|繁体|chinese/.test(sourceText) || lan.includes('zh')) return '中文';
+    if (/英文|英语|english/.test(sourceText) || lan.includes('en')) return '英文';
+    if (/日文|日语|japanese/.test(sourceText) || lan.includes('ja') || lan.includes('jp')) return '日文';
+    if (/韩文|韩语|korean/.test(sourceText) || lan.includes('ko')) return '韩文';
+
+    return sourceText.replace(/自动生成|字幕|\(AI\)|AI/g, '').trim() || sourceText || lan || '字幕';
+  }
+
+  function sanitizeLanguageSuffix(languageName) {
+    return String(languageName || '字幕').replace(/[\\/:*?"<>|]/g, '_').trim() || '字幕';
+  }
+
+  function ensureSubtitleSelection(video) {
+    if (!hasSubtitleTracks(video)) return [];
+
+    const validTrackIds = video.subtitleTracks.map((track, index) => getSubtitleTrackId(track, index));
+    const selectedTrackIds = Array.isArray(video.selectedSubtitleTrackIds)
+      ? video.selectedSubtitleTrackIds.filter((trackId) => validTrackIds.includes(String(trackId)))
+      : [];
+
+    if (selectedTrackIds.length === 0) {
+      selectedTrackIds.push(validTrackIds[0]);
+    }
+
+    video.selectedSubtitleTrackIds = selectedTrackIds;
+    return selectedTrackIds;
+  }
+
+  function getSelectedSubtitleTracks(video) {
+    if (!hasSubtitleTracks(video)) return [];
+    const selectedTrackIds = ensureSubtitleSelection(video);
+    return video.subtitleTracks.filter((track, index) => selectedTrackIds.includes(getSubtitleTrackId(track, index)));
+  }
+
+  function isAllSubtitleTracksSelected(video) {
+    return hasSubtitleTracks(video) && ensureSubtitleSelection(video).length === video.subtitleTracks.length;
+  }
+
+  function getSubtitleLanguageDisplayText(video) {
+    if (!hasSubtitleTracks(video)) return '无';
+
+    const selectedTracks = getSelectedSubtitleTracks(video);
+    if (selectedTracks.length === video.subtitleTracks.length && video.subtitleTracks.length > 1) return '全部';
+    if (selectedTracks.length === 1) return getSubtitleLanguageName(selectedTracks[0]);
+    return `已选 ${selectedTracks.length} 项`;
+  }
+
+  function getSubtitleLanguageCellHtml(video, index) {
+    if (!hasSubtitleTracks(video)) {
+      return '<span style="color: #666;">无</span>';
+    }
+
+    ensureSubtitleSelection(video);
+
+    if (video.subtitleTracks.length === 1) {
+      return `<span style="color: #333;">${escapeHtml(getSubtitleLanguageName(video.subtitleTracks[0]))}</span>`;
+    }
+
+    return `
+      <div class="subtitle-language-select" data-index="${index}">
+        <button class="subtitle-language-trigger" type="button" data-index="${index}">
+          <span>${escapeHtml(getSubtitleLanguageDisplayText(video))}</span>
+          <span>▾</span>
+        </button>
+      </div>
+    `;
+  }
+
+  function closeSubtitleLanguageMenu() {
+    if (activeSubtitleLanguageMenu) {
+      activeSubtitleLanguageMenu.element.remove();
+      activeSubtitleLanguageMenu.trigger?.closest('.subtitle-language-select')?.classList.remove('open');
+      activeSubtitleLanguageMenu = null;
+    }
+  }
+
+  function getSubtitleLanguageMenuHtml(video, index) {
+    const selectedTrackIds = video.selectedSubtitleTrackIds || [];
+    const allSelected = isAllSubtitleTracksSelected(video);
+    const optionsHtml = video.subtitleTracks
+      .map((track, trackIndex) => {
+        const trackId = getSubtitleTrackId(track, trackIndex);
+        const checked = selectedTrackIds.includes(trackId) ? 'checked' : '';
+        return `
+          <label class="subtitle-language-option">
+            <input type="checkbox" class="subtitle-language-option-input" data-index="${index}" data-track-id="${escapeHtml(
+              trackId,
+            )}" ${checked}>
+            <span>${escapeHtml(getSubtitleLanguageName(track))}</span>
+          </label>
+        `;
+      })
+      .join('');
+
+    return `
+      <label class="subtitle-language-option">
+        <input type="checkbox" class="subtitle-language-all-input" data-index="${index}" ${allSelected ? 'checked' : ''}>
+        <span>全部</span>
+      </label>
+      ${optionsHtml}
+    `;
+  }
+
+  function positionSubtitleLanguageMenu(trigger, menu) {
+    const rect = trigger.getBoundingClientRect();
+    const gap = 6;
+    const viewportPadding = 8;
+    const menuWidth = menu.offsetWidth;
+    const menuHeight = menu.offsetHeight;
+
+    let top = rect.bottom + gap;
+    let left = rect.left + rect.width / 2 - menuWidth / 2;
+
+    if (top + menuHeight > window.innerHeight - viewportPadding && rect.top > menuHeight + gap) {
+      top = rect.top - menuHeight - gap;
+    }
+
+    left = Math.max(viewportPadding, Math.min(left, window.innerWidth - menuWidth - viewportPadding));
+    top = Math.max(viewportPadding, top);
+
+    menu.style.left = `${left}px`;
+    menu.style.top = `${top}px`;
+  }
+
+  function refreshSubtitleLanguageTrigger(index) {
+    document
+      .querySelector(`.subtitle-language-trigger[data-index="${index}"] span:first-child`)
+      ?.replaceChildren(document.createTextNode(getSubtitleLanguageDisplayText(videoList[index])));
+  }
+
+  function refreshSubtitleLanguageActionState(index) {
+    const video = videoList[index];
+    const copyButton = document.querySelector(`.copy-row-btn[data-index="${index}"]`);
+    if (!video || !copyButton) return;
+
+    copyButton.disabled = !canCopyVideoSubtitle(video);
+    copyButton.title = getCopyButtonTitle(video);
+  }
+
+  function refreshSubtitleLanguageMenu(index) {
+    if (!activeSubtitleLanguageMenu) return;
+    const video = videoList[index];
+    if (!video || !hasSubtitleTracks(video)) return;
+
+    activeSubtitleLanguageMenu.element.innerHTML = getSubtitleLanguageMenuHtml(video, index);
+    bindSubtitleLanguageMenuEvents(activeSubtitleLanguageMenu.element, index);
+    positionSubtitleLanguageMenu(activeSubtitleLanguageMenu.trigger, activeSubtitleLanguageMenu.element);
+  }
+
+  function setAllSubtitleLanguageSelection(index, checked) {
+    const video = videoList[index];
+    if (!video || !hasSubtitleTracks(video)) return;
+
+    if (checked) {
+      video.selectedSubtitleTrackIds = video.subtitleTracks.map((track, trackIndex) =>
+        getSubtitleTrackId(track, trackIndex),
+      );
+    } else {
+      video.selectedSubtitleTrackIds = [getSubtitleTrackId(video.subtitleTracks[0], 0)];
+    }
+
+    refreshSubtitleLanguageTrigger(index);
+    refreshSubtitleLanguageActionState(index);
+    refreshSubtitleLanguageMenu(index);
+  }
+
+  function setSubtitleLanguageSelection(index, trackId, checked) {
+    const video = videoList[index];
+    if (!video || !hasSubtitleTracks(video)) return;
+
+    const currentSelection = ensureSubtitleSelection(video);
+    if (checked) {
+      video.selectedSubtitleTrackIds = Array.from(new Set([...currentSelection, trackId]));
+    } else {
+      const nextSelection = currentSelection.filter((selectedTrackId) => selectedTrackId !== trackId);
+      video.selectedSubtitleTrackIds = nextSelection.length > 0 ? nextSelection : currentSelection;
+    }
+
+    refreshSubtitleLanguageTrigger(index);
+    refreshSubtitleLanguageActionState(index);
+    refreshSubtitleLanguageMenu(index);
+  }
+
+  function bindSubtitleLanguageMenuEvents(menu, index) {
+    menu.querySelector('.subtitle-language-all-input')?.addEventListener('change', function () {
+      setAllSubtitleLanguageSelection(index, this.checked);
+    });
+
+    menu.querySelectorAll('.subtitle-language-option-input').forEach((input) => {
+      input.addEventListener('change', function () {
+        setSubtitleLanguageSelection(index, this.getAttribute('data-track-id'), this.checked);
+      });
+    });
+  }
+
+  function openSubtitleLanguageMenu(index, trigger) {
+    const video = videoList[index];
+    if (!video || !hasSubtitleTracks(video)) return;
+
+    closeSubtitleLanguageMenu();
+
+    const menu = document.createElement('div');
+    menu.className = 'subtitle-language-menu';
+    menu.innerHTML = getSubtitleLanguageMenuHtml(video, index);
+    menu.addEventListener('click', (event) => event.stopPropagation());
+    document.body.appendChild(menu);
+
+    positionSubtitleLanguageMenu(trigger, menu);
+    trigger.closest('.subtitle-language-select')?.classList.add('open');
+    activeSubtitleLanguageMenu = { element: menu, trigger };
+    bindSubtitleLanguageMenuEvents(menu, index);
+  }
+
+  function canCopyVideoSubtitle(video) {
+    if (!hasSubtitleContent(video)) return false;
+    if (hasSubtitleTracks(video)) return getSelectedSubtitleTracks(video).length === 1;
+    return !!(video.subtitleText && video.subtitleText.trim() !== '');
+  }
+
+  function getCopyButtonTitle(video) {
+    if (!hasSubtitleContent(video)) return '没有可复制的字幕内容';
+    if (hasSubtitleTracks(video) && getSelectedSubtitleTracks(video).length !== 1) return '选择单个语言后可复制';
+    return '复制视频脚本';
+  }
+
+  async function getSubtitleContentForTrack(video, track) {
+    const trackId = getSubtitleTrackId(track, track?.index || 0);
+    video.subtitleTrackContents = video.subtitleTrackContents || {};
+
+    if (video.subtitleTrackContents[trackId]?.subtitleText) {
+      return video.subtitleTrackContents[trackId];
+    }
+
+    const response = await chrome.runtime.sendMessage({
+      action: 'fetchBilibiliSubtitleContent',
+      cid: video.cid,
+      bvid: video.bvid,
+      aid: video.aid,
+      track,
+    });
+
+    if (!response?.success || !response.subtitleText) {
+      throw new Error(response?.message || '获取字幕内容失败');
+    }
+
+    video.subtitleTrackContents[trackId] = response;
+    return response;
   }
 
   function setTranscribeProgressContext(currentIndex, total) {
@@ -1998,6 +2282,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
   // 更新视频表格
   function updateVideoTable() {
+    closeSubtitleLanguageMenu();
+
     // 清空表格内容
     videoTableBody.innerHTML = '';
 
@@ -2067,8 +2353,11 @@ document.addEventListener('DOMContentLoaded', function () {
       // 构建操作按钮HTML
       let actionButtonsHtml = '';
       if (hasSubtitleContent(video)) {
+        const copyDisabled = canCopyVideoSubtitle(video) ? '' : 'disabled';
         actionButtonsHtml += `
-          <button class="table-action-btn copy-row-btn" data-index="${index}" title="复制视频脚本">
+          <button class="table-action-btn copy-row-btn" data-index="${index}" title="${getCopyButtonTitle(
+            video,
+          )}" ${copyDisabled}>
             <svg viewBox="0 0 24 24">
               <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
             </svg>
@@ -2092,7 +2381,7 @@ document.addEventListener('DOMContentLoaded', function () {
         }</a></td>
         <td style="text-align: center;">${formatDate(video.publishDate)}</td>
         <td>${subtitleStatusHtml}</td>
-        <td style="text-align: center; color: #666;">无</td>
+        <td style="text-align: center;">${getSubtitleLanguageCellHtml(video, index)}</td>
         <td>
           ${actionButtonsHtml}
         </td>
@@ -2112,6 +2401,7 @@ document.addEventListener('DOMContentLoaded', function () {
       tableBodyContainer.onscroll = null;
 
       tableBodyContainer.addEventListener('scroll', function () {
+        closeSubtitleLanguageMenu();
         tableHeaderContainer.scrollLeft = this.scrollLeft;
       });
     }
@@ -2129,14 +2419,27 @@ document.addEventListener('DOMContentLoaded', function () {
         }
 
         const video = videoList[index];
-        if (!video.subtitleText) {
+        if (!hasSubtitleContent(video)) {
           showError('没有可复制的字幕内容');
           return;
         }
 
         try {
+          let subtitleText = video.subtitleText;
+
+          if (hasSubtitleTracks(video)) {
+            const selectedTracks = getSelectedSubtitleTracks(video);
+            if (selectedTracks.length !== 1) {
+              showError('选择单个语言后可复制');
+              return;
+            }
+
+            const subtitleContent = await getSubtitleContentForTrack(video, selectedTracks[0]);
+            subtitleText = subtitleContent.subtitleText;
+          }
+
           // 转换为TXT格式
-          let txtContent = convertToTxtFormat(video.subtitleText);
+          let txtContent = convertToTxtFormat(subtitleText);
 
           // 添加视频信息前缀
           txtContent = prependVideoInfoText(txtContent, video.title, video.bvid);
@@ -2148,6 +2451,18 @@ document.addEventListener('DOMContentLoaded', function () {
           console.error('复制失败:', err);
           showError('复制失败: ' + (err.message || '未知错误'));
         }
+      });
+    });
+
+    document.querySelectorAll('.subtitle-language-trigger').forEach((btn) => {
+      btn.addEventListener('click', function (event) {
+        event.stopPropagation();
+        const index = parseInt(this.getAttribute('data-index'));
+        if (activeSubtitleLanguageMenu?.trigger === this) {
+          closeSubtitleLanguageMenu();
+          return;
+        }
+        openSubtitleLanguageMenu(index, this);
       });
     });
 
@@ -2292,9 +2607,9 @@ document.addEventListener('DOMContentLoaded', function () {
         console.log(`正在获取第 ${i + 1}/${videoList.length} 个视频的字幕: ${video.title}`);
         updateProgress(currentPercent, `获取字幕中...`);
 
-        // 调用chrome.runtime.sendMessage直接获取字幕，而不是通过fetchBilibiliSubtitle函数
+        // 获取字幕语言列表，具体字幕内容在复制或导出时按需下载。
         const response = await chrome.runtime.sendMessage({
-          action: 'fetchBilibiliSubtitle',
+          action: 'fetchBilibiliSubtitleTracks',
           cid: video.cid,
           bvid: video.bvid,
           aid: video.aid, // 添加aid参数，帮助后台更好地获取字幕
@@ -2302,10 +2617,14 @@ document.addEventListener('DOMContentLoaded', function () {
 
         console.log(`获取字幕结果:`, response);
 
-        if (response && response.success) {
+        if (response && response.success && Array.isArray(response.subtitleTracks) && response.subtitleTracks.length > 0) {
           // 更新字幕状态和内容
           videoList[i].subtitleStatus = '外挂字幕';
-          videoList[i].subtitleText = response.subtitleText;
+          videoList[i].subtitleText = null;
+          videoList[i].aid = response.aid || videoList[i].aid;
+          videoList[i].subtitleTracks = response.subtitleTracks;
+          videoList[i].selectedSubtitleTrackIds = [getSubtitleTrackId(response.subtitleTracks[0], 0)];
+          videoList[i].subtitleTrackContents = {};
           successCount++;
           console.log(`视频 ${video.title} 字幕获取成功`);
         } else if (isChargeExclusiveBlockedResponse(response)) {
@@ -2317,6 +2636,10 @@ document.addEventListener('DOMContentLoaded', function () {
           const errorMessage = response?.message || '未知原因';
           // videoList[i].subtitleStatus = `获取失败: ${errorMessage}`;
           videoList[i].subtitleStatus = `无外挂字幕`;
+          videoList[i].subtitleText = null;
+          videoList[i].subtitleTracks = [];
+          videoList[i].selectedSubtitleTrackIds = [];
+          videoList[i].subtitleTrackContents = {};
           failCount++;
           console.log(`视频 ${video.title} 字幕获取失败: ${errorMessage}`);
         }
@@ -2951,6 +3274,89 @@ document.addEventListener('DOMContentLoaded', function () {
     return `标题：${title}\n链接：${videoUrl}\n\n${subtitleContent}`;
   }
 
+  function buildVideoExportFileName(video, format) {
+    const safeTitle = video.title.replace(/[\\/:*?"<>|]/g, '_');
+    const safeAuthor = video.author ? video.author.replace(/[\\/:*?"<>|]/g, '_') : 'unknown';
+    let formattedDate = '';
+
+    if (video.publishDate) {
+      const d = formatDate(video.publishDate);
+      if (d && d !== '-') {
+        formattedDate = d;
+      }
+    }
+
+    return buildFileName(safeAuthor, safeTitle, formattedDate, format);
+  }
+
+  function appendLanguageSuffixToFileName(fileName, languageName, format) {
+    const suffix = sanitizeLanguageSuffix(languageName);
+    const extension = `.${format}`;
+
+    if (fileName.endsWith(extension)) {
+      return `${fileName.slice(0, -extension.length)}-${suffix}${extension}`;
+    }
+
+    return `${fileName}-${suffix}`;
+  }
+
+  function ensureUniqueZipFileName(fileName, usedFileNames) {
+    if (!usedFileNames.has(fileName)) {
+      usedFileNames.add(fileName);
+      return fileName;
+    }
+
+    const dotIndex = fileName.lastIndexOf('.');
+    const baseName = dotIndex >= 0 ? fileName.slice(0, dotIndex) : fileName;
+    const extension = dotIndex >= 0 ? fileName.slice(dotIndex) : '';
+    let index = 2;
+    let nextFileName = `${baseName}-${index}${extension}`;
+
+    while (usedFileNames.has(nextFileName)) {
+      index++;
+      nextFileName = `${baseName}-${index}${extension}`;
+    }
+
+    usedFileNames.add(nextFileName);
+    return nextFileName;
+  }
+
+  function buildSubtitleExportTasks(videosWithSubtitle, format) {
+    const usedFileNames = new Set();
+    const tasks = [];
+
+    videosWithSubtitle.forEach((video) => {
+      const baseFileName = buildVideoExportFileName(video, format);
+
+      if (hasSubtitleTracks(video)) {
+        getSelectedSubtitleTracks(video).forEach((track) => {
+          const languageName = getSubtitleLanguageName(track);
+          const fileName = ensureUniqueZipFileName(
+            appendLanguageSuffixToFileName(baseFileName, languageName, format),
+            usedFileNames,
+          );
+
+          tasks.push({
+            video,
+            track,
+            languageName,
+            fileName,
+          });
+        });
+        return;
+      }
+
+      tasks.push({
+        video,
+        track: null,
+        languageName: '',
+        fileName: ensureUniqueZipFileName(baseFileName, usedFileNames),
+      });
+    });
+
+    return tasks;
+  }
+
   // 执行导出流程
   async function executeExport(videosWithSubtitle, format) {
     try {
@@ -2970,38 +3376,43 @@ document.addEventListener('DOMContentLoaded', function () {
       showProgress(true);
       updateProgress(0, '准备导出字幕...');
 
-      showSuccess(`开始批量导出${format.toUpperCase()}字幕，共 ${videosWithSubtitle.length} 个文件`);
+      const exportTasks = buildSubtitleExportTasks(videosWithSubtitle, format);
+
+      if (exportTasks.length === 0) {
+        showError('没有可导出的字幕语言，请先选择字幕语言');
+        showProgress(false);
+        if (exportTableBtn) {
+          exportTableBtn.disabled = false;
+          exportTableBtn.innerHTML = `
+            <svg viewBox="0 0 24 24">
+              <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" />
+            </svg>
+            导出字幕
+          `;
+        }
+        return;
+      }
+
+      showSuccess(`开始批量导出${format.toUpperCase()}字幕，共 ${exportTasks.length} 个文件`);
 
       // 创建一个临时的zip文件夹
       const zipContent = new JSZip();
       let exportedCount = 0;
       let errorCount = 0;
 
-      // 依次导出每个视频的字幕
-      for (const [index, video] of videosWithSubtitle.entries()) {
+      // 依次导出每个字幕文件
+      for (const [index, task] of exportTasks.entries()) {
         try {
-          // 创建文件名，移除不合法的文件名字符
-          const safeTitle = video.title.replace(/[\\/:*?"<>|]/g, '_');
-          const safeAuthor = video.author ? video.author.replace(/[\\/:*?"<>|]/g, '_') : 'unknown';
-
-          // 格式化发布日期
-          let formattedDate = '';
-          if (video.publishDate) {
-            const d = formatDate(video.publishDate);
-            if (d && d !== '-') {
-              formattedDate = d;
-            }
-          }
-
-          // 构建文件名: 【作者】——视频名字——【发布日期】
-          const fileName = buildFileName(safeAuthor, safeTitle, formattedDate, format);
+          const { video, track, fileName } = task;
+          const subtitleSource = track ? await getSubtitleContentForTrack(video, track) : video;
+          const subtitleText = subtitleSource.subtitleText;
 
           // 根据选择的格式处理字幕内容
           let subtitleContent;
           if (format === 'srt') {
-            subtitleContent = convertToSrtFormat(video.subtitleText);
+            subtitleContent = convertToSrtFormat(subtitleText);
           } else {
-            subtitleContent = convertToTxtFormat(video.subtitleText);
+            subtitleContent = convertToTxtFormat(subtitleText);
           }
 
           // 添加视频信息前缀（仅TXT格式，SRT不能破坏格式）
@@ -3014,15 +3425,30 @@ document.addEventListener('DOMContentLoaded', function () {
           exportedCount++;
 
           // 更新进度条
-          const percent = Math.floor(((index + 1) / videosWithSubtitle.length) * 100);
-          updateProgress(percent, `已处理 ${exportedCount}/${videosWithSubtitle.length} 个字幕`);
+          const percent = Math.floor(((index + 1) / exportTasks.length) * 100);
+          updateProgress(percent, `已处理 ${exportedCount}/${exportTasks.length} 个字幕`);
 
           // 每添加一个更新一次状态
-          showSuccess(`已处理 ${exportedCount}/${videosWithSubtitle.length} 个字幕`);
+          showSuccess(`已处理 ${exportedCount}/${exportTasks.length} 个字幕`);
         } catch (videoError) {
-          console.error(`导出视频 "${video.title}" 的字幕失败:`, videoError);
+          console.error(`导出字幕失败:`, videoError);
           errorCount++;
         }
+      }
+
+      if (exportedCount === 0) {
+        showProgress(false);
+        if (exportTableBtn) {
+          exportTableBtn.disabled = false;
+          exportTableBtn.innerHTML = `
+            <svg viewBox="0 0 24 24">
+              <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" />
+            </svg>
+            导出字幕
+          `;
+        }
+        showError(`导出失败，${errorCount} 个字幕文件未能生成`);
+        return;
       }
 
       // 更新进度为100%

@@ -949,6 +949,73 @@
         color: #1890ff;
       }
 
+      .table-action-btn:disabled {
+        cursor: not-allowed;
+        opacity: 0.35;
+      }
+
+      .table-action-btn:disabled:hover {
+        background-color: transparent;
+        color: #666;
+      }
+
+      .subtitle-language-select {
+        display: inline-block;
+        width: 86px;
+      }
+
+      .subtitle-language-trigger {
+        width: 100%;
+        padding: 5px 8px;
+        border: 1px solid #d9d9d9;
+        border-radius: 6px;
+        background-color: #fff;
+        color: #333;
+        font-size: 12px;
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 4px;
+      }
+
+      .subtitle-language-select.open .subtitle-language-trigger {
+        border-color: #3370ff;
+        box-shadow: 0 0 0 2px rgba(51, 112, 255, 0.12);
+      }
+
+      .subtitle-language-menu {
+        position: fixed;
+        min-width: 120px;
+        padding: 6px;
+        background-color: #fff;
+        border: 1px solid #e5e7eb;
+        border-radius: 8px;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.14);
+        z-index: 9999;
+        text-align: left;
+      }
+
+      .subtitle-language-option {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 6px 8px;
+        border-radius: 6px;
+        color: #333;
+        font-size: 12px;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+
+      .subtitle-language-option:hover {
+        background-color: #f5f7ff;
+      }
+
+      .subtitle-language-option input {
+        margin: 0;
+      }
+
       .remove-row-btn {
         color: #666;
         background-color: transparent; /* 默认透明，避免遮挡行悬停色 */
