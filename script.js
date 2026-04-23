@@ -2004,7 +2004,7 @@ document.addEventListener('DOMContentLoaded', function () {
     // 如果没有视频，显示空状态
     if (videoList.length === 0) {
       const emptyRow = document.createElement('tr');
-      emptyRow.innerHTML = `<td colspan="6" style="text-align: center; padding: 20px;">暂无视频，请添加视频</td>`;
+      emptyRow.innerHTML = `<td colspan="7" style="text-align: center; padding: 20px;">暂无视频，请添加视频</td>`;
       videoTableBody.appendChild(emptyRow);
 
       // 更新计数器显示
@@ -2092,6 +2092,7 @@ document.addEventListener('DOMContentLoaded', function () {
         }</a></td>
         <td style="text-align: center;">${formatDate(video.publishDate)}</td>
         <td>${subtitleStatusHtml}</td>
+        <td style="text-align: center; color: #666;">无</td>
         <td>
           ${actionButtonsHtml}
         </td>

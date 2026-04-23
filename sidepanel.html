@@ -844,13 +844,21 @@
 
       th:nth-child(5),
       td:nth-child(5) {
-        width: 100px;
+        width: 120px;
         text-align: center;
+        white-space: nowrap;
       }
 
       th:nth-child(6),
       td:nth-child(6) {
-        width: 120px;
+        width: 90px;
+        text-align: center;
+        white-space: nowrap;
+      }
+
+      th:nth-child(7),
+      td:nth-child(7) {
+        width: 100px;
         text-align: center;
         white-space: nowrap;
       }
@@ -1820,8 +1828,9 @@
               <col style="width: auto; min-width: 180px" />
               <col style="width: 100px; min-width: 100px" />
               <col style="width: 100px; min-width: 100px" />
-              <col style="width: 100px; min-width: 100px" />
               <col style="width: 120px; min-width: 120px" />
+              <col style="width: 90px; min-width: 90px" />
+              <col style="width: 100px; min-width: 100px" />
             </colgroup>
             <thead>
               <tr>
@@ -1863,6 +1872,9 @@
                   >
                 </th>
                 <th style="background-color: #f8f9fa; border-bottom: 2px solid #ddd; padding: 12px; text-align: center">
+                  字幕语言
+                </th>
+                <th style="background-color: #f8f9fa; border-bottom: 2px solid #ddd; padding: 12px; text-align: center">
                   操作
                 </th>
               </tr>
@@ -1885,8 +1897,9 @@
               <col style="width: auto; min-width: 180px" />
               <col style="width: 100px; min-width: 100px" />
               <col style="width: 100px; min-width: 100px" />
-              <col style="width: 100px; min-width: 100px" />
               <col style="width: 120px; min-width: 120px" />
+              <col style="width: 90px; min-width: 90px" />
+              <col style="width: 100px; min-width: 100px" />
             </colgroup>
             <tbody id="videoTableBody">
               <!-- 表格内容将通过JavaScript动态添加 -->
