@@ -197,7 +197,7 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   function isSubtitleSuccessStatus(status) {
-    return ['获取成功', '已获取字幕', '已获取AI字幕'].includes(status);
+    return ['获取成功', '已获取字幕', '已获取AI字幕', 'B站字幕', '外挂字幕', '转写字幕'].includes(status);
   }
 
   function hasSubtitleContent(video) {
@@ -245,6 +245,7 @@ document.addEventListener('DOMContentLoaded', function () {
     if (
       status === '获取中' ||
       status === 'AI转写中' ||
+      status === '转写中' ||
       status === CHARGE_EXCLUSIVE_BLOCK_STATUS ||
       status.startsWith('信息不完整')
     ) {
@@ -255,11 +256,11 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   function getSubtitleStatusDisplayText(video) {
-    if (video?.subtitleStatus === '已获取AI字幕') {
-      return '已获取AI字幕';
+    if (['已获取AI字幕', '转写字幕'].includes(video?.subtitleStatus)) {
+      return '转写字幕';
     }
 
-    return '已获取字幕';
+    return '外挂字幕';
   }
 
   function setTranscribeProgressContext(currentIndex, total) {
@@ -2032,12 +2033,13 @@ document.addEventListener('DOMContentLoaded', function () {
       if (isSubtitleSuccessStatus(video.subtitleStatus)) {
         // 已获取状态显示为绿色并添加✅图标
         subtitleStatusHtml = `<span style="color: #52c41a; font-weight: 500;">✅ ${getSubtitleStatusDisplayText(video)}</span>`;
-      } else if (video.subtitleStatus === '获取中' || video.subtitleStatus === 'AI转写中') {
+      } else if (video.subtitleStatus === '获取中' || video.subtitleStatus === 'AI转写中' || video.subtitleStatus === '转写中') {
         // 获取中状态显示为蓝色带动画
+        const pendingStatusText = video.subtitleStatus === 'AI转写中' ? '转写中' : video.subtitleStatus;
         subtitleStatusHtml = `<span style="color: #1890ff; display: flex; align-items: center;">
           <svg viewBox="0 0 24 24" style="width: 16px; height: 16px; margin-right: 4px; animation: spin 1.5s linear infinite;">
             <path d="M12 6v3l4-4-4-4v3c-4.42 0-8 3.58-8 8 0 1.57.46 3.03 1.24 4.26L6.7 14.8c-.45-.83-.7-1.79-.7-2.8 0-3.31 2.69-6 6-6zm6.76 1.74L17.3 9.2c.44.84.7 1.79.7 2.8 0 3.31-2.69 6-6 6v-3l-4 4 4 4v-3c4.42 0 8-3.58 8-8 0-1.57-.46-3.03-1.24-4.26z" fill="currentColor"/>
-          </svg>${video.subtitleStatus}</span>`;
+          </svg>${pendingStatusText}</span>`;
       } else if (video.subtitleStatus === '未获取') {
         // 未获取状态显示为灰色
         subtitleStatusHtml = `<span style="color: #666;">${video.subtitleStatus}</span>`;
@@ -2301,7 +2303,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
         if (response && response.success) {
           // 更新字幕状态和内容
-          videoList[i].subtitleStatus = '获取成功';
+          videoList[i].subtitleStatus = '外挂字幕';
           videoList[i].subtitleText = response.subtitleText;
           successCount++;
           console.log(`视频 ${video.title} 字幕获取成功`);
@@ -2594,13 +2596,13 @@ document.addEventListener('DOMContentLoaded', function () {
             }
 
             if (videoToTranscribe.duration && videoToTranscribe.duration > 1800) {
-              videoToTranscribe.subtitleStatus = 'AI转写失败: 视频超过30分钟';
+              videoToTranscribe.subtitleStatus = '转写失败: 视频超过30分钟';
               failCount++;
               updateVideoTable();
               continue;
             }
 
-            videoToTranscribe.subtitleStatus = 'AI转写中';
+            videoToTranscribe.subtitleStatus = '转写中';
             updateVideoTable();
             updateTranscribeProgress(0, `准备转写：${videoToTranscribe.title}`);
 
@@ -2627,7 +2629,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 markVideoAsChargeExclusive(videoToTranscribe);
                 skippedCount++;
               } else {
-                videoToTranscribe.subtitleStatus = `AI转写失败: ${response.message || '未知错误'}`;
+                videoToTranscribe.subtitleStatus = `转写失败: ${response.message || '未知错误'}`;
                 failCount++;
               }
               updateVideoTable();
@@ -2649,7 +2651,7 @@ document.addEventListener('DOMContentLoaded', function () {
                 updateTranscribeProgress(progress, msg || '转写中...');
               });
 
-              videoToTranscribe.subtitleStatus = '已获取AI字幕';
+              videoToTranscribe.subtitleStatus = '转写字幕';
               videoToTranscribe.subtitleText = transcribeResult.srtContent;
               successCount++;
               updateVideoTable();
@@ -2657,19 +2659,19 @@ document.addEventListener('DOMContentLoaded', function () {
             }
 
             if (response.srtContent) {
-              videoToTranscribe.subtitleStatus = '已获取AI字幕';
+              videoToTranscribe.subtitleStatus = '转写字幕';
               videoToTranscribe.subtitleText = response.srtContent;
               successCount++;
               updateVideoTable();
               continue;
             }
 
-            videoToTranscribe.subtitleStatus = 'AI转写失败: 转写结果格式不正确';
+            videoToTranscribe.subtitleStatus = '转写失败: 转写结果格式不正确';
             failCount++;
             updateVideoTable();
           } catch (itemError) {
             console.error(`音频转写失败: ${videoToTranscribe.title}`, itemError);
-            videoToTranscribe.subtitleStatus = `AI转写失败: ${itemError.message || '未知错误'}`;
+            videoToTranscribe.subtitleStatus = `转写失败: ${itemError.message || '未知错误'}`;
             failCount++;
             updateVideoTable();
           }
