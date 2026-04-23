@@ -87,6 +87,10 @@
         transition: all 0.3s ease;
       }
 
+      .cookie-input-field {
+        padding-right: 72px;
+      }
+
       .input-field:focus {
         outline: none;
         border-color: #3370ff;
@@ -112,7 +116,7 @@
         transition: opacity 0.3s;
       }
 
-      .input-field:focus + .clear-btn,
+      .input-field:focus ~ .clear-btn,
       .input-wrapper:hover .clear-btn {
         display: flex;
       }
@@ -125,6 +129,67 @@
         width: 16px;
         height: 16px;
         fill: currentColor;
+      }
+
+      .cookie-visibility-btn {
+        position: absolute;
+        right: 10px;
+        background: none;
+        border: none;
+        padding: 4px;
+        cursor: pointer;
+        color: #9ca3af;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        opacity: 0.75;
+        transition: opacity 0.3s;
+      }
+
+      .input-wrapper.has-cookie-value .cookie-visibility-btn {
+        display: flex;
+      }
+
+      .cookie-visibility-btn:hover {
+        opacity: 1;
+      }
+
+      .cookie-visibility-btn svg {
+        width: 20px;
+        height: 20px;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+      }
+
+      .cookie-visibility-btn .cookie-eye-icon {
+        display: none;
+      }
+
+      .cookie-visibility-btn.is-visible .cookie-eye-off-icon {
+        display: none;
+      }
+
+      .cookie-visibility-btn.is-visible .cookie-eye-icon {
+        display: block;
+      }
+
+      .cookie-clear-btn {
+        right: 42px;
+      }
+
+      .cookie-input-field:focus ~ .cookie-clear-btn {
+        display: none;
+      }
+
+      .input-wrapper:hover .cookie-clear-btn {
+        display: none;
+      }
+
+      .input-wrapper.has-cookie-value:hover .cookie-clear-btn {
+        display: flex;
       }
 
       .get-url-btn {
@@ -1423,12 +1488,46 @@
         <label class="input-label">Cookie</label>
         <div class="input-wrapper">
           <input
-            type="text"
+            type="password"
             id="bilibiliCookie"
-            class="input-field"
+            class="input-field cookie-input-field"
             placeholder="请点击右侧按钮获取 B站 Cookie"
+            autocomplete="off"
+            autocapitalize="off"
+            spellcheck="false"
           />
-          <button class="clear-btn cookie-clear-btn">
+          <button
+            id="cookieVisibilityBtn"
+            class="cookie-visibility-btn"
+            type="button"
+            aria-label="显示 Cookie"
+            title="显示 Cookie"
+          >
+            <svg
+              class="cookie-eye-icon"
+              viewBox="0 0 24 24"
+            >
+              <path d="M2.06 12.35a1 1 0 0 1 0-.7C3.37 8.37 6.58 6 12 6s8.63 2.37 9.94 5.65a1 1 0 0 1 0 .7C20.63 15.63 17.42 18 12 18s-8.63-2.37-9.94-5.65z" />
+              <circle
+                cx="12"
+                cy="12"
+                r="3"
+              />
+            </svg>
+            <svg
+              class="cookie-eye-off-icon"
+              viewBox="0 0 24 24"
+            >
+              <path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c5.42 0 8.63 2.37 9.94 5.65a1 1 0 0 1 0 .7 11.8 11.8 0 0 1-2.1 3.17" />
+              <path d="M6.61 6.61A11.64 11.64 0 0 0 2.06 11.65a1 1 0 0 0 0 .7C3.37 15.63 6.58 18 12 18c1.35 0 2.57-.15 3.65-.44" />
+              <path d="M2 2l20 20" />
+              <path d="M9.88 9.88a3 3 0 0 0 4.24 4.24" />
+            </svg>
+          </button>
+          <button
+            class="clear-btn cookie-clear-btn"
+            type="button"
+          >
             <svg viewBox="0 0 24 24">
               <path
                 d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"

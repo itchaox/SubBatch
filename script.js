@@ -15,6 +15,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
   const bilibiliCookieInput = document.getElementById('bilibiliCookie');
   const cookieClearBtn = document.querySelector('.cookie-clear-btn');
+  const cookieVisibilityBtn = document.getElementById('cookieVisibilityBtn');
+  const cookieInputWrapper = bilibiliCookieInput.closest('.input-wrapper');
   const errorToast = document.getElementById('errorToast');
   const successToast = document.getElementById('successToast');
   const previewBtn = document.getElementById('previewBtn');
@@ -998,7 +1000,22 @@ document.addEventListener('DOMContentLoaded', function () {
   });
 
   // Cookie 处理函数
+  function updateCookieInputControls() {
+    const hasCookieValue = Boolean(bilibiliCookieInput.value.trim());
+
+    cookieInputWrapper?.classList.toggle('has-cookie-value', hasCookieValue);
+
+    if (!hasCookieValue) {
+      bilibiliCookieInput.type = 'password';
+      cookieVisibilityBtn?.classList.remove('is-visible');
+      cookieVisibilityBtn?.setAttribute('aria-label', '显示 Cookie');
+      cookieVisibilityBtn?.setAttribute('title', '显示 Cookie');
+    }
+  }
+
   function setCookie() {
+    updateCookieInputControls();
+
     const cookie = bilibiliCookieInput.value.trim();
     console.log('设置Cookie (部分显示):', cookie ? cookie.substring(0, 20) + '...' : '空');
 
@@ -1026,8 +1043,25 @@ document.addEventListener('DOMContentLoaded', function () {
     bilibiliCookieInput.focus();
   });
 
+  // Cookie 默认隐藏，必要时允许用户临时查看。
+  cookieVisibilityBtn?.addEventListener('click', () => {
+    if (!bilibiliCookieInput.value.trim()) {
+      updateCookieInputControls();
+      return;
+    }
+
+    const shouldShowCookie = bilibiliCookieInput.type === 'password';
+
+    bilibiliCookieInput.type = shouldShowCookie ? 'text' : 'password';
+    cookieVisibilityBtn.classList.toggle('is-visible', shouldShowCookie);
+    cookieVisibilityBtn.setAttribute('aria-label', shouldShowCookie ? '隐藏 Cookie' : '显示 Cookie');
+    cookieVisibilityBtn.setAttribute('title', shouldShowCookie ? '隐藏 Cookie' : '显示 Cookie');
+    bilibiliCookieInput.focus();
+  });
+
   // 为Cookie输入框添加input事件监听器，当用户输入内容时自动保存
   bilibiliCookieInput.addEventListener('input', setCookie);
+  updateCookieInputControls();
 
   // 为Cookie输入框添加blur事件，当用户输入完成离开输入框时设置Cookie
   bilibiliCookieInput.addEventListener('blur', setCookie);
