@@ -813,16 +813,31 @@ document.addEventListener('DOMContentLoaded', function () {
       active: true,
       currentWindow: true,
     });
-    const activeBilibiliTab = activeTabs.find((tab) => tab.url && tab.url.includes('bilibili.com/video/'));
+    const activeBilibiliTab = activeTabs.find((tab) => tab.url && /https?:\/\/([^/]+\.)?bilibili\.com\//.test(tab.url));
     if (activeBilibiliTab) {
       return activeBilibiliTab;
     }
 
     const bilibiliTabs = await chrome.tabs.query({
-      url: '*://*.bilibili.com/video/*',
+      url: '*://*.bilibili.com/*',
       currentWindow: true,
     });
-    return bilibiliTabs.length > 0 ? bilibiliTabs[0] : null;
+    if (bilibiliTabs.length > 0) {
+      return bilibiliTabs[0];
+    }
+
+    const globalActiveTabs = await chrome.tabs.query({ active: true });
+    const globalActiveBilibiliTab = globalActiveTabs.find(
+      (tab) => tab.url && /https?:\/\/([^/]+\.)?bilibili\.com\//.test(tab.url),
+    );
+    if (globalActiveBilibiliTab) {
+      return globalActiveBilibiliTab;
+    }
+
+    const globalBilibiliTabs = await chrome.tabs.query({
+      url: '*://*.bilibili.com/*',
+    });
+    return globalBilibiliTabs.length > 0 ? globalBilibiliTabs[0] : null;
   }
 
   // 从URL中提取视频ID
@@ -2937,6 +2952,94 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   }
 
+  function showClearTableConfirmDialog() {
+    return new Promise((resolve) => {
+      const dialogOverlay = document.createElement('div');
+      dialogOverlay.style.position = 'fixed';
+      dialogOverlay.style.top = '0';
+      dialogOverlay.style.left = '0';
+      dialogOverlay.style.width = '100%';
+      dialogOverlay.style.height = '100%';
+      dialogOverlay.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
+      dialogOverlay.style.display = 'flex';
+      dialogOverlay.style.justifyContent = 'center';
+      dialogOverlay.style.alignItems = 'center';
+      dialogOverlay.style.zIndex = '2000';
+      dialogOverlay.style.backdropFilter = 'blur(3px)';
+
+      const dialogContent = document.createElement('div');
+      dialogContent.style.backgroundColor = 'white';
+      dialogContent.style.borderRadius = '14px';
+      dialogContent.style.padding = '22px';
+      dialogContent.style.width = '400px';
+      dialogContent.style.maxWidth = '92%';
+      dialogContent.style.boxShadow = '0 10px 25px rgba(0, 0, 0, 0.15)';
+
+      const title = document.createElement('h3');
+      title.textContent = '确认清空表格';
+      title.style.margin = '0 0 10px 0';
+      title.style.color = '#222';
+      title.style.fontSize = '18px';
+
+      const description = document.createElement('p');
+      description.textContent = '清空后，当前表格中的视频列表和字幕状态都会被移除。';
+      description.style.margin = '0';
+      description.style.color = '#555';
+      description.style.fontSize = '14px';
+      description.style.lineHeight = '1.7';
+
+      const buttonContainer = document.createElement('div');
+      buttonContainer.style.display = 'flex';
+      buttonContainer.style.justifyContent = 'flex-end';
+      buttonContainer.style.gap = '12px';
+      buttonContainer.style.marginTop = '20px';
+
+      const cancelButton = document.createElement('button');
+      cancelButton.textContent = '取消';
+      cancelButton.style.padding = '10px 18px';
+      cancelButton.style.backgroundColor = '#f0f2f5';
+      cancelButton.style.color = '#333';
+      cancelButton.style.border = 'none';
+      cancelButton.style.borderRadius = '8px';
+      cancelButton.style.cursor = 'pointer';
+      cancelButton.style.fontWeight = '500';
+
+      const confirmButton = document.createElement('button');
+      confirmButton.textContent = '确认清空';
+      confirmButton.style.padding = '10px 18px';
+      confirmButton.style.background = 'linear-gradient(to right, #ff7875, #ff4d4f)';
+      confirmButton.style.color = 'white';
+      confirmButton.style.border = 'none';
+      confirmButton.style.borderRadius = '8px';
+      confirmButton.style.cursor = 'pointer';
+      confirmButton.style.fontWeight = '600';
+      confirmButton.style.boxShadow = '0 4px 12px rgba(255, 77, 79, 0.22)';
+
+      function closeDialog(confirmed) {
+        if (dialogOverlay.parentNode) {
+          document.body.removeChild(dialogOverlay);
+        }
+        resolve(confirmed);
+      }
+
+      cancelButton.addEventListener('click', () => closeDialog(false));
+      confirmButton.addEventListener('click', () => closeDialog(true));
+      dialogOverlay.addEventListener('click', (event) => {
+        if (event.target === dialogOverlay) {
+          closeDialog(false);
+        }
+      });
+
+      buttonContainer.appendChild(cancelButton);
+      buttonContainer.appendChild(confirmButton);
+      dialogContent.appendChild(title);
+      dialogContent.appendChild(description);
+      dialogContent.appendChild(buttonContainer);
+      dialogOverlay.appendChild(dialogContent);
+      document.body.appendChild(dialogOverlay);
+    });
+  }
+
   // 音频转字幕按钮事件监听
   if (transcribeAudioBtn) {
     console.log('添加音频转字幕按钮事件监听');
@@ -2978,14 +3081,13 @@ document.addEventListener('DOMContentLoaded', function () {
       try {
         showSuccess(`开始批量转写无字幕视频，共 ${videosToTranscribe.length} 个视频...`);
 
-        // 获取当前 B站 标签页用于 content script
+        // 优先使用任意已打开的 B站页面通过页面上下文下载音频；没有时让后台尝试直接下载。
         const bilibiliTab = await getCurrentBilibiliVideoTab();
         console.log('B站 标签页:', bilibiliTab?.url, 'ID:', bilibiliTab?.id);
 
         if (!bilibiliTab) {
-          showError('请在 B站视频页面打开侧边栏');
-          showProgress(false);
-          return;
+          console.warn('未找到已打开的 B站页面标签页，将尝试直接下载音频');
+          showError('未找到已打开的 B站页面，将尝试直接下载音频；若失败请先打开任意 B站页面后重试');
         }
 
         let successCount = 0;
@@ -3034,7 +3136,7 @@ document.addEventListener('DOMContentLoaded', function () {
               action: 'transcribeAudio',
               bvid: videoToTranscribe.bvid,
               cid: videoToTranscribe.cid,
-              tabId: bilibiliTab.id,
+              tabId: bilibiliTab?.id || null,
             });
 
             console.log('音频转写响应:', response);
@@ -4149,7 +4251,17 @@ document.addEventListener('DOMContentLoaded', function () {
   window.formatReadableChunksForTxt = formatReadableChunksForTxt;
 
   // 清空表格
-  function clearTable() {
+  async function clearTable() {
+    if (videoList.length === 0) {
+      showError('表格已经是空的');
+      return;
+    }
+
+    const confirmed = await showClearTableConfirmDialog();
+    if (!confirmed) {
+      return;
+    }
+
     videoList = [];
     updateVideoTable();
     showSuccess('表格已清空');

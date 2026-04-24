@@ -1016,16 +1016,123 @@ async function resolveSubtitleUrlFromTrack({ track, aid, cid, bvid }) {
   return '';
 }
 
-async function fetchSubtitleContentFromUrl({ subtitleUrl, track, bvid, aid }) {
-  // 字幕 CDN 不接受带自定义头的预检请求。这里保持和旧字幕下载路径一致，
-  // 使用最简单的 GET，避免触发 aisubtitle.hdslb.com 的 CORS preflight。
-  const subtitleResponse = await fetch(subtitleUrl);
+function findMatchingSubtitleTrack(tracks, targetTrack) {
+  if (!Array.isArray(tracks) || !targetTrack) return null;
 
-  if (!subtitleResponse.ok) {
-    throw new Error(`获取字幕内容失败: HTTP ${subtitleResponse.status}`);
+  return (
+    tracks.find((track) => targetTrack.trackId && track.trackId === targetTrack.trackId) ||
+    tracks.find((track) =>
+      targetTrack.id !== undefined &&
+      targetTrack.id !== null &&
+      track.id === targetTrack.id &&
+      track.lan === targetTrack.lan,
+    ) ||
+    tracks.find((track) => track.lan === targetTrack.lan && track.lan_doc === targetTrack.lan_doc) ||
+    null
+  );
+}
+
+async function refreshSubtitleUrlFromLatestTrack({ track, cid, bvid }) {
+  try {
+    const latestTrackResult = await getBilibiliSubtitleTracks(cid, bvid, 0);
+    if (!latestTrackResult?.success || !Array.isArray(latestTrackResult.subtitleTracks)) {
+      return '';
+    }
+
+    const latestTrack = findMatchingSubtitleTrack(latestTrackResult.subtitleTracks, track);
+    if (!latestTrack) {
+      console.warn('刷新字幕地址失败：未匹配到同语言字幕轨道', { track, cid, bvid });
+      return '';
+    }
+
+    return await resolveSubtitleUrlFromTrack({
+      track: latestTrack,
+      aid: latestTrackResult.aid,
+      cid,
+      bvid,
+    });
+  } catch (error) {
+    console.warn('刷新最新字幕地址失败:', error.message);
+    return '';
+  }
+}
+
+async function fetchSubtitleContentFromUrl({ subtitleUrl, track, bvid, aid }) {
+  const refererUrl = bvid
+    ? `https://www.bilibili.com/video/${bvid}`
+    : aid
+      ? `https://www.bilibili.com/video/av${aid}`
+      : 'https://www.bilibili.com/';
+  const requestHeaders = {
+    Referer: refererUrl,
+    Origin: 'https://www.bilibili.com',
+    'User-Agent':
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36',
+    Accept: 'application/json, text/plain, */*',
+    'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+    Connection: 'keep-alive',
+    'Cache-Control': 'no-cache',
+  };
+
+  if (bilibiliCookie && bilibiliCookie.trim() !== '') {
+    requestHeaders['Cookie'] = bilibiliCookie;
+  }
+
+  const requestAttempts = [
+    {
+      label: '带来源头请求',
+      options: {
+        headers: requestHeaders,
+        credentials: 'include',
+      },
+    },
+    {
+      label: '简化请求',
+      options: {},
+    },
+  ];
+
+  let subtitleResponse = null;
+  let lastError = null;
+  for (const attempt of requestAttempts) {
+    try {
+      subtitleResponse = await fetch(subtitleUrl, attempt.options);
+      if (subtitleResponse.ok) {
+        console.log(`字幕内容下载成功: ${attempt.label}`);
+        break;
+      }
+
+      lastError = new Error(`获取字幕内容失败: HTTP ${subtitleResponse.status}`);
+      console.warn(`字幕内容下载失败，准备尝试下一种方式: ${attempt.label}`, subtitleResponse.status);
+    } catch (error) {
+      lastError = error;
+      console.warn(`字幕内容下载异常，准备尝试下一种方式: ${attempt.label}`, error.message);
+    }
+  }
+
+  if (!subtitleResponse || !subtitleResponse.ok) {
+    throw lastError || new Error('获取字幕内容失败');
   }
 
   const subtitleData = await subtitleResponse.json();
+  if (isAISubtitleFormat(subtitleData)) {
+    const formattedData = formatAISubtitleData(subtitleData);
+    if (formattedData) {
+      return {
+        success: true,
+        metadata: {
+          ...formattedData.metadata,
+          lan: track?.lan || formattedData.metadata.lan || '',
+          lan_doc: track?.lan_doc || formattedData.metadata.lan_doc || '字幕',
+          subtitle_url: subtitleUrl,
+          trackId: track?.trackId,
+        },
+        subtitles: formattedData.subtitles,
+        subtitleText: formattedData.subtitleText,
+      };
+    }
+  }
+
   if (!subtitleData || !Array.isArray(subtitleData.body)) {
     return {
       success: false,
@@ -1101,12 +1208,37 @@ async function getBilibiliSubtitleContentByTrack({ cid, bvid, aid, track }, retr
       };
     }
 
-    return fetchSubtitleContentFromUrl({
-      subtitleUrl,
-      track,
-      bvid,
-      aid: resolvedAid,
-    });
+    try {
+      return await fetchSubtitleContentFromUrl({
+        subtitleUrl,
+        track,
+        bvid,
+        aid: resolvedAid,
+      });
+    } catch (error) {
+      if (/HTTP 403/.test(error.message || '')) {
+        const refreshedSubtitleUrl = await refreshSubtitleUrlFromLatestTrack({
+          track,
+          cid,
+          bvid,
+        });
+
+        if (refreshedSubtitleUrl && refreshedSubtitleUrl !== subtitleUrl) {
+          console.warn('字幕地址可能已过期，已刷新后重试:', {
+            lan: track?.lan,
+            lan_doc: track?.lan_doc,
+          });
+          return await fetchSubtitleContentFromUrl({
+            subtitleUrl: refreshedSubtitleUrl,
+            track,
+            bvid,
+            aid: resolvedAid,
+          });
+        }
+      }
+
+      throw error;
+    }
   } catch (error) {
     console.error('按语言获取字幕内容失败:', error);
 
