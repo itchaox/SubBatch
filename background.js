@@ -1134,6 +1134,46 @@ function formatTime(seconds) {
     .padStart(2, '0')}.${milliseconds.toString().padStart(3, '0')}`;
 }
 
+function normalizeTranscriptionLanguageCode(language) {
+  if (!language) return 'unknown';
+
+  const normalized = String(language)
+    .trim()
+    .toLowerCase()
+    .replace(/^<\|/, '')
+    .replace(/\|>$/, '');
+
+  const aliasMap = {
+    chinese: 'zh',
+    mandarin: 'zh',
+    english: 'en',
+    japanese: 'ja',
+    jp: 'ja',
+    korean: 'ko',
+    kr: 'ko',
+  };
+
+  const mapped = aliasMap[normalized] || normalized;
+  if (mapped.startsWith('zh')) return 'zh';
+  if (mapped.startsWith('en')) return 'en';
+  if (mapped.startsWith('ja')) return 'ja';
+  if (mapped.startsWith('ko')) return 'ko';
+  if (/^[a-z]{2,3}$/.test(mapped)) return mapped;
+  return 'unknown';
+}
+
+function getTranscriptionLanguageName(language) {
+  const normalized = normalizeTranscriptionLanguageCode(language);
+  const languageNames = {
+    zh: '中文',
+    en: '英文',
+    ja: '日文',
+    ko: '韩文',
+  };
+
+  return languageNames[normalized] || '未知';
+}
+
 // 保存Cookie到storage
 async function saveCookieToStorage(cookie) {
   try {
@@ -2191,6 +2231,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           srtContent: srtContent,
           text: transcribeResult.text,
           chunks: transcribeResult.chunks,
+          language: transcribeResult.language,
+          languageName: transcribeResult.languageName,
           duration: audioResult.duration,
         });
       } catch (error) {
@@ -3368,7 +3410,6 @@ class WhisperTranscriber {
       const result = await this.pipeline(int16Array, {
         top_k: 0,
         do_sample: false,
-        language: 'zh', // 优先中文
         task: 'transcribe',
         return_timestamps: true,
         num_beams: 1, // ← 加这个，明确贪心，最快
@@ -3382,6 +3423,8 @@ class WhisperTranscriber {
       return {
         text: result.text || '',
         chunks: result.chunks || [],
+        language: normalizeTranscriptionLanguageCode(result.language || result.lang),
+        languageName: getTranscriptionLanguageName(result.language || result.lang),
       };
     } catch (error) {
       console.error('Whisper 转写失败:', error);

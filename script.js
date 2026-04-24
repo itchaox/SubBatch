@@ -211,6 +211,10 @@ document.addEventListener('DOMContentLoaded', function () {
     return Array.isArray(video?.subtitleTracks) && video.subtitleTracks.length > 0;
   }
 
+  function isTranscribedSubtitle(video) {
+    return ['已获取AI字幕', '转写字幕'].includes(video?.subtitleStatus);
+  }
+
   function hasSubtitleContent(video) {
     return !!(
       video &&
@@ -233,6 +237,8 @@ document.addEventListener('DOMContentLoaded', function () {
     video.subtitleTracks = [];
     video.selectedSubtitleTrackIds = [];
     video.subtitleTrackContents = {};
+    video.transcribedLanguage = null;
+    video.transcribedLanguageName = null;
     video.isChargeExclusive = true;
     video.blockReason = CHARGE_EXCLUSIVE_BLOCK_REASON;
   }
@@ -274,7 +280,7 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   function getSubtitleStatusDisplayText(video) {
-    if (['已获取AI字幕', '转写字幕'].includes(video?.subtitleStatus)) {
+    if (isTranscribedSubtitle(video)) {
       return '转写字幕';
     }
 
@@ -304,6 +310,79 @@ document.addEventListener('DOMContentLoaded', function () {
     if (/韩文|韩语|korean/.test(sourceText) || lan.includes('ko')) return '韩文';
 
     return sourceText.replace(/自动生成|字幕|\(AI\)|AI/g, '').trim() || sourceText || lan || '字幕';
+  }
+
+  function getSubtitleTrackLanguageCode(track) {
+    const byCode = normalizeWhisperLanguageCode(track?.lan);
+    if (byCode !== 'unknown') return byCode;
+
+    return normalizeWhisperLanguageCode(getSubtitleLanguageName(track));
+  }
+
+  function normalizeWhisperLanguageCode(language) {
+    if (!language) return 'unknown';
+
+    const normalized = String(language)
+      .trim()
+      .toLowerCase()
+      .replace(/^<\|/, '')
+      .replace(/\|>$/, '')
+      .replace(/^language:/, '')
+      .replace(/^lang:/, '');
+
+    const aliasMap = {
+      chinese: 'zh',
+      mandarin: 'zh',
+      cmn: 'zh',
+      yue: 'zh',
+      cantonese: 'zh',
+      中文: 'zh',
+      english: 'en',
+      英文: 'en',
+      英语: 'en',
+      japanese: 'ja',
+      日文: 'ja',
+      日语: 'ja',
+      jp: 'ja',
+      korean: 'ko',
+      韩文: 'ko',
+      韩语: 'ko',
+      kr: 'ko',
+    };
+
+    const mapped = aliasMap[normalized] || normalized;
+    if (mapped.startsWith('zh')) return 'zh';
+    if (mapped.startsWith('en')) return 'en';
+    if (mapped.startsWith('ja')) return 'ja';
+    if (mapped.startsWith('ko')) return 'ko';
+    if (/^[a-z]{2,3}$/.test(mapped)) return mapped;
+    return 'unknown';
+  }
+
+  function isChineseTranscriptionLanguage(language) {
+    return normalizeWhisperLanguageCode(language) === 'zh';
+  }
+
+  function getTranscriptionLanguageName(language) {
+    const normalized = normalizeWhisperLanguageCode(language);
+    const languageNames = {
+      zh: '中文',
+      en: '英文',
+      ja: '日文',
+      ko: '韩文',
+      fr: '法文',
+      de: '德文',
+      es: '西班牙文',
+      ru: '俄文',
+      it: '意大利文',
+      pt: '葡萄牙文',
+    };
+
+    return languageNames[normalized] || '未知';
+  }
+
+  function getTranscribedLanguageName(video) {
+    return video?.transcribedLanguageName || getTranscriptionLanguageName(video?.transcribedLanguage);
   }
 
   function sanitizeLanguageSuffix(languageName) {
@@ -346,6 +425,10 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   function getSubtitleLanguageCellHtml(video, index) {
+    if (isTranscribedSubtitle(video)) {
+      return `<span class="transcribed-language-badge">${escapeHtml(getTranscribedLanguageName(video))}</span>`;
+    }
+
     if (!hasSubtitleTracks(video)) {
       return '<span style="color: #666;">无</span>';
     }
@@ -2266,6 +2349,8 @@ document.addEventListener('DOMContentLoaded', function () {
       mid: videoInfo.mid,
       duration: videoInfo.duration,
       page: videoInfo.page, // 保存分P页码
+      transcribedLanguage: null,
+      transcribedLanguageName: null,
     };
 
     // 添加到视频列表
@@ -2426,6 +2511,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
         try {
           let subtitleText = video.subtitleText;
+          let subtitleLanguage = isTranscribedSubtitle(video) ? video.transcribedLanguage : null;
 
           if (hasSubtitleTracks(video)) {
             const selectedTracks = getSelectedSubtitleTracks(video);
@@ -2436,10 +2522,11 @@ document.addEventListener('DOMContentLoaded', function () {
 
             const subtitleContent = await getSubtitleContentForTrack(video, selectedTracks[0]);
             subtitleText = subtitleContent.subtitleText;
+            subtitleLanguage = getSubtitleTrackLanguageCode(selectedTracks[0]);
           }
 
           // 转换为TXT格式
-          let txtContent = convertToTxtFormat(subtitleText);
+          let txtContent = convertToTxtFormat(subtitleText, subtitleLanguage);
 
           // 添加视频信息前缀
           txtContent = prependVideoInfoText(txtContent, video.title, video.bvid);
@@ -2625,6 +2712,8 @@ document.addEventListener('DOMContentLoaded', function () {
           videoList[i].subtitleTracks = response.subtitleTracks;
           videoList[i].selectedSubtitleTrackIds = [getSubtitleTrackId(response.subtitleTracks[0], 0)];
           videoList[i].subtitleTrackContents = {};
+          videoList[i].transcribedLanguage = null;
+          videoList[i].transcribedLanguageName = null;
           successCount++;
           console.log(`视频 ${video.title} 字幕获取成功`);
         } else if (isChargeExclusiveBlockedResponse(response)) {
@@ -2640,6 +2729,8 @@ document.addEventListener('DOMContentLoaded', function () {
           videoList[i].subtitleTracks = [];
           videoList[i].selectedSubtitleTrackIds = [];
           videoList[i].subtitleTrackContents = {};
+          videoList[i].transcribedLanguage = null;
+          videoList[i].transcribedLanguageName = null;
           failCount++;
           console.log(`视频 ${video.title} 字幕获取失败: ${errorMessage}`);
         }
@@ -2977,6 +3068,12 @@ document.addEventListener('DOMContentLoaded', function () {
 
               videoToTranscribe.subtitleStatus = '转写字幕';
               videoToTranscribe.subtitleText = transcribeResult.srtContent;
+              videoToTranscribe.subtitleTracks = [];
+              videoToTranscribe.selectedSubtitleTrackIds = [];
+              videoToTranscribe.subtitleTrackContents = {};
+              videoToTranscribe.transcribedLanguage = normalizeWhisperLanguageCode(transcribeResult.language);
+              videoToTranscribe.transcribedLanguageName =
+                transcribeResult.languageName || getTranscriptionLanguageName(transcribeResult.language);
               successCount++;
               updateVideoTable();
               continue;
@@ -2985,6 +3082,12 @@ document.addEventListener('DOMContentLoaded', function () {
             if (response.srtContent) {
               videoToTranscribe.subtitleStatus = '转写字幕';
               videoToTranscribe.subtitleText = response.srtContent;
+              videoToTranscribe.subtitleTracks = [];
+              videoToTranscribe.selectedSubtitleTrackIds = [];
+              videoToTranscribe.subtitleTrackContents = {};
+              videoToTranscribe.transcribedLanguage = normalizeWhisperLanguageCode(response.language);
+              videoToTranscribe.transcribedLanguageName =
+                response.languageName || getTranscriptionLanguageName(response.language);
               successCount++;
               updateVideoTable();
               continue;
@@ -3412,7 +3515,10 @@ document.addEventListener('DOMContentLoaded', function () {
           if (format === 'srt') {
             subtitleContent = convertToSrtFormat(subtitleText);
           } else {
-            subtitleContent = convertToTxtFormat(subtitleText);
+            subtitleContent = convertToTxtFormat(
+              subtitleText,
+              track ? getSubtitleTrackLanguageCode(track) : video.transcribedLanguage,
+            );
           }
 
           // 添加视频信息前缀（仅TXT格式，SRT不能破坏格式）
@@ -3577,8 +3683,10 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   // 将字幕内容转换为纯文本格式（去除时间戳和序号）
-  function convertToTxtFormat(subtitleText) {
+  function convertToTxtFormat(subtitleText, transcriptionLanguage = null) {
     if (!subtitleText) return '';
+
+    const useChineseWrapRules = !transcriptionLanguage || isChineseTranscriptionLanguage(transcriptionLanguage);
 
     // 将字幕文本按行分割
     const lines = subtitleText.split('\n');
@@ -3597,17 +3705,22 @@ document.addEventListener('DOMContentLoaded', function () {
       // 跳过时间轴行（含 --> 格式的行）
       if (line.includes(' --> ')) continue;
 
-      // 清理残余的 <|X.XX|> 时间戳标记和繁体字
-      line = cleanTranscriptionText(line);
+      // 清理残余的 <|X.XX|> 时间戳标记；只有中文内容才做繁简转换。
+      line = cleanTranscriptionText(line, { language: transcriptionLanguage });
 
       if (line) {
-        // 按标点符号分句，确保每句话单独一行
-        const segments = splitTextToSentences(line);
-        txtContent += segments + '\n';
+        if (useChineseWrapRules) {
+          // 中文转写继续按语义断句，保持当前更适合中文的阅读观感。
+          const segments = splitTextToSentences(line);
+          txtContent += segments + '\n';
+        } else {
+          // 非中文不套中文 18 字断句规则，保留模型输出的自然片段。
+          txtContent += line + '\n';
+        }
       }
     }
 
-    return removeDuplicateTextLines(txtContent);
+    return useChineseWrapRules ? removeDuplicateTextLines(txtContent) : txtContent.trim();
   }
 
   const TXT_WRAP_PREFERRED_CHARS = 17;
@@ -4399,6 +4512,310 @@ document.addEventListener('DOMContentLoaded', function () {
 // 音频转字幕 - 前端处理函数
 // ============================================
 
+function normalizeWhisperLanguageCode(language) {
+  if (!language) return 'unknown';
+
+  const normalized = String(language)
+    .trim()
+    .toLowerCase()
+    .replace(/^<\|/, '')
+    .replace(/\|>$/, '')
+    .replace(/^language:/, '')
+    .replace(/^lang:/, '');
+
+  const aliasMap = {
+    chinese: 'zh',
+    mandarin: 'zh',
+    cmn: 'zh',
+    yue: 'zh',
+    cantonese: 'zh',
+    中文: 'zh',
+    english: 'en',
+    英文: 'en',
+    英语: 'en',
+    japanese: 'ja',
+    日文: 'ja',
+    日语: 'ja',
+    jp: 'ja',
+    korean: 'ko',
+    韩文: 'ko',
+    韩语: 'ko',
+    kr: 'ko',
+  };
+
+  const mapped = aliasMap[normalized] || normalized;
+  if (mapped.startsWith('zh')) return 'zh';
+  if (mapped.startsWith('en')) return 'en';
+  if (mapped.startsWith('ja')) return 'ja';
+  if (mapped.startsWith('ko')) return 'ko';
+  if (/^[a-z]{2,3}$/.test(mapped)) return mapped;
+  return 'unknown';
+}
+
+function isChineseTranscriptionLanguage(language) {
+  return normalizeWhisperLanguageCode(language) === 'zh';
+}
+
+function getTranscriptionLanguageName(language) {
+  const normalized = normalizeWhisperLanguageCode(language);
+  const languageNames = {
+    zh: '中文',
+    en: '英文',
+    ja: '日文',
+    ko: '韩文',
+    fr: '法文',
+    de: '德文',
+    es: '西班牙文',
+    ru: '俄文',
+    it: '意大利文',
+    pt: '葡萄牙文',
+  };
+
+  return languageNames[normalized] || '未知';
+}
+
+function inferTranscriptionLanguageFromText(text) {
+  const value = String(text || '');
+  if (/[\u4e00-\u9fff]/.test(value)) return 'zh';
+  if (/[\u3040-\u30ff]/.test(value)) return 'ja';
+  if (/[\uac00-\ud7af]/.test(value)) return 'ko';
+  if (/[A-Za-z]/.test(value)) return 'en';
+  return 'unknown';
+}
+
+function resolveTranscriptionLanguage(language, text) {
+  const normalized = normalizeWhisperLanguageCode(language);
+  return normalized !== 'unknown' ? normalized : inferTranscriptionLanguageFromText(text);
+}
+
+function getWhisperLanguageTokenId(language) {
+  const normalized = normalizeWhisperLanguageCode(language);
+  if (!frontendWhisperModel || normalized === 'unknown') return null;
+
+  const langToId = frontendWhisperModel.generation_config?.lang_to_id || {};
+  return langToId[`<|${normalized}|>`] ?? langToId[normalized] ?? null;
+}
+
+function getWhisperTranscribeTokenId() {
+  return frontendWhisperModel?.generation_config?.task_to_id?.transcribe ?? null;
+}
+
+function getWhisperDecoderStartTokenId() {
+  return (
+    frontendWhisperModel?.generation_config?.decoder_start_token_id ??
+    frontendWhisperModel?.config?.decoder_start_token_id ??
+    50258
+  );
+}
+
+function buildWhisperGenerateOptions(language) {
+  return {
+    max_new_tokens: 448,
+    task: 'transcribe',
+    return_timestamps: true,
+    num_beams: 1,
+    do_sample: false,
+  };
+}
+
+let frontendWhisperActiveLanguage = 'zh';
+
+function getWhisperLanguagePromptValue(language) {
+  const normalized = normalizeWhisperLanguageCode(language);
+  const promptValues = {
+    zh: 'chinese',
+    en: 'english',
+    ja: 'japanese',
+    ko: 'korean',
+  };
+
+  return promptValues[normalized] || normalized || 'chinese';
+}
+
+function setFrontendWhisperActiveLanguage(language) {
+  const normalized = normalizeWhisperLanguageCode(language);
+  frontendWhisperActiveLanguage = normalized !== 'unknown' ? normalized : 'zh';
+}
+
+function createWhisperDecoderInputIds(tokenIds) {
+  const Tensor = frontendTransformersModule?.Tensor;
+  if (typeof Tensor !== 'function') return [tokenIds];
+
+  return new Tensor(
+    'int64',
+    BigInt64Array.from(tokenIds.map((tokenId) => BigInt(tokenId))),
+    [1, tokenIds.length],
+  );
+}
+
+async function readTensorData(tensor) {
+  if (!tensor) return [];
+
+  try {
+    if (tensor.data) {
+      return Array.from(tensor.data, (value) => Number(value));
+    }
+  } catch (error) {
+    if (typeof tensor.getData !== 'function') {
+      throw error;
+    }
+  }
+
+  if (typeof tensor.getData === 'function') {
+    const values = await tensor.getData();
+    return Array.from(values, (value) => Number(value));
+  }
+
+  return [];
+}
+
+function disposeTensorTree(value, seen = new Set()) {
+  if (!value || typeof value !== 'object' || seen.has(value)) return;
+  seen.add(value);
+
+  if (typeof value.dispose === 'function') {
+    try {
+      value.dispose();
+    } catch (error) {
+      console.warn('Tensor 释放失败:', error.message);
+    }
+    return;
+  }
+
+  if (Array.isArray(value)) {
+    value.forEach((item) => disposeTensorTree(item, seen));
+    return;
+  }
+
+  Object.values(value).forEach((item) => disposeTensorTree(item, seen));
+}
+
+async function detectWhisperLanguageFromInputFeatures(inputFeatures, tag = '[单块]') {
+  const langToId = frontendWhisperModel?.generation_config?.lang_to_id || {};
+  const languageEntries = Object.entries(langToId);
+  if (!frontendWhisperModel || languageEntries.length === 0) return 'unknown';
+
+  const decoderInputIds = createWhisperDecoderInputIds([getWhisperDecoderStartTokenId()]);
+  let output = null;
+
+  try {
+    console.time(`${tag} detect_language`);
+    output = await frontendWhisperModel({
+      input_features: inputFeatures,
+      decoder_input_ids: decoderInputIds,
+    });
+    console.timeEnd(`${tag} detect_language`);
+
+    const logits = output?.logits;
+    const logitsData = await readTensorData(logits);
+    const dims = logits?.dims || logits?.shape || [];
+    const vocabSize = Number(dims[dims.length - 1] || 0);
+    if (!vocabSize || logitsData.length < vocabSize) return 'unknown';
+
+    const sequenceLength = Number(dims[dims.length - 2] || 1);
+    const lastTokenOffset = Math.max(0, sequenceLength - 1) * vocabSize;
+    let bestLanguage = 'unknown';
+    let bestScore = -Infinity;
+
+    for (const [language, tokenId] of languageEntries) {
+      const score = logitsData[lastTokenOffset + Number(tokenId)];
+      if (typeof score === 'number' && score > bestScore) {
+        bestScore = score;
+        bestLanguage = normalizeWhisperLanguageCode(language);
+      }
+    }
+
+    if (bestLanguage !== 'unknown') {
+      console.log(`${tag} Whisper 语言探测:`, bestLanguage, getTranscriptionLanguageName(bestLanguage));
+    }
+    return bestLanguage;
+  } catch (error) {
+    console.warn(`${tag} Whisper 语言探测失败:`, error.message);
+    return 'unknown';
+  } finally {
+    disposeTensorTree(output);
+    disposeTensorTree(decoderInputIds);
+  }
+}
+
+function detectWhisperLanguageFromTokens(tokenIds) {
+  if (!Array.isArray(tokenIds) || tokenIds.length === 0 || !frontendWhisperModel) return 'unknown';
+
+  const langToId = frontendWhisperModel.generation_config?.lang_to_id || {};
+  const idToLanguage = new Map(Object.entries(langToId).map(([language, id]) => [Number(id), language]));
+  for (const tokenId of tokenIds) {
+    const language = idToLanguage.get(Number(tokenId));
+    if (language) {
+      return normalizeWhisperLanguageCode(language);
+    }
+  }
+
+  return 'unknown';
+}
+
+function detectWhisperLanguageFromMetadata(metadata) {
+  return normalizeWhisperLanguageCode(
+    metadata?.language || metadata?.lang || metadata?.language_code || metadata?.languageCode,
+  );
+}
+
+function detectWhisperLanguageFromDecodedText(text) {
+  const languageMatch = String(text || '').match(/<\|([a-z]{2,3}(?:-[a-z]{2})?|chinese|english|japanese|korean)\|>/i);
+  return normalizeWhisperLanguageCode(languageMatch?.[1]);
+}
+
+function formatNonChineseChunksForTxt(chunks, language = null) {
+  if (!Array.isArray(chunks) || chunks.length === 0) return '';
+
+  return chunks
+    .map((chunk) => cleanTranscriptionText(chunk?.text || '', { language }))
+    .filter(Boolean)
+    .join('\n');
+}
+
+function buildTranscriptionResultFromChunks(chunks, fallbackText, language) {
+  const sourceText = Array.isArray(chunks) && chunks.length > 0
+    ? chunks.map((chunk) => chunk?.text || '').join('\n')
+    : fallbackText;
+  const normalizedLanguage = resolveTranscriptionLanguage(language, sourceText);
+  const languageName = getTranscriptionLanguageName(normalizedLanguage);
+
+  if (Array.isArray(chunks) && chunks.length > 0) {
+    if (isChineseTranscriptionLanguage(normalizedLanguage)) {
+      const readableChunks = buildReadableChunksFromTimestamps(chunks);
+      const outputChunks = readableChunks.length > 0 ? readableChunks : chunks;
+      const text = readableChunks.length > 0 && typeof window.formatReadableChunksForTxt === 'function'
+        ? window.formatReadableChunksForTxt(readableChunks)
+        : outputChunks.map((chunk) => chunk.text).join('\n');
+
+      return {
+        text,
+        chunks: outputChunks,
+        srtContent: convertToSRT(outputChunks),
+        language: normalizedLanguage,
+        languageName,
+      };
+    }
+
+    return {
+      text: formatNonChineseChunksForTxt(chunks, normalizedLanguage),
+      chunks,
+      srtContent: convertToSRT(chunks),
+      language: normalizedLanguage,
+      languageName,
+    };
+  }
+
+  const cleanedText = cleanTranscriptionText(fallbackText || '', { language: normalizedLanguage });
+  return {
+    text: cleanedText,
+    chunks: [],
+    srtContent: cleanedText,
+    language: normalizedLanguage,
+    languageName,
+  };
+}
+
 /**
  * 在前端解码音频数据
  * @param {Array} audioData - 原始音频数据（Uint8Array converted to Array）
@@ -4651,32 +5068,20 @@ async function initFrontendWhisper(onProgress) {
       console.log('WASM 模型加载成功');
     }
 
-    // 强制覆盖模型默认的 forced_decoder_ids 为中文转写
-    // 不写死 token id，直接从模型 generation_config 读取，避免不同模型配置不一致
-    const chineseTokenId = frontendWhisperModel.generation_config?.lang_to_id?.['<|zh|>'] ?? 50260;
-    const transcribeTokenId = frontendWhisperModel.generation_config?.task_to_id?.transcribe ?? 50360;
-    frontendWhisperModel.generation_config.forced_decoder_ids = [
-      [1, chineseTokenId],
-      [2, transcribeTokenId],
-    ];
+    // 运行库未传 language 时会默认英文，这里改成按当前分块语言动态注入。
     frontendWhisperModel.generation_config.return_timestamps = true;
-
-    // Monkey-patch _retrieve_init_tokens 确保中文语言设置不被覆盖
-    // Transformers.js v3 的 generate() 内部会调用此方法来决定语言 token
-    // 如果不 patch，v3 可能忽略 forced_decoder_ids 直接用英文
-    if (typeof frontendWhisperModel._retrieve_init_tokens === 'function') {
-      const originalRetrieve = frontendWhisperModel._retrieve_init_tokens;
+    if (typeof frontendWhisperModel._retrieve_init_tokens === 'function' && !frontendWhisperModel.__subBatchLanguagePatch) {
+      const originalRetrieveInitTokens = frontendWhisperModel._retrieve_init_tokens;
       frontendWhisperModel._retrieve_init_tokens = function (generationConfig, ...args) {
-        // 强制注入中文语言参数
-        generationConfig.language = 'chinese';
+        generationConfig.language = getWhisperLanguagePromptValue(frontendWhisperActiveLanguage);
         generationConfig.task = 'transcribe';
         generationConfig.return_timestamps = true;
-        return originalRetrieve.call(this, generationConfig, ...args);
+        return originalRetrieveInitTokens.call(this, generationConfig, ...args);
       };
-      console.log('已 patch _retrieve_init_tokens 强制使用中文');
+      frontendWhisperModel.__subBatchLanguagePatch = true;
     }
 
-    console.log('Whisper 模型加载完成:', currentModelName, '(语言已设为中文)');
+    console.log('Whisper 模型加载完成:', currentModelName, '(动态语言注入)');
   } catch (error) {
     console.error('在前端初始化 Whisper 失败:', error);
     throw error;
@@ -4714,6 +5119,7 @@ async function transcribeAudioInFrontend(audioBuffer, onProgress) {
 
     const allChunks = [];
     let mergedText = '';
+    let transcriptionLanguage = 'unknown';
 
     // 如果音频 <= 30 秒，直接处理
     if (monoAudio.length <= chunkSamples) {
@@ -4722,21 +5128,12 @@ async function transcribeAudioInFrontend(audioBuffer, onProgress) {
       if (onProgress) onProgress(55, '开始转写音频...');
 
       const singleChunkResult = await transcribeSingleChunk(input_features, 0, onProgress);
-      if (singleChunkResult.chunks.length > 0) {
-        const readableChunks = buildReadableChunksFromTimestamps(singleChunkResult.chunks);
-        if (readableChunks.length > 0) {
-          const formattedText = typeof window.formatReadableChunksForTxt === 'function'
-            ? window.formatReadableChunksForTxt(readableChunks)
-            : readableChunks.map((chunk) => chunk.text).join('\n');
-          return {
-            text: formattedText,
-            chunks: readableChunks,
-            srtContent: convertToSRT(readableChunks),
-          };
-        }
-      }
-
-      return singleChunkResult;
+      transcriptionLanguage = normalizeWhisperLanguageCode(singleChunkResult.language);
+      return buildTranscriptionResultFromChunks(
+        singleChunkResult.chunks,
+        singleChunkResult.text,
+        transcriptionLanguage,
+      );
     }
 
     // 长音频：分块处理
@@ -4771,16 +5168,28 @@ async function transcribeAudioInFrontend(audioBuffer, onProgress) {
         console.timeEnd(`[块${i + 1}] extract_features`);
 
         // 转写单个块
-        const chunkResult = await transcribeSingleChunk(input_features, timeOffset, null, i + 1);
+        const chunkLanguage = transcriptionLanguage !== 'unknown' ? transcriptionLanguage : null;
+        const chunkResult = await transcribeSingleChunk(input_features, timeOffset, null, i + 1, {
+          language: chunkLanguage,
+        });
+
+        const chunkDetectedLanguage = resolveTranscriptionLanguage(chunkResult.language, chunkResult.text);
+        if (transcriptionLanguage === 'unknown' && chunkDetectedLanguage !== 'unknown') {
+          transcriptionLanguage = chunkDetectedLanguage;
+          console.log('Whisper 自动识别语言:', transcriptionLanguage, getTranscriptionLanguageName(transcriptionLanguage));
+        }
 
         console.time(`[块${i + 1}] 后处理`);
         if (chunkResult.chunks.length > 0) {
           allChunks.push(...chunkResult.chunks);
         }
         if (chunkResult.text) {
-          const cleanedChunkText = cleanTranscriptionText(chunkResult.text);
+          const activeLanguage = transcriptionLanguage !== 'unknown'
+            ? transcriptionLanguage
+            : chunkDetectedLanguage;
+          const cleanedChunkText = cleanTranscriptionText(chunkResult.text, { language: activeLanguage });
           const deduplicatedChunkText = mergedText
-            ? trimLeadingOverlapText(mergedText, cleanedChunkText)
+            ? trimLeadingOverlapText(mergedText, cleanedChunkText, activeLanguage)
             : cleanedChunkText;
 
           if (deduplicatedChunkText) {
@@ -4802,31 +5211,25 @@ async function transcribeAudioInFrontend(audioBuffer, onProgress) {
     // 对重叠区域的片段进行去重（基于时间戳）
     const deduplicatedChunks = deduplicateChunksByTime(allChunks);
 
-    const readableChunks = deduplicatedChunks.length > 0 ? buildReadableChunksFromTimestamps(deduplicatedChunks) : [];
-    const fullText = readableChunks.length > 0
-      ? (
-        typeof window.formatReadableChunksForTxt === 'function'
-          ? window.formatReadableChunksForTxt(readableChunks)
-          : readableChunks.map((chunk) => chunk.text).join('\n')
-      )
-      : mergedText;
-    const srtContent = readableChunks.length > 0 ? convertToSRT(readableChunks) : fullText;
+    const transcriptionResult = buildTranscriptionResultFromChunks(
+      deduplicatedChunks,
+      mergedText,
+      transcriptionLanguage,
+    );
 
     console.log(
       '全部转写完成, 原始片段:',
       allChunks.length,
-      '个, 可读分段:',
-      readableChunks.length,
-      '个, 文本长度:',
-      fullText.length,
+      '个, 输出片段:',
+      transcriptionResult.chunks.length,
+      '个, 语言:',
+      transcriptionResult.languageName,
+      '文本长度:',
+      transcriptionResult.text.length,
     );
     console.timeEnd('⏱️ 转写总耗时');
 
-    return {
-      text: fullText,
-      chunks: readableChunks.length > 0 ? readableChunks : allChunks,
-      srtContent: srtContent,
-    };
+    return transcriptionResult;
   } catch (error) {
     console.error('前端转写失败:', error);
     throw error;
@@ -4840,75 +5243,121 @@ async function transcribeAudioInFrontend(audioBuffer, onProgress) {
  * @param {Function} onProgress - 进度回调
  * @returns {Promise<{text: string, chunks: Array, srtContent: string}>}
  */
-async function transcribeSingleChunk(input_features, timeOffset, onProgress, chunkIndex) {
+async function transcribeSingleChunk(input_features, timeOffset, onProgress, chunkIndex, options = {}) {
   let chunks = [];
   let text = '';
+  let language = normalizeWhisperLanguageCode(options.language);
   const tag = chunkIndex ? `[块${chunkIndex}]` : '[单块]';
-  const chineseTokenId = frontendWhisperModel.generation_config?.lang_to_id?.['<|zh|>'] ?? 50260;
-  const transcribeTokenId = frontendWhisperModel.generation_config?.task_to_id?.transcribe ?? 50360;
+
+  if (language === 'unknown') {
+    language = await detectWhisperLanguageFromInputFeatures(input_features, tag);
+    if (language === 'unknown') {
+      language = 'zh';
+      console.warn(`${tag} Whisper 未识别出语言，兜底使用中文`);
+    }
+  }
+  setFrontendWhisperActiveLanguage(language);
 
   // 只跑一次 generate（带时间戳），不再 fallback 二次推理
   console.time(`${tag} generate`);
   const output = await frontendWhisperModel.generate(
     { input_features },
-    {
-      max_new_tokens: 448,
-      forced_decoder_ids: [
-        [1, chineseTokenId],
-        [2, transcribeTokenId],
-      ],
-      language: 'chinese',
-      task: 'transcribe',
-      return_timestamps: true,
-      num_beams: 1,
-      do_sample: false,
-    },
+    buildWhisperGenerateOptions(language),
   );
   console.timeEnd(`${tag} generate`);
 
-  console.time(`${tag} decode`);
   try {
-    const rawChunks = decodeWhisperTimestampChunks(output);
-    const dedupedRawChunks = removeWhisperDuplicates(rawChunks);
-    for (const chunk of dedupedRawChunks) {
-      chunks.push({
-        text: chunk.text,
-        timestamp: [chunk.timestamp[0] + timeOffset, chunk.timestamp[1] + timeOffset],
-      });
+    console.time(`${tag} decode`);
+    let tokenIds = [];
+    try {
+      const asrResult = await decodeWhisperAsrResult(output);
+      tokenIds = asrResult.tokenIds || [];
+      language = language !== 'unknown' ? language : normalizeWhisperLanguageCode(asrResult.language);
+      const rawChunks = asrResult.chunks;
+      const dedupedRawChunks = removeWhisperDuplicates(rawChunks);
+      for (const chunk of dedupedRawChunks) {
+        chunks.push({
+          text: chunk.text,
+          timestamp: [chunk.timestamp[0] + timeOffset, chunk.timestamp[1] + timeOffset],
+        });
+      }
+      if (chunks.length > 0) {
+        console.log(`${tag} 时间戳解析成功:`, chunks.length, '段');
+      }
+    } catch (tsError) {
+      console.warn(tag, '时间戳解析失败:', tsError.message);
     }
-    if (chunks.length > 0) {
-      console.log(`${tag} 时间戳解析成功:`, chunks.length, '段');
-    }
-  } catch (tsError) {
-    console.warn(tag, '时间戳解析失败:', tsError.message);
-  }
 
-  // 如果时间戳解析没产出 chunks，直接从第一次 output 提取纯文本（不重新推理）
-  if (chunks.length === 0) {
-    const decoded = frontendWhisperTokenizer.batch_decode(output, { skip_special_tokens: true });
-    text = cleanTranscriptionText(decoded[0] || '');
-  } else {
-    text = chunks.map((c) => c.text).join('\n');
+    // 如果时间戳解析没产出 chunks，直接从第一次 output 提取纯文本（不重新推理）
+    if (chunks.length === 0) {
+      if (tokenIds.length === 0) {
+        tokenIds = await extractWhisperTokenIds(output);
+      }
+      const decodeInput = tokenIds.length > 0 ? [tokenIds] : output;
+      const decodedWithTokens = frontendWhisperTokenizer.batch_decode(decodeInput, { skip_special_tokens: false });
+      language = language !== 'unknown'
+        ? language
+        : detectWhisperLanguageFromDecodedText(decodedWithTokens[0] || '');
+      const decoded = frontendWhisperTokenizer.batch_decode(decodeInput, { skip_special_tokens: true });
+      text = cleanTranscriptionText(decoded[0] || '', { language });
+    } else {
+      text = chunks.map((c) => c.text).join('\n');
+    }
+    console.timeEnd(`${tag} decode`);
+  } finally {
+    disposeWhisperOutput(output);
   }
-  console.timeEnd(`${tag} decode`);
 
   const srtContent = chunks.length > 0 ? convertToSRT(chunks) : text;
-  return { text, chunks, srtContent };
+  const resolvedLanguage = resolveTranscriptionLanguage(language, text);
+  return {
+    text,
+    chunks,
+    srtContent,
+    language: resolvedLanguage,
+    languageName: getTranscriptionLanguageName(resolvedLanguage),
+  };
+}
+
+function disposeWhisperOutput(output) {
+  try {
+    disposeTensorTree(output);
+  } catch (error) {
+    console.warn('Whisper 输出释放失败:', error.message);
+  }
 }
 
 /**
  * 提取 Whisper generate 输出中的 token ids
  * 兼容 Tensor 和 return_dict_in_generate 风格的返回结构
  * @param {*} output
- * @returns {number[]}
+ * @returns {Promise<number[]>}
  */
-function extractWhisperTokenIds(output) {
+async function extractWhisperTokenIds(output) {
   const sequences = output?.sequences || output;
   if (!sequences) return [];
 
   if (typeof sequences.tolist === 'function') {
-    const values = sequences.tolist();
-    return Array.isArray(values[0]) ? values[0].map((v) => Number(v)) : values.map((v) => Number(v));
+    try {
+      const values = sequences.tolist();
+      return Array.isArray(values[0]) ? values[0].map((v) => Number(v)) : values.map((v) => Number(v));
+    } catch (error) {
+      if (typeof sequences.getData !== 'function') {
+        throw error;
+      }
+    }
+  }
+
+  // WebGPU 输出的 Tensor 数据可能仍在 GPU 上，需要先下载到 CPU 再解码。
+  if (typeof sequences.getData === 'function') {
+    const values = await sequences.getData();
+    const flatValues = Array.from(values, (value) => Number(value));
+    const dims = sequences.dims || sequences.shape || [];
+    if (Array.isArray(dims) && dims.length >= 2) {
+      const sequenceLength = Number(dims[dims.length - 1]);
+      return flatValues.slice(0, sequenceLength);
+    }
+    return flatValues;
   }
 
   if (Array.isArray(sequences)) {
@@ -4933,15 +5382,16 @@ function getWhisperTimePrecision() {
  * 规范化 Whisper 时间戳分段
  * 某些分段的结束时间可能缺失，这里会优先用下一段开始时间补齐
  * @param {Array<{text: string, timestamp: [number, number]}>} chunks
+ * @param {string|null} language
  * @returns {Array<{text: string, timestamp: [number, number]}>}
  */
-function normalizeWhisperTimestampChunks(chunks) {
+function normalizeWhisperTimestampChunks(chunks, language = null) {
   if (!Array.isArray(chunks) || chunks.length === 0) return [];
 
   const normalized = [];
   for (let i = 0; i < chunks.length; i++) {
     const current = chunks[i];
-    const cleanedText = cleanTranscriptionText(current?.text || '');
+    const cleanedText = cleanTranscriptionText(current?.text || '', { language });
     if (!cleanedText) continue;
 
     let start = Array.isArray(current?.timestamp) ? current.timestamp[0] : null;
@@ -4974,12 +5424,19 @@ function normalizeWhisperTimestampChunks(chunks) {
  * @param {*} output
  * @returns {Array<{text: string, timestamp: [number, number]}>}
  */
-function decodeWhisperTimestampChunks(output) {
-  const tokenIds = extractWhisperTokenIds(output);
-  if (tokenIds.length === 0) return [];
+async function decodeWhisperAsrResult(output) {
+  const tokenIds = await extractWhisperTokenIds(output);
+  if (tokenIds.length === 0) {
+    return {
+      chunks: [],
+      language: 'unknown',
+      tokenIds: [],
+    };
+  }
 
   const tokenizer = frontendWhisperTokenizer;
   const timePrecision = getWhisperTimePrecision();
+  let language = detectWhisperLanguageFromTokens(tokenIds);
 
   if (tokenizer && typeof tokenizer._decode_asr === 'function') {
     try {
@@ -4991,21 +5448,42 @@ function decodeWhisperTimestampChunks(output) {
           force_full_sequences: false,
         },
       );
-      const officialChunks = normalizeWhisperTimestampChunks(metadata?.chunks || []);
+      const metadataLanguage = detectWhisperLanguageFromMetadata(metadata);
+      if (metadataLanguage !== 'unknown') {
+        language = metadataLanguage;
+      }
+      const officialChunks = normalizeWhisperTimestampChunks(metadata?.chunks || [], language);
       if (officialChunks.length > 0) {
-        return officialChunks;
+        return {
+          chunks: officialChunks,
+          language,
+          tokenIds,
+        };
       }
     } catch (officialError) {
       console.warn('Whisper 官方时间戳解码失败，回退到字符串解析:', officialError.message);
     }
   }
 
-  const decodedWithTs = tokenizer.batch_decode(output, {
+  const decodedWithTs = tokenizer.batch_decode([tokenIds], {
     skip_special_tokens: false,
     decode_with_timestamps: true,
     time_precision: timePrecision,
   });
-  return normalizeWhisperTimestampChunks(parseTimestampChunks(decodedWithTs[0] || ''));
+  const decodedLanguage = detectWhisperLanguageFromDecodedText(decodedWithTs[0] || '');
+  if (decodedLanguage !== 'unknown') {
+    language = decodedLanguage;
+  }
+
+  return {
+    chunks: normalizeWhisperTimestampChunks(parseTimestampChunks(decodedWithTs[0] || '', language), language),
+    language,
+    tokenIds,
+  };
+}
+
+async function decodeWhisperTimestampChunks(output) {
+  return (await decodeWhisperAsrResult(output)).chunks;
 }
 
 /**
@@ -5219,9 +5697,10 @@ function isLikelyReadableIntro(text) {
 /**
  * 解析 Whisper 带时间戳的输出
  * @param {string} text - Whisper 输出的带 <|0.00|> 格式时间戳的文本
+ * @param {string|null} language
  * @returns {Array<{text: string, timestamp: [number, number]}>}
  */
-function parseTimestampChunks(text) {
+function parseTimestampChunks(text, language = null) {
   const chunks = [];
   const timestampRegex = /<\|(\d+\.\d+)\|>/g;
   let matches = [];
@@ -5235,9 +5714,9 @@ function parseTimestampChunks(text) {
     const end = matches[i + 1] ? matches[i + 1].time : start + 1;
     const textStart = matches[i].index + matches[i].length;
     const textEnd = matches[i + 1] ? matches[i + 1].index : text.length;
-    const chunkText = text.substring(textStart, textEnd).trim();
+    const chunkText = cleanTranscriptionText(text.substring(textStart, textEnd).trim(), { language });
     if (chunkText) {
-      chunks.push({ text: traditionalToSimplified(chunkText), timestamp: [start, end] });
+      chunks.push({ text: chunkText, timestamp: [start, end] });
     }
   }
   return chunks;
@@ -5718,27 +6197,66 @@ function traditionalToSimplified(text) {
 /**
  * 清理转写文本：移除 <|X.XX|> 时间戳标记、多余空白
  * @param {string} text - 原始转写文本
+ * @param {{language?: string|null}|string|null} options - 文本语言，中文才做繁简转换
  * @returns {string} 清理后的文本
  */
-function cleanTranscriptionText(text) {
+function cleanTranscriptionText(text, options = {}) {
   if (!text) return text;
+  const language = typeof options === 'string' ? options : options?.language;
+
   // 移除 <|X.XX|> 时间戳标记
   let cleaned = text.replace(/<\|\d+\.\d+\|>/g, '');
-  // 繁体转简体
-  cleaned = traditionalToSimplified(cleaned);
+
+  if (isLikelyGarbledText(cleaned)) {
+    return '';
+  }
+
+  // 繁简转换只适用于中文；日文等非中文里存在共用汉字，不能直接套中文映射。
+  if (shouldApplyChineseTextNormalization(language)) {
+    cleaned = traditionalToSimplified(cleaned);
+  }
+
+  // 只剩少量替换符时直接删除，整行明显乱码时上面已经过滤。
+  cleaned = cleaned.replace(/\uFFFD/g, '');
   // 移除多余空格
   cleaned = cleaned.replace(/\s+/g, ' ').trim();
+
+  if (isLikelyGarbledText(cleaned)) {
+    return '';
+  }
+
   return cleaned;
+}
+
+function shouldApplyChineseTextNormalization(language) {
+  const normalizedLanguage = normalizeWhisperLanguageCode(language);
+  return normalizedLanguage === 'unknown' || normalizedLanguage === 'zh';
+}
+
+function isLikelyGarbledText(text) {
+  const value = String(text || '').trim();
+  if (!value) return false;
+
+  const replacementCount = (value.match(/\uFFFD/g) || []).length;
+  if (replacementCount === 0) return false;
+
+  const visibleLength = Math.max(1, value.replace(/\s/g, '').length);
+  return (
+    /\uFFFD{2,}/.test(value) ||
+    replacementCount >= 3 ||
+    replacementCount / visibleLength >= 0.2
+  );
 }
 
 /**
  * 构建文本去重用的标准化索引映射
  * 便于找到“标准化后重叠部分”在原始文本中的裁剪位置
  * @param {string} text
+ * @param {string|null} language
  * @returns {{cleaned: string, normalized: string, indexMap: number[]}}
  */
-function buildNormalizedTextIndexMap(text) {
-  const cleaned = cleanTranscriptionText(text || '');
+function buildNormalizedTextIndexMap(text, language = null) {
+  const cleaned = cleanTranscriptionText(text || '', { language });
   const normalizedChars = [];
   const indexMap = [];
 
@@ -5818,11 +6336,12 @@ function findChunkTextOverlapLength(previousNormalized, currentNormalized) {
  * 在 6 秒重叠不变的前提下，尽量减少 TXT 中的重复内容
  * @param {string} previousText
  * @param {string} currentText
+ * @param {string|null} language
  * @returns {string}
  */
-function trimLeadingOverlapText(previousText, currentText) {
-  const previousIndexMap = buildNormalizedTextIndexMap((previousText || '').slice(-320));
-  const currentIndexMap = buildNormalizedTextIndexMap(currentText);
+function trimLeadingOverlapText(previousText, currentText, language = null) {
+  const previousIndexMap = buildNormalizedTextIndexMap((previousText || '').slice(-320), language);
+  const currentIndexMap = buildNormalizedTextIndexMap(currentText, language);
 
   if (!previousIndexMap.normalized || !currentIndexMap.normalized) {
     return currentIndexMap.cleaned;
