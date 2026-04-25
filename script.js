@@ -2394,6 +2394,7 @@ document.addEventListener('DOMContentLoaded', function () {
       videoTableBody.appendChild(emptyRow);
 
       // 更新计数器显示
+      document.getElementById('videoCountInfo').style.display = 'none';
       document.getElementById('totalVideoCount').textContent = '0';
       document.getElementById('completedSubtitleCount').textContent = '0';
       updateNoSubtitleBanner();
