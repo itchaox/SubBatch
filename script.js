@@ -9,7 +9,7 @@ document.addEventListener('DOMContentLoaded', function () {
   // 自定义下拉框元素
   const urlTypeTrigger = document.getElementById('urlTypeTrigger');
   const urlTypeDropdown = document.getElementById('urlTypeDropdown');
-  const urlTypeOptions = document.querySelectorAll('.custom-select-option');
+  const urlTypeOptions = urlTypeDropdown.querySelectorAll('.custom-select-option');
   const urlTypeSelectedText = document.querySelector('.custom-select-selected-text');
   let currentUrlType = 'video'; // 默认选择视频地址
 
@@ -874,6 +874,187 @@ document.addEventListener('DOMContentLoaded', function () {
     return null;
   }
 
+  function parseSearchPageUrl(url) {
+    try {
+      const parsedUrl = new URL(url);
+      if (!/search\.bilibili\.com$/i.test(parsedUrl.hostname)) {
+        return null;
+      }
+
+      if (!/^\/(all|video)\/?$/i.test(parsedUrl.pathname)) {
+        return null;
+      }
+
+      const keyword = parsedUrl.searchParams.get('keyword')?.trim();
+      if (!keyword) {
+        return null;
+      }
+
+      const allowedOrders = new Set(['totalrank', 'click', 'pubdate', 'dm', 'stow', 'scores']);
+      const parsedPage = parseInt(parsedUrl.searchParams.get('page') || '1', 10);
+      const order = (parsedUrl.searchParams.get('order') || 'totalrank').trim().toLowerCase();
+
+      return {
+        keyword,
+        order: allowedOrders.has(order) ? order : 'totalrank',
+        page: Number.isFinite(parsedPage) && parsedPage > 0 ? parsedPage : 1,
+        rawUrl: parsedUrl.toString(),
+      };
+    } catch (error) {
+      console.warn('解析搜索页面地址失败:', error);
+      return null;
+    }
+  }
+
+  const htmlEntityDecoder = document.createElement('textarea');
+
+  function sanitizeSearchResultText(text) {
+    if (text === null || text === undefined) return '';
+    const strippedText = String(text).replace(/<[^>]+>/g, '');
+    htmlEntityDecoder.innerHTML = strippedText;
+    return htmlEntityDecoder.value.replace(/\s+/g, ' ').trim();
+  }
+
+  function parseSearchDuration(duration) {
+    if (typeof duration === 'number' && Number.isFinite(duration) && duration >= 0) {
+      return duration;
+    }
+
+    if (typeof duration !== 'string') return 0;
+
+    const parts = duration
+      .split(':')
+      .map((part) => parseInt(part, 10))
+      .filter((part) => Number.isFinite(part));
+
+    if (parts.length === 3) return parts[0] * 3600 + parts[1] * 60 + parts[2];
+    if (parts.length === 2) return parts[0] * 60 + parts[1];
+    if (parts.length === 1) return parts[0];
+    return 0;
+  }
+
+  function processAndAddSearchVideosToTable(videos) {
+    if (!Array.isArray(videos) || videos.length === 0) {
+      console.error('无效的搜索结果数据');
+      return 0;
+    }
+
+    let addedCount = 0;
+
+    videos.forEach((video) => {
+      const bvid = video.bvid || extractBilibiliVideoId(video.arcurl || '');
+      const aidMatch = typeof video.arcurl === 'string' ? video.arcurl.match(/\/video\/av(\d+)/i) : null;
+      const aid = video.aid || video.id || (aidMatch ? parseInt(aidMatch[1], 10) : 0);
+
+      if (!bvid && !aid) {
+        console.warn('搜索结果缺少可识别的视频 ID，已跳过:', video);
+        return;
+      }
+
+      const existingVideo = videoList.find(
+        (item) => (bvid && item.bvid === bvid) || (aid && String(item.aid) === String(aid)),
+      );
+      if (existingVideo) {
+        return;
+      }
+
+      const formattedVideo = {
+        id: bvid || aid || `${Date.now()}-${Math.random()}`,
+        bvid: bvid || '',
+        aid: aid || 0,
+        cid: 0,
+        title: sanitizeSearchResultText(video.title) || '未知标题',
+        author: sanitizeSearchResultText(video.author || video.up_name) || '未知作者',
+        publishDate: video.pubdate || 0,
+        subtitleStatus: '未获取',
+        subtitleText: null,
+        view_count: video.play || 0,
+        like_count: video.favorites || 0,
+        mid: video.mid || video.author_mid || 0,
+        duration: parseSearchDuration(video.duration),
+      };
+
+      if (addVideoToTable(formattedVideo, false)) {
+        addedCount++;
+      }
+    });
+
+    if (addedCount > 0) {
+      updateVideoTable();
+    }
+
+    return addedCount;
+  }
+
+  async function fetchSearchPageVideos(searchInfo) {
+    console.log('开始获取搜索页面视频:', searchInfo);
+
+    getFavoriteBtn.disabled = true;
+    getFavoriteBtn.innerHTML = `
+        <svg viewBox="0 0 24 24" class="spin">
+          <path d="M12 6v3l4-4-4-4v3c-4.42 0-8 3.58-8 8 0 1.57.46 3.03 1.24 4.26L6.7 14.8c-.45-.83-.7-1.79-.7-2.8 0-3.31 2.69-6 6-6zm6.76 1.74L17.3 9.2c.44.84.7 1.79.7 2.8 0 3.31-2.69 6-6 6v-3l-4 4 4 4v-3c4.42 0 8-3.58 8-8 0-1.57-.46-3.03-1.24-4.26z"/>
+        </svg>
+        获取中
+      `;
+
+    showSuccess('正在获取搜索页面视频，请稍候...');
+
+    try {
+      const response = await new Promise((resolve, reject) => {
+        const timeoutId = setTimeout(() => {
+          reject(new Error('请求超时，background.js没有及时响应'));
+        }, 15000);
+
+        chrome.runtime.sendMessage(
+          {
+            action: 'fetchSearchVideoList',
+            keyword: searchInfo.keyword,
+            order: searchInfo.order,
+            page: searchInfo.page,
+          },
+          (response) => {
+            clearTimeout(timeoutId);
+            const error = chrome.runtime.lastError;
+            if (error) {
+              reject(error);
+              return;
+            }
+            resolve(response);
+          },
+        );
+      });
+
+      if (response && response.success && response.data) {
+        const medias = response.data.medias || [];
+        if (medias.length === 0) {
+          showError('当前搜索页面没有可添加的视频');
+          return;
+        }
+
+        const addedCount = processAndAddSearchVideosToTable(medias);
+        if (addedCount > 0) {
+          showSuccess(`成功添加 ${addedCount} 个搜索结果视频到表格`);
+        } else {
+          showSuccess('当前搜索结果视频已全部在表格中');
+        }
+        return;
+      }
+
+      showError(response?.message || '获取搜索页面视频失败');
+    } catch (error) {
+      console.error('获取搜索页面视频出错:', error);
+      showError('获取搜索页面视频失败: ' + (error.message || '未知错误'));
+    } finally {
+      getFavoriteBtn.disabled = false;
+      getFavoriteBtn.innerHTML = `
+        <svg viewBox="0 0 24 24">
+          <path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z" />
+        </svg>
+        获取视频
+      `;
+    }
+  }
+
   // 判断是否为B站URL
   function isBilibiliUrl(url) {
     return url.includes('bilibili.com/video') || url.includes('b23.tv') || /bilibili\.com\/video\/av\d+/i.test(url);
@@ -1293,6 +1474,10 @@ document.addEventListener('DOMContentLoaded', function () {
         generateUrlBtn.style.display = 'block';
         getFavoriteBtn.style.display = 'none';
         urlInput.placeholder = '请输入B站单个视频地址';
+      } else if (currentUrlType === 'search') {
+        generateUrlBtn.style.display = 'none';
+        getFavoriteBtn.style.display = 'block';
+        urlInput.placeholder = '请输入B站搜索页面地址';
       } else if (currentUrlType === 'favorite') {
         generateUrlBtn.style.display = 'none';
         getFavoriteBtn.style.display = 'block';
@@ -1343,6 +1528,10 @@ document.addEventListener('DOMContentLoaded', function () {
         generateUrlBtn.style.display = 'block';
         getFavoriteBtn.style.display = 'none';
         urlInput.placeholder = '请输入B站视频地址';
+      } else if (currentUrlType === 'search') {
+        generateUrlBtn.style.display = 'none';
+        getFavoriteBtn.style.display = 'block';
+        urlInput.placeholder = '请输入B站搜索页面地址';
       } else if (currentUrlType === 'favorite') {
         generateUrlBtn.style.display = 'none';
         getFavoriteBtn.style.display = 'block';
@@ -1623,6 +1812,23 @@ document.addEventListener('DOMContentLoaded', function () {
   if (getFavoriteBtn) {
     getFavoriteBtn.addEventListener('click', async () => {
       const inputUrl = urlInput.value.trim();
+
+      if (currentUrlType === 'search') {
+        if (!inputUrl) {
+          showError('请输入B站搜索页面地址');
+          urlInput.focus();
+          return;
+        }
+
+        const searchInfo = parseSearchPageUrl(inputUrl);
+        if (!searchInfo) {
+          showError('无法识别的搜索页面地址，请检查格式');
+          return;
+        }
+
+        await fetchSearchPageVideos(searchInfo);
+        return;
+      }
 
       // 处理用户主页地址
       if (currentUrlType === 'user') {
@@ -3113,8 +3319,8 @@ document.addEventListener('DOMContentLoaded', function () {
               continue;
             }
 
-            if (videoToTranscribe.duration && videoToTranscribe.duration > 1800) {
-              videoToTranscribe.subtitleStatus = '转写失败: 视频超过30分钟';
+            if (videoToTranscribe.duration && videoToTranscribe.duration > 3600) {
+              videoToTranscribe.subtitleStatus = '转写失败: 视频超过60分钟';
               failCount++;
               updateVideoTable();
               continue;

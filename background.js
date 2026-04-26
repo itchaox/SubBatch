@@ -2185,6 +2185,76 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     return true;
   }
 
+  // 处理获取搜索页面视频列表的消息
+  if (message.action === 'fetchSearchVideoList') {
+    console.log('收到获取搜索页面视频列表请求:', message);
+
+    if (!message.keyword || !String(message.keyword).trim()) {
+      sendResponse({
+        success: false,
+        message: '缺少必要参数 keyword，请确保已提供搜索关键词',
+      });
+      return true;
+    }
+
+    const page = typeof message.page === 'number' && message.page > 0 ? message.page : 1;
+    const allowedOrders = new Set(['totalrank', 'click', 'pubdate', 'dm', 'stow', 'scores']);
+    const order = allowedOrders.has(message.order) ? message.order : 'totalrank';
+    const responseSender = sendResponse;
+
+    (async () => {
+      try {
+        const wbiKeys = await getWbiKeys();
+        if (!wbiKeys) {
+          throw new Error('获取Wbi签名密钥失败');
+        }
+
+        const params = {
+          search_type: 'video',
+          keyword: String(message.keyword).trim(),
+          order,
+          page,
+          page_size: 42,
+        };
+
+        const query = encWbi(params, wbiKeys.img_key, wbiKeys.sub_key);
+        const url = `https://api.bilibili.com/x/web-interface/wbi/search/type?${query}`;
+
+        console.log('搜索页面请求URL:', url);
+
+        const result = await fetchWithHeaders(url);
+
+        if (result.code === 0 && result.data) {
+          responseSender({
+            success: true,
+            data: {
+              medias: Array.isArray(result.data.result) ? result.data.result : [],
+              page: result.data.page || page,
+              numPages: result.data.numPages || 0,
+              numResults: result.data.numResults || 0,
+              keyword: params.keyword,
+              order,
+            },
+          });
+        } else {
+          responseSender({
+            success: false,
+            message: result.message || '获取搜索页面视频列表失败',
+            code: result.code,
+          });
+        }
+      } catch (error) {
+        console.error('获取搜索页面视频列表出错:', error);
+        responseSender({
+          success: false,
+          message: error.message || '网络请求错误',
+        });
+      }
+    })();
+
+    return true;
+  }
+
   // 处理获取视频分P列表的消息
   if (message.action === 'fetchVideoParts') {
     console.log('收到获取视频分P列表请求:', message);
