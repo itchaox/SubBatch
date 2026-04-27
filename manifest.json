@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "SubBatch - B站字幕批量下载工具",
-  "version": "1.6.0",
+  "version": "2.0.0",
   "description": "一键批量下载B站(Bilibili)视频字幕，支持导出SRT/TXT格式。支持批量处理个人主页、收藏夹、合集、视频选集、单个视频的字幕，本地处理，安全高效。",
   "icons": {
     "16": "images/logo/logo-16.png",
