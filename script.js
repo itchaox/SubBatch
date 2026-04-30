@@ -142,6 +142,7 @@ document.addEventListener('DOMContentLoaded', function () {
     { value: 'author', label: '作者' },
     { value: 'publishDate', label: '发布日期' },
     { value: 'tags', label: '标签' },
+    { value: 'description', label: '视频简介' },
   ];
 
   // 显示错误提示
@@ -2576,6 +2577,7 @@ document.addEventListener('DOMContentLoaded', function () {
       author: videoInfo.author,
       publishDate: videoInfo.publishDate || 0,
       tags: Array.isArray(videoInfo.tags) ? videoInfo.tags.filter(Boolean) : [],
+      description: videoInfo.description || '',
       subtitleStatus: '未获取',
       subtitleText: null,
       view_count: videoInfo.view_count,
@@ -3703,6 +3705,19 @@ document.addEventListener('DOMContentLoaded', function () {
     return TXT_VIDEO_INFO_FIELD_OPTIONS.find((option) => option.value === field)?.label || field;
   }
 
+  function getTxtVideoInfoExportLabel(field) {
+    const exportLabelMap = {
+      title: '视频标题',
+      link: '视频链接',
+      author: '视频作者',
+      publishDate: '发布日期',
+      tags: '视频标签',
+      description: '视频简介',
+    };
+
+    return exportLabelMap[field] || getTxtVideoInfoFieldLabel(field);
+  }
+
   function buildExportVideoUrl(video) {
     if (!video?.bvid) return '';
     let videoUrl = `https://www.bilibili.com/video/${video.bvid}`;
@@ -3743,6 +3758,10 @@ document.addEventListener('DOMContentLoaded', function () {
         .join(' ');
     }
 
+    if (field === 'description') {
+      return String(video.description || '').trim();
+    }
+
     return '';
   }
 
@@ -3751,7 +3770,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
     const normalizedFields = normalizePrependVideoInfoFields(activeFields);
     const needsTags = normalizedFields.includes('tags') && (!Array.isArray(video.tags) || video.tags.length === 0);
-    if (!needsTags) return;
+    const needsDescription = normalizedFields.includes('description') && !String(video.description || '').trim();
+    if (!needsTags && !needsDescription) return;
 
     try {
       const infoResponse = await new Promise((resolve) => {
@@ -3774,6 +3794,9 @@ document.addEventListener('DOMContentLoaded', function () {
         if (!video.publishDate && infoResponse.publishDate) {
           video.publishDate = infoResponse.publishDate;
         }
+        if (!video.description && infoResponse.description) {
+          video.description = infoResponse.description;
+        }
       }
     } catch (error) {
       console.warn(`补充视频导出元信息失败: ${video.title}`, error);
@@ -3789,12 +3812,12 @@ document.addEventListener('DOMContentLoaded', function () {
       .map((field) => {
         const value = getTxtVideoInfoFieldValue(video, field);
         if (!value) return '';
-        return `${getTxtVideoInfoFieldLabel(field)}：${value}`;
+        return `${getTxtVideoInfoExportLabel(field)}：${value}`;
       })
       .filter(Boolean);
 
     if (lines.length === 0) return subtitleContent;
-    return `${lines.join('\n')}\n\n${subtitleContent}`;
+    return `${lines.join('\n')}\n\n---\n字幕正文\n---\n\n${subtitleContent}`;
   }
 
   function buildVideoExportFileName(video, format) {
