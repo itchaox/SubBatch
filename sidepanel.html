@@ -1313,6 +1313,41 @@
         color: #999;
       }
 
+      .custom-multi-select-dropdown {
+        width: calc(100%);
+        padding: 6px 0;
+      }
+
+      .custom-multi-select-option {
+        position: relative;
+        padding: 10px 12px;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        color: #333;
+        font-size: 14px;
+      }
+
+      .custom-multi-select-option:hover {
+        background-color: #f5f7fa;
+      }
+
+      .custom-multi-select-option input {
+        width: 16px;
+        height: 16px;
+        margin: 0;
+        accent-color: #3370ff;
+        cursor: pointer;
+        flex-shrink: 0;
+        pointer-events: none;
+      }
+
+      .custom-multi-select-option.selected {
+        color: #3370ff;
+      }
+
       /* 添加箭头图标 */
       .select-arrow-icon {
         width: 16px;
@@ -2298,12 +2333,12 @@
             </div>
           </div>
         </div>
-        <div style="display: flex; align-items: center; justify-content: space-between; margin-top: 16px">
+        <div style="display: flex; align-items: center; gap: 12px; margin-top: 16px">
           <div style="display: flex; align-items: center; gap: 6px">
             <span style="font-size: 14px; color: #333; font-weight: 500">导出 TXT 时添加视频信息</span>
             <span
               class="status-help-icon"
-              data-tooltip="开启该开关后，在导出 TXT 格式时，会在头部增加标题和链接"
+              data-tooltip="导出 TXT 时，可在头部按需增加标题、链接、作者、发布日期"
               style="
                 display: inline-flex;
                 align-items: center;
@@ -2321,13 +2356,69 @@
               >!</span
             >
           </div>
-          <label class="switch">
-            <input
-              type="checkbox"
-              id="prependVideoInfoToggle"
-            />
-            <span class="switch-slider"></span>
-          </label>
+          <div
+            class="custom-select-container"
+            id="txtVideoInfoSelectContainer"
+            style="flex: 1"
+          >
+            <div
+              class="custom-select-trigger"
+              id="txtVideoInfoSelectTrigger"
+            >
+              <span class="custom-select-selected-text">不添加</span>
+              <svg
+                class="select-arrow-icon"
+                viewBox="0 0 24 24"
+              >
+                <path d="M7 10l5 5 5-5z" />
+              </svg>
+            </div>
+            <div
+              class="custom-select-dropdown custom-multi-select-dropdown"
+              id="txtVideoInfoSelectDropdown"
+            >
+              <div
+                class="custom-multi-select-option"
+                data-value="title"
+              >
+                <input
+                  type="checkbox"
+                  value="title"
+                />
+                <span>视频标题</span>
+              </div>
+              <div
+                class="custom-multi-select-option"
+                data-value="link"
+              >
+                <input
+                  type="checkbox"
+                  value="link"
+                />
+                <span>视频链接</span>
+              </div>
+              <div
+                class="custom-multi-select-option"
+                data-value="author"
+              >
+                <input
+                  type="checkbox"
+                  value="author"
+                />
+                <span>视频作者</span>
+              </div>
+              <div
+                class="custom-multi-select-option"
+                data-value="publishDate"
+              >
+                <input
+                  type="checkbox"
+                  value="publishDate"
+                />
+                <span>发布日期</span>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>

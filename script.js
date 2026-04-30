@@ -136,6 +136,12 @@ document.addEventListener('DOMContentLoaded', function () {
   let skipTranscribeConfirmDialog = false;
   const CHARGE_EXCLUSIVE_BLOCK_REASON = 'charge-exclusive';
   const CHARGE_EXCLUSIVE_BLOCK_STATUS = '充电专属不可获取';
+  const TXT_VIDEO_INFO_FIELD_OPTIONS = [
+    { value: 'title', label: '标题' },
+    { value: 'link', label: '链接' },
+    { value: 'author', label: '作者' },
+    { value: 'publishDate', label: '发布日期' },
+  ];
 
   // 显示错误提示
   function showError(message) {
@@ -1337,9 +1343,7 @@ document.addEventListener('DOMContentLoaded', function () {
       }
 
       // 创建Blob对象
-      const finalText = prependVideoInfo
-        ? prependVideoInfoText(subtitleText, currentVideoInfo?.title, currentVideoInfo?.bvid)
-        : subtitleText;
+      const finalText = prependVideoInfoText(subtitleText, currentVideoInfo);
       const blob = new Blob([finalText], { type: 'text/plain;charset=utf-8' });
 
       // 创建下载链接
@@ -2751,7 +2755,7 @@ document.addEventListener('DOMContentLoaded', function () {
           let txtContent = convertToTxtFormat(subtitleText, subtitleLanguage);
 
           // 添加视频信息前缀
-          txtContent = prependVideoInfoText(txtContent, video.title, video.bvid);
+          txtContent = prependVideoInfoText(txtContent, video);
 
           // 复制到剪贴板
           await navigator.clipboard.writeText(txtContent);
@@ -3679,11 +3683,64 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   }
 
-  // 根据设置在字幕内容前添加视频标题和链接
-  function prependVideoInfoText(subtitleContent, title, bvid) {
-    if (!prependVideoInfo || !bvid) return subtitleContent;
-    const videoUrl = `https://www.bilibili.com/video/${bvid}`;
-    return `标题：${title}\n链接：${videoUrl}\n\n${subtitleContent}`;
+  function normalizePrependVideoInfoFields(fields) {
+    if (!Array.isArray(fields)) return [];
+    const fieldSet = new Set(fields);
+    return TXT_VIDEO_INFO_FIELD_OPTIONS.map((option) => option.value).filter((value) => fieldSet.has(value));
+  }
+
+  function getTxtVideoInfoFieldLabel(field) {
+    return TXT_VIDEO_INFO_FIELD_OPTIONS.find((option) => option.value === field)?.label || field;
+  }
+
+  function buildExportVideoUrl(video) {
+    if (!video?.bvid) return '';
+    let videoUrl = `https://www.bilibili.com/video/${video.bvid}`;
+    if (Number(video.page) > 1) {
+      videoUrl += `?p=${video.page}`;
+    }
+    return videoUrl;
+  }
+
+  function getTxtVideoInfoFieldValue(video, field) {
+    if (!video) return '';
+
+    if (field === 'title') {
+      return video.title || '';
+    }
+
+    if (field === 'link') {
+      return buildExportVideoUrl(video);
+    }
+
+    if (field === 'author') {
+      return video.author || '';
+    }
+
+    if (field === 'publishDate') {
+      if (!video.publishDate) return '';
+      const formattedDate = formatDate(video.publishDate);
+      return formattedDate && formattedDate !== '-' ? formattedDate : '';
+    }
+
+    return '';
+  }
+
+  // 根据设置在字幕内容前添加视频信息
+  function prependVideoInfoText(subtitleContent, video) {
+    const activeFields = normalizePrependVideoInfoFields(prependVideoInfoFields);
+    if (activeFields.length === 0 || !video) return subtitleContent;
+
+    const lines = activeFields
+      .map((field) => {
+        const value = getTxtVideoInfoFieldValue(video, field);
+        if (!value) return '';
+        return `${getTxtVideoInfoFieldLabel(field)}：${value}`;
+      })
+      .filter(Boolean);
+
+    if (lines.length === 0) return subtitleContent;
+    return `${lines.join('\n')}\n\n${subtitleContent}`;
   }
 
   function buildVideoExportFileName(video, format) {
@@ -3832,7 +3889,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
           // 添加视频信息前缀（仅TXT格式，SRT不能破坏格式）
           if (format !== 'srt') {
-            subtitleContent = prependVideoInfoText(subtitleContent, video.title, video.bvid);
+            subtitleContent = prependVideoInfoText(subtitleContent, video);
           }
 
           // 将字幕内容添加到zip文件
@@ -4489,6 +4546,7 @@ document.addEventListener('DOMContentLoaded', function () {
   const settingsModal = document.getElementById('settingsModal');
   const settingsModalCloseBtn = document.getElementById('settingsModalCloseBtn');
   let defaultExportFormat = 'ask'; // 默认值
+  let prependVideoInfoFields = [];
 
   chrome.storage.local.get(['skipTranscribeConfirmDialog'], (result) => {
     skipTranscribeConfirmDialog = !!result.skipTranscribeConfirmDialog;
@@ -4510,6 +4568,61 @@ document.addEventListener('DOMContentLoaded', function () {
     if (formatSelectDropdown) formatSelectDropdown.classList.remove('active');
     if (fileNameSelectTrigger) fileNameSelectTrigger.classList.remove('active');
     if (fileNameSelectDropdown) fileNameSelectDropdown.classList.remove('active');
+    if (txtVideoInfoSelectTrigger) txtVideoInfoSelectTrigger.classList.remove('active');
+    if (txtVideoInfoSelectDropdown) txtVideoInfoSelectDropdown.classList.remove('active');
+  }
+
+  function updateTxtVideoInfoSelectedText() {
+    if (!txtVideoInfoSelectedText) return;
+
+    const activeFields = normalizePrependVideoInfoFields(prependVideoInfoFields);
+    if (activeFields.length === 0) {
+      txtVideoInfoSelectedText.textContent = '不添加';
+      return;
+    }
+
+    if (activeFields.length <= 2) {
+      txtVideoInfoSelectedText.textContent = activeFields.map(getTxtVideoInfoFieldLabel).join('、');
+      return;
+    }
+
+    txtVideoInfoSelectedText.textContent = `已选 ${activeFields.length} 项`;
+  }
+
+  function syncTxtVideoInfoOptionStates() {
+    const activeFields = normalizePrependVideoInfoFields(prependVideoInfoFields);
+    txtVideoInfoOptions.forEach((option) => {
+      const value = option.getAttribute('data-value');
+      const checked = activeFields.includes(value);
+      option.classList.toggle('selected', checked);
+      const checkbox = option.querySelector('input[type="checkbox"]');
+      if (checkbox) {
+        checkbox.checked = checked;
+      }
+    });
+    updateTxtVideoInfoSelectedText();
+  }
+
+  function persistTxtVideoInfoFields() {
+    prependVideoInfoFields = normalizePrependVideoInfoFields(prependVideoInfoFields);
+    chrome.storage.local.set({
+      prependVideoInfoFields,
+      prependVideoInfo: prependVideoInfoFields.length > 0,
+    });
+    syncTxtVideoInfoOptionStates();
+  }
+
+  function toggleTxtVideoInfoField(value) {
+    if (!value) return;
+
+    const normalizedFields = normalizePrependVideoInfoFields(prependVideoInfoFields);
+    if (normalizedFields.includes(value)) {
+      prependVideoInfoFields = normalizedFields.filter((field) => field !== value);
+    } else {
+      prependVideoInfoFields = [...normalizedFields, value];
+    }
+
+    persistTxtVideoInfoFields();
   }
 
   // 从 storage 加载设置
@@ -4570,6 +4683,10 @@ document.addEventListener('DOMContentLoaded', function () {
   const fileNameSelectDropdown = document.getElementById('fileNameSelectDropdown');
   const fileNameSelectOptions = document.querySelectorAll('#fileNameSelectDropdown .custom-select-option');
   const fileNameSelectedText = document.querySelector('#fileNameSelectTrigger .custom-select-selected-text');
+  const txtVideoInfoSelectTrigger = document.getElementById('txtVideoInfoSelectTrigger');
+  const txtVideoInfoSelectDropdown = document.getElementById('txtVideoInfoSelectDropdown');
+  const txtVideoInfoOptions = document.querySelectorAll('#txtVideoInfoSelectDropdown .custom-multi-select-option');
+  const txtVideoInfoSelectedText = document.querySelector('#txtVideoInfoSelectTrigger .custom-select-selected-text');
 
   // 从 storage 加载文件命名设置
   chrome.storage.local.get(['defaultFileNameFormat'], (result) => {
@@ -4621,6 +4738,56 @@ document.addEventListener('DOMContentLoaded', function () {
     });
   }
 
+  chrome.storage.local.get(['prependVideoInfoFields', 'prependVideoInfo'], (result) => {
+    if (Array.isArray(result.prependVideoInfoFields)) {
+      prependVideoInfoFields = normalizePrependVideoInfoFields(result.prependVideoInfoFields);
+    } else if (result.prependVideoInfo) {
+      prependVideoInfoFields = ['title', 'link'];
+    } else {
+      prependVideoInfoFields = [];
+    }
+
+    syncTxtVideoInfoOptionStates();
+  });
+
+  if (txtVideoInfoSelectTrigger && txtVideoInfoSelectDropdown) {
+    txtVideoInfoSelectTrigger.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const wasOpen = txtVideoInfoSelectTrigger.classList.contains('active');
+      closeAllSettingsDropdowns();
+      if (!wasOpen) {
+        txtVideoInfoSelectTrigger.classList.add('active');
+        txtVideoInfoSelectDropdown.classList.add('active');
+      }
+    });
+
+    txtVideoInfoOptions.forEach((option) => {
+      const checkbox = option.querySelector('input[type="checkbox"]');
+      if (checkbox) {
+        checkbox.addEventListener('click', (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          const value = option.getAttribute('data-value');
+          toggleTxtVideoInfoField(value);
+        });
+      }
+
+      option.addEventListener('click', (e) => {
+        e.stopPropagation();
+        e.preventDefault();
+        const value = option.getAttribute('data-value');
+        toggleTxtVideoInfoField(value);
+      });
+    });
+
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('#txtVideoInfoSelectContainer')) {
+        txtVideoInfoSelectTrigger.classList.remove('active');
+        txtVideoInfoSelectDropdown.classList.remove('active');
+      }
+    });
+  }
+
   if (settingsBtn && settingsModal) {
     const openSettingsModal = () => {
       settingsModal.style.display = 'flex';
@@ -4653,24 +4820,6 @@ document.addEventListener('DOMContentLoaded', function () {
       if (e.key === 'Escape' && settingsModal.style.display === 'flex') {
         closeSettingsModal();
       }
-    });
-  }
-
-  // 字幕添加视频信息开关
-  let prependVideoInfo = false;
-  const prependVideoInfoToggle = document.getElementById('prependVideoInfoToggle');
-
-  chrome.storage.local.get(['prependVideoInfo'], (result) => {
-    if (result.prependVideoInfo) {
-      prependVideoInfo = true;
-      if (prependVideoInfoToggle) prependVideoInfoToggle.checked = true;
-    }
-  });
-
-  if (prependVideoInfoToggle) {
-    prependVideoInfoToggle.addEventListener('change', (e) => {
-      prependVideoInfo = e.target.checked;
-      chrome.storage.local.set({ prependVideoInfo });
     });
   }
 
