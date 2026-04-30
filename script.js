@@ -141,6 +141,7 @@ document.addEventListener('DOMContentLoaded', function () {
     { value: 'link', label: '链接' },
     { value: 'author', label: '作者' },
     { value: 'publishDate', label: '发布日期' },
+    { value: 'tags', label: '标签' },
   ];
 
   // 显示错误提示
@@ -750,6 +751,9 @@ document.addEventListener('DOMContentLoaded', function () {
         if (infoResponse.aid) {
           video.aid = infoResponse.aid;
         }
+        if (Array.isArray(infoResponse.tags)) {
+          video.tags = infoResponse.tags.filter(Boolean);
+        }
         return true;
       }
     } catch (error) {
@@ -787,6 +791,9 @@ document.addEventListener('DOMContentLoaded', function () {
 
         if (infoResponse.aid) {
           video.aid = infoResponse.aid;
+        }
+        if (Array.isArray(infoResponse.tags)) {
+          video.tags = infoResponse.tags.filter(Boolean);
         }
 
         video.isChargeExclusive = !!infoResponse.isChargeExclusive;
@@ -1343,6 +1350,7 @@ document.addEventListener('DOMContentLoaded', function () {
       }
 
       // 创建Blob对象
+      await ensureVideoExportMetadata(currentVideoInfo);
       const finalText = prependVideoInfoText(subtitleText, currentVideoInfo);
       const blob = new Blob([finalText], { type: 'text/plain;charset=utf-8' });
 
@@ -2567,6 +2575,7 @@ document.addEventListener('DOMContentLoaded', function () {
       title: videoInfo.title,
       author: videoInfo.author,
       publishDate: videoInfo.publishDate || 0,
+      tags: Array.isArray(videoInfo.tags) ? videoInfo.tags.filter(Boolean) : [],
       subtitleStatus: '未获取',
       subtitleText: null,
       view_count: videoInfo.view_count,
@@ -2755,6 +2764,7 @@ document.addEventListener('DOMContentLoaded', function () {
           let txtContent = convertToTxtFormat(subtitleText, subtitleLanguage);
 
           // 添加视频信息前缀
+          await ensureVideoExportMetadata(video);
           txtContent = prependVideoInfoText(txtContent, video);
 
           // 复制到剪贴板
@@ -3723,7 +3733,51 @@ document.addEventListener('DOMContentLoaded', function () {
       return formattedDate && formattedDate !== '-' ? formattedDate : '';
     }
 
+    if (field === 'tags') {
+      const tags = Array.isArray(video.tags) ? video.tags : [];
+      if (tags.length === 0) return '';
+      return tags
+        .map((tag) => String(tag || '').trim())
+        .filter(Boolean)
+        .map((tag) => (tag.startsWith('#') ? tag : `#${tag}`))
+        .join(' ');
+    }
+
     return '';
+  }
+
+  async function ensureVideoExportMetadata(video, activeFields = prependVideoInfoFields) {
+    if (!video?.bvid) return;
+
+    const normalizedFields = normalizePrependVideoInfoFields(activeFields);
+    const needsTags = normalizedFields.includes('tags') && (!Array.isArray(video.tags) || video.tags.length === 0);
+    if (!needsTags) return;
+
+    try {
+      const infoResponse = await new Promise((resolve) => {
+        chrome.runtime.sendMessage(
+          {
+            action: 'fetchBilibiliInfo',
+            videoId: video.bvid,
+          },
+          resolve,
+        );
+      });
+
+      if (infoResponse?.success) {
+        if (Array.isArray(infoResponse.tags)) {
+          video.tags = infoResponse.tags.filter(Boolean);
+        }
+        if (!video.author && infoResponse.author) {
+          video.author = infoResponse.author;
+        }
+        if (!video.publishDate && infoResponse.publishDate) {
+          video.publishDate = infoResponse.publishDate;
+        }
+      }
+    } catch (error) {
+      console.warn(`补充视频导出元信息失败: ${video.title}`, error);
+    }
   }
 
   // 根据设置在字幕内容前添加视频信息
@@ -3889,6 +3943,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
           // 添加视频信息前缀（仅TXT格式，SRT不能破坏格式）
           if (format !== 'srt') {
+            await ensureVideoExportMetadata(video);
             subtitleContent = prependVideoInfoText(subtitleContent, video);
           }
 
