@@ -527,29 +527,93 @@ function createChargeExclusiveBlockedResult() {
   };
 }
 
+async function fetchBilibiliViewDetail({ bvid, aid, needElec = 0 }) {
+  if (!bvid && !aid) {
+    throw new Error('缺少 bvid 或 aid，无法获取视频详情');
+  }
+
+  const wbiKeys = await getWbiKeys();
+  if (!wbiKeys) {
+    throw new Error('获取Wbi签名密钥失败');
+  }
+
+  const params = {
+    ...(bvid ? { bvid } : {}),
+    ...(aid ? { aid } : {}),
+    need_elec: needElec,
+  };
+
+  const query = encWbi(params, wbiKeys.img_key, wbiKeys.sub_key);
+  const apiUrl = `https://api.bilibili.com/x/web-interface/wbi/view/detail?${query}`;
+
+  console.log('请求B站视频详情URL:', apiUrl);
+  return fetchWithHeaders(apiUrl);
+}
+
+function normalizeBilibiliViewDetail(detailData) {
+  const viewData = detailData?.View || {};
+  const cardInfo = detailData?.Card?.card || {};
+  const tags = Array.isArray(detailData?.Tags)
+    ? detailData.Tags.map((tag) => tag?.tag_name || tag?.name || '').filter(Boolean)
+    : [];
+
+  const ownerName = cardInfo?.name || viewData?.owner?.name || '';
+  const ownerMid = cardInfo?.mid || viewData?.owner?.mid || 0;
+  const ownerFace = cardInfo?.face || viewData?.owner?.face || '';
+  const pages = Array.isArray(viewData?.pages) ? viewData.pages : [];
+  const cid = viewData?.cid || pages[0]?.cid || null;
+
+  const compatibleFullData = {
+    ...viewData,
+    cid,
+    owner: {
+      ...(viewData.owner || {}),
+      name: ownerName,
+      mid: ownerMid || 0,
+      face: ownerFace || '',
+    },
+    pages,
+    Tags: Array.isArray(detailData?.Tags) ? detailData.Tags : [],
+    Card: detailData?.Card || null,
+    tags_raw: Array.isArray(detailData?.Tags) ? detailData.Tags : [],
+    card_info: detailData?.Card || null,
+  };
+
+  return {
+    normalizedVideoInfo: {
+      title: viewData?.title || '',
+      author: ownerName,
+      cover: viewData?.pic || '',
+      description: viewData?.desc || '',
+      view_count: viewData?.stat?.view || 0,
+      like_count: viewData?.stat?.like || 0,
+      bvid: viewData?.bvid || '',
+      aid: viewData?.aid || 0,
+      cid,
+      duration: viewData?.duration || 0,
+      publishDate: viewData?.pubdate || viewData?.ctime || 0,
+      tags,
+      full_data: compatibleFullData,
+    },
+    compatibleFullData,
+    tags,
+  };
+}
+
 async function getBilibiliVideoInfo(videoId) {
   try {
     // 判断是BV号还是AV号
     const isBV = videoId.startsWith('BV');
-    const apiUrl = isBV
-      ? `https://api.bilibili.com/x/web-interface/view?bvid=${videoId}`
-      : `https://api.bilibili.com/x/web-interface/view?aid=${videoId.replace('av', '')}`;
+    const detailData = await fetchBilibiliViewDetail({
+      ...(isBV ? { bvid: videoId } : { aid: videoId.replace('av', '') }),
+      needElec: 0,
+    });
+    console.log('🚀 detailData:', detailData);
 
-    console.log('请求B站视频信息URL:', apiUrl);
-    const data = await fetchWithHeaders(apiUrl);
-    console.log('🚀 data:', data);
-
-    if (data.code === 0 && data.data) {
-      const chargeExclusiveInfo = extractChargeExclusiveInfo(data.data);
-
-      // 获取视频的第一个分P的cid
-      let cid = data.data.cid;
-
-      // 如果视频有多个分P，则优先使用第一P的cid
-      if (!cid && data.data.pages && data.data.pages.length > 0) {
-        cid = data.data.pages[0].cid;
-        console.log('从pages中获取cid:', cid);
-      }
+    if (detailData.code === 0 && detailData.data) {
+      const { normalizedVideoInfo } = normalizeBilibiliViewDetail(detailData.data);
+      const chargeExclusiveInfo = extractChargeExclusiveInfo(detailData.data.View);
+      const cid = normalizedVideoInfo.cid;
 
       if (!cid) {
         console.error('无法从API响应中获取cid');
@@ -561,24 +625,13 @@ async function getBilibiliVideoInfo(videoId) {
 
       return {
         success: true,
-        title: data.data.title,
-        author: data.data.owner.name,
-        cover: data.data.pic,
-        description: data.data.desc,
-        view_count: data.data.stat.view,
-        like_count: data.data.stat.like,
-        bvid: data.data.bvid,
-        aid: data.data.aid, // 添加aid，便于后续请求
-        cid: cid, // 使用获取到的cid
-        duration: data.data.duration,
-        publishDate: data.data.pubdate || data.data.ctime || 0,
+        ...normalizedVideoInfo,
         ...chargeExclusiveInfo,
-        full_data: data.data, // 添加完整数据供需要时使用
       };
     } else {
       return {
         success: false,
-        message: data.message || '获取视频信息失败',
+        message: detailData.message || '获取视频信息失败',
       };
     }
   } catch (error) {
@@ -598,20 +651,20 @@ async function getBilibiliSubtitle(cid, bvid, retryCount = 2) {
     // 首先获取视频的基本信息，确保有aid
     let aid;
     try {
-      const viewInfo = await fetchWithHeaders(`https://api.bilibili.com/x/web-interface/view?bvid=${bvid}`);
+      const viewInfo = await fetchBilibiliViewDetail({ bvid, needElec: 0 });
       if (viewInfo.code === 0 && viewInfo.data) {
-        const chargeExclusiveInfo = extractChargeExclusiveInfo(viewInfo.data);
+        const chargeExclusiveInfo = extractChargeExclusiveInfo(viewInfo.data.View);
         if (chargeExclusiveInfo.isChargeExclusive) {
           console.warn('检测到充电专属视频，拦截字幕获取:', {
             bvid,
             cid,
-            is_upower_exclusive: viewInfo.data.is_upower_exclusive,
-            is_upower_play: viewInfo.data.is_upower_play,
-            is_upower_preview: viewInfo.data.is_upower_preview,
+            is_upower_exclusive: viewInfo.data.View?.is_upower_exclusive,
+            is_upower_play: viewInfo.data.View?.is_upower_play,
+            is_upower_preview: viewInfo.data.View?.is_upower_preview,
           });
           return createChargeExclusiveBlockedResult();
         }
-        aid = viewInfo.data.aid;
+        aid = viewInfo.data.View?.aid;
         console.log('成功获取aid:', aid);
       } else {
         console.error('获取视频信息失败:', viewInfo);
@@ -942,14 +995,14 @@ async function getBilibiliSubtitleTracks(cid, bvid, retryCount = 2) {
 
     let aid;
     try {
-      const viewInfo = await fetchWithHeaders(`https://api.bilibili.com/x/web-interface/view?bvid=${bvid}`);
+      const viewInfo = await fetchBilibiliViewDetail({ bvid, needElec: 0 });
       if (viewInfo.code === 0 && viewInfo.data) {
-        const chargeExclusiveInfo = extractChargeExclusiveInfo(viewInfo.data);
+        const chargeExclusiveInfo = extractChargeExclusiveInfo(viewInfo.data.View);
         if (chargeExclusiveInfo.isChargeExclusive) {
           console.warn('检测到充电专属视频，拦截字幕语言列表获取:', { bvid, cid });
           return createChargeExclusiveBlockedResult();
         }
-        aid = viewInfo.data.aid;
+        aid = viewInfo.data.View?.aid;
       }
     } catch (error) {
       console.error('获取视频基本信息出错:', error);
@@ -1181,14 +1234,18 @@ async function getBilibiliSubtitleContentByTrack({ cid, bvid, aid, track }, retr
 
     let resolvedAid = aid;
     try {
-      const viewInfo = await fetchWithHeaders(`https://api.bilibili.com/x/web-interface/view?bvid=${bvid}`);
+      const viewInfo = await fetchBilibiliViewDetail({
+        ...(bvid ? { bvid } : {}),
+        ...(resolvedAid ? { aid: resolvedAid } : {}),
+        needElec: 0,
+      });
       if (viewInfo.code === 0 && viewInfo.data) {
-        const chargeExclusiveInfo = extractChargeExclusiveInfo(viewInfo.data);
+        const chargeExclusiveInfo = extractChargeExclusiveInfo(viewInfo.data.View);
         if (chargeExclusiveInfo.isChargeExclusive) {
           console.warn('检测到充电专属视频，拦截字幕内容获取:', { bvid, cid });
           return createChargeExclusiveBlockedResult();
         }
-        resolvedAid = resolvedAid || viewInfo.data.aid;
+        resolvedAid = resolvedAid || viewInfo.data.View?.aid;
       }
     } catch (error) {
       console.error('获取视频基本信息出错:', error);
