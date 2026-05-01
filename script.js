@@ -4633,6 +4633,7 @@ document.addEventListener('DOMContentLoaded', function () {
   // 自定义下拉框元素
   const formatSelectTrigger = document.getElementById('formatSelectTrigger');
   const formatSelectDropdown = document.getElementById('formatSelectDropdown');
+  const formatSelectContainer = document.getElementById('formatSelectContainer');
   const formatSelectOptions = document.querySelectorAll('#formatSelectDropdown .custom-select-option');
   const formatSelectedText = document.querySelector('#formatSelectTrigger .custom-select-selected-text');
 
@@ -4642,10 +4643,13 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   function closeAllSettingsDropdowns() {
+    if (formatSelectContainer) formatSelectContainer.classList.remove('dropdown-open');
     if (formatSelectTrigger) formatSelectTrigger.classList.remove('active');
     if (formatSelectDropdown) formatSelectDropdown.classList.remove('active');
+    if (fileNameSelectContainer) fileNameSelectContainer.classList.remove('dropdown-open');
     if (fileNameSelectTrigger) fileNameSelectTrigger.classList.remove('active');
     if (fileNameSelectDropdown) fileNameSelectDropdown.classList.remove('active');
+    if (txtVideoInfoSelectContainer) txtVideoInfoSelectContainer.classList.remove('dropdown-open');
     if (txtVideoInfoSelectTrigger) txtVideoInfoSelectTrigger.classList.remove('active');
     if (txtVideoInfoSelectDropdown) txtVideoInfoSelectDropdown.classList.remove('active');
   }
@@ -4727,6 +4731,7 @@ document.addEventListener('DOMContentLoaded', function () {
       const wasOpen = formatSelectTrigger.classList.contains('active');
       closeAllSettingsDropdowns();
       if (!wasOpen) {
+        formatSelectContainer?.classList.add('dropdown-open');
         formatSelectTrigger.classList.add('active');
         formatSelectDropdown.classList.add('active');
       }
@@ -4757,10 +4762,12 @@ document.addEventListener('DOMContentLoaded', function () {
 
   // 文件命名格式设置
   let defaultFileNameFormat = 'author-title-date';
+  const fileNameSelectContainer = document.getElementById('fileNameSelectContainer');
   const fileNameSelectTrigger = document.getElementById('fileNameSelectTrigger');
   const fileNameSelectDropdown = document.getElementById('fileNameSelectDropdown');
   const fileNameSelectOptions = document.querySelectorAll('#fileNameSelectDropdown .custom-select-option');
   const fileNameSelectedText = document.querySelector('#fileNameSelectTrigger .custom-select-selected-text');
+  const txtVideoInfoSelectContainer = document.getElementById('txtVideoInfoSelectContainer');
   const txtVideoInfoSelectTrigger = document.getElementById('txtVideoInfoSelectTrigger');
   const txtVideoInfoSelectDropdown = document.getElementById('txtVideoInfoSelectDropdown');
   const txtVideoInfoOptions = document.querySelectorAll('#txtVideoInfoSelectDropdown .custom-multi-select-option');
@@ -4789,6 +4796,7 @@ document.addEventListener('DOMContentLoaded', function () {
       const wasOpen = fileNameSelectTrigger.classList.contains('active');
       closeAllSettingsDropdowns();
       if (!wasOpen) {
+        fileNameSelectContainer?.classList.add('dropdown-open');
         fileNameSelectTrigger.classList.add('active');
         fileNameSelectDropdown.classList.add('active');
       }
@@ -4834,6 +4842,7 @@ document.addEventListener('DOMContentLoaded', function () {
       const wasOpen = txtVideoInfoSelectTrigger.classList.contains('active');
       closeAllSettingsDropdowns();
       if (!wasOpen) {
+        txtVideoInfoSelectContainer?.classList.add('dropdown-open');
         txtVideoInfoSelectTrigger.classList.add('active');
         txtVideoInfoSelectDropdown.classList.add('active');
       }
