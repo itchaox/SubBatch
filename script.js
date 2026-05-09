@@ -136,6 +136,7 @@ document.addEventListener('DOMContentLoaded', function () {
   let skipTranscribeConfirmDialog = false;
   const CHARGE_EXCLUSIVE_BLOCK_REASON = 'charge-exclusive';
   const CHARGE_EXCLUSIVE_BLOCK_STATUS = '充电专属不可获取';
+  const TXT_VIDEO_INFO_ALL_OPTION_VALUE = 'all';
   const TXT_VIDEO_INFO_FIELD_OPTIONS = [
     { value: 'title', label: '标题' },
     { value: 'link', label: '链接' },
@@ -3765,6 +3766,10 @@ document.addEventListener('DOMContentLoaded', function () {
     return TXT_VIDEO_INFO_FIELD_OPTIONS.map((option) => option.value).filter((value) => fieldSet.has(value));
   }
 
+  function getAllTxtVideoInfoFieldValues() {
+    return TXT_VIDEO_INFO_FIELD_OPTIONS.map((option) => option.value);
+  }
+
   function getTxtVideoInfoFieldLabel(field) {
     return TXT_VIDEO_INFO_FIELD_OPTIONS.find((option) => option.value === field)?.label || field;
   }
@@ -4727,6 +4732,11 @@ document.addEventListener('DOMContentLoaded', function () {
       return;
     }
 
+    if (activeFields.length === TXT_VIDEO_INFO_FIELD_OPTIONS.length) {
+      txtVideoInfoSelectedText.textContent = '全部';
+      return;
+    }
+
     if (activeFields.length <= 2) {
       txtVideoInfoSelectedText.textContent = activeFields.map(getTxtVideoInfoFieldLabel).join('、');
       return;
@@ -4737,9 +4747,10 @@ document.addEventListener('DOMContentLoaded', function () {
 
   function syncTxtVideoInfoOptionStates() {
     const activeFields = normalizePrependVideoInfoFields(prependVideoInfoFields);
+    const allSelected = activeFields.length === TXT_VIDEO_INFO_FIELD_OPTIONS.length;
     txtVideoInfoOptions.forEach((option) => {
       const value = option.getAttribute('data-value');
-      const checked = activeFields.includes(value);
+      const checked = value === TXT_VIDEO_INFO_ALL_OPTION_VALUE ? allSelected : activeFields.includes(value);
       option.classList.toggle('selected', checked);
       const checkbox = option.querySelector('input[type="checkbox"]');
       if (checkbox) {
@@ -4762,6 +4773,13 @@ document.addEventListener('DOMContentLoaded', function () {
     if (!value) return;
 
     const normalizedFields = normalizePrependVideoInfoFields(prependVideoInfoFields);
+    if (value === TXT_VIDEO_INFO_ALL_OPTION_VALUE) {
+      prependVideoInfoFields =
+        normalizedFields.length === TXT_VIDEO_INFO_FIELD_OPTIONS.length ? [] : getAllTxtVideoInfoFieldValues();
+      persistTxtVideoInfoFields();
+      return;
+    }
+
     if (normalizedFields.includes(value)) {
       prependVideoInfoFields = normalizedFields.filter((field) => field !== value);
     } else {
