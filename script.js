@@ -12,6 +12,38 @@ document.addEventListener('DOMContentLoaded', function () {
   const urlTypeOptions = urlTypeDropdown.querySelectorAll('.custom-select-option');
   const urlTypeSelectedText = document.querySelector('.custom-select-selected-text');
   let currentUrlType = 'video'; // 默认选择视频地址
+  const URL_TYPE_CONFIG = {
+    video: {
+      placeholder: '请输入B站单个视频地址',
+      emptyMessage: '请输入B站单个视频地址',
+      formatErrorMessage: '请输入正确的单个视频地址格式',
+    },
+    user: {
+      placeholder: '请输入B站个人主页地址',
+      emptyMessage: '请输入B站个人主页地址',
+      formatErrorMessage: '请输入正确的个人主页地址格式',
+    },
+    favorite: {
+      placeholder: '请输入B站收藏夹地址',
+      emptyMessage: '请输入B站收藏夹地址',
+      formatErrorMessage: '请输入正确的收藏夹地址格式',
+    },
+    collection: {
+      placeholder: '请输入B站合集地址',
+      emptyMessage: '请输入B站合集地址',
+      formatErrorMessage: '请输入正确的合集地址格式',
+    },
+    selection: {
+      placeholder: '请输入B站视频选集地址 (含分P)',
+      emptyMessage: '请输入B站视频选集地址',
+      formatErrorMessage: '请输入正确的视频选集地址格式',
+    },
+    search: {
+      placeholder: '请输入B站搜索页面地址',
+      emptyMessage: '请输入B站搜索页面地址',
+      formatErrorMessage: '请输入正确的搜索页面地址格式',
+    },
+  };
 
   const bilibiliCookieInput = document.getElementById('bilibiliCookie');
   const cookieClearBtn = document.querySelector('.cookie-clear-btn');
@@ -858,18 +890,19 @@ document.addEventListener('DOMContentLoaded', function () {
   // 从URL中提取视频ID
   function extractBilibiliVideoId(url) {
     // 匹配常规格式 https://www.bilibili.com/video/BV1xx411c7mD/
+    const normalizedUrl = normalizeUrlForParsing(url);
     const bvRegex = /bilibili\.com\/video\/(BV\w+)/i;
-    const bvMatch = url.match(bvRegex);
+    const bvMatch = normalizedUrl.match(bvRegex);
     if (bvMatch) return bvMatch[1];
 
     // 匹配短链接 https://b23.tv/OurLgw6
     const shortRegex = /b23\.tv\/(\w+)/i;
-    const shortMatch = url.match(shortRegex);
+    const shortMatch = normalizedUrl.match(shortRegex);
     if (shortMatch) return shortMatch[1];
 
     // 匹配旧版av号 https://www.bilibili.com/video/av788057797/
     const avRegex = /bilibili\.com\/video\/av(\d+)/i;
-    const avMatch = url.match(avRegex);
+    const avMatch = normalizedUrl.match(avRegex);
     if (avMatch) return `av${avMatch[1]}`;
 
     return null;
@@ -878,9 +911,13 @@ document.addEventListener('DOMContentLoaded', function () {
   // 从URL中提取合集信息 (mid和season_id)
   function parseCollectionUrl(url) {
     // 匹配格式: https://space.bilibili.com/521041866/lists/4337438?type=season
-    const regex = /space\.bilibili\.com\/(\d+)\/lists\/(\d+)/;
-    const match = url.match(regex);
-    if (match && match.length >= 3) {
+    const parsedUrl = parseUrlForValidation(url);
+    if (!parsedUrl || !isSpaceBilibiliHostname(parsedUrl.hostname)) {
+      return null;
+    }
+
+    const match = parsedUrl.pathname.match(/^\/(\d+)\/lists\/(\d+)\/?$/);
+    if (match) {
       return {
         mid: match[1],
         season_id: match[2],
@@ -890,35 +927,94 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   function parseSearchPageUrl(url) {
-    try {
-      const parsedUrl = new URL(url);
-      if (!/search\.bilibili\.com$/i.test(parsedUrl.hostname)) {
-        return null;
-      }
-
-      if (!/^\/(all|video)\/?$/i.test(parsedUrl.pathname)) {
-        return null;
-      }
-
-      const keyword = parsedUrl.searchParams.get('keyword')?.trim();
-      if (!keyword) {
-        return null;
-      }
-
-      const allowedOrders = new Set(['totalrank', 'click', 'pubdate', 'dm', 'stow', 'scores']);
-      const parsedPage = parseInt(parsedUrl.searchParams.get('page') || '1', 10);
-      const order = (parsedUrl.searchParams.get('order') || 'totalrank').trim().toLowerCase();
-
-      return {
-        keyword,
-        order: allowedOrders.has(order) ? order : 'totalrank',
-        page: Number.isFinite(parsedPage) && parsedPage > 0 ? parsedPage : 1,
-        rawUrl: parsedUrl.toString(),
-      };
-    } catch (error) {
-      console.warn('解析搜索页面地址失败:', error);
+    const parsedUrl = parseUrlForValidation(url);
+    if (!parsedUrl) {
       return null;
     }
+
+    if (!/^search\.bilibili\.com$/i.test(parsedUrl.hostname)) {
+      return null;
+    }
+
+    if (!/^\/(all|video)\/?$/i.test(parsedUrl.pathname)) {
+      return null;
+    }
+
+    const keyword = parsedUrl.searchParams.get('keyword')?.trim();
+    if (!keyword) {
+      return null;
+    }
+
+    const allowedOrders = new Set(['totalrank', 'click', 'pubdate', 'dm', 'stow', 'scores']);
+    const parsedPage = parseInt(parsedUrl.searchParams.get('page') || '1', 10);
+    const order = (parsedUrl.searchParams.get('order') || 'totalrank').trim().toLowerCase();
+
+    return {
+      keyword,
+      order: allowedOrders.has(order) ? order : 'totalrank',
+      page: Number.isFinite(parsedPage) && parsedPage > 0 ? parsedPage : 1,
+      rawUrl: parsedUrl.toString(),
+    };
+  }
+
+  function parseFavoriteUrl(url) {
+    const parsedUrl = parseUrlForValidation(url);
+    if (!parsedUrl || !isBilibiliHostname(parsedUrl.hostname)) {
+      return null;
+    }
+
+    const fid = parsedUrl.searchParams.get('fid')?.trim();
+    if (fid && /^\d+$/.test(fid)) {
+      const isSpaceFavlist = isSpaceBilibiliHostname(parsedUrl.hostname) && /^\/\d+\/favlist\/?$/i.test(parsedUrl.pathname);
+      const isStandaloneFavlist = /^\/favlist\/?$/i.test(parsedUrl.pathname);
+      if (isSpaceFavlist || isStandaloneFavlist) {
+        return fid;
+      }
+    }
+
+    const mediaListMatch = parsedUrl.pathname.match(/^\/medialist\/(?:detail|play)\/ml(\d+)\/?$/i);
+    if (mediaListMatch) {
+      return mediaListMatch[1];
+    }
+
+    const shortFavoriteMatch = parsedUrl.pathname.match(/^\/(?:fav|list)\/(?:ml)?(\d+)\/?$/i);
+    return shortFavoriteMatch ? shortFavoriteMatch[1] : null;
+  }
+
+  function parseUrlByType(urlType, url) {
+    if (urlType === 'video' || urlType === 'selection') {
+      return extractBilibiliVideoId(url);
+    }
+    if (urlType === 'search') {
+      return parseSearchPageUrl(url);
+    }
+    if (urlType === 'favorite') {
+      return parseFavoriteUrl(url);
+    }
+    if (urlType === 'collection') {
+      return parseCollectionUrl(url);
+    }
+    if (urlType === 'user') {
+      return parseUserUrl(url);
+    }
+    return null;
+  }
+
+  function validateUrlInput(urlType, inputUrl) {
+    const config = getUrlTypeConfig(urlType);
+    if (!inputUrl) {
+      showError(config.emptyMessage);
+      urlInput.focus();
+      return null;
+    }
+
+    const parsedResult = parseUrlByType(urlType, inputUrl);
+    if (!parsedResult) {
+      showUrlFormatError(urlType);
+      return null;
+    }
+
+    return parsedResult;
   }
 
   const htmlEntityDecoder = document.createElement('textarea');
@@ -1134,9 +1230,56 @@ document.addEventListener('DOMContentLoaded', function () {
     }
   }
 
+  function getUrlTypeConfig(urlType = currentUrlType) {
+    return URL_TYPE_CONFIG[urlType] || URL_TYPE_CONFIG.video;
+  }
+
+  function setUrlInputPlaceholder(urlType = currentUrlType) {
+    urlInput.placeholder = getUrlTypeConfig(urlType).placeholder;
+  }
+
+  function showUrlFormatError(urlType = currentUrlType) {
+    showError(getUrlTypeConfig(urlType).formatErrorMessage);
+    urlInput.focus();
+  }
+
+  function normalizeUrlForParsing(url) {
+    const trimmedUrl = String(url || '').trim();
+    if (!trimmedUrl) return '';
+    if (/^[a-z][a-z\d+\-.]*:\/\//i.test(trimmedUrl)) return trimmedUrl;
+    if (/^(www\.|space\.|search\.)?bilibili\.com(\/|$)/i.test(trimmedUrl) || /^b23\.tv(\/|$)/i.test(trimmedUrl)) {
+      return `https://${trimmedUrl}`;
+    }
+    return trimmedUrl;
+  }
+
+  function parseUrlForValidation(url) {
+    try {
+      return new URL(normalizeUrlForParsing(url));
+    } catch (error) {
+      return null;
+    }
+  }
+
+  function isBilibiliHostname(hostname) {
+    return /(^|\.)bilibili\.com$/i.test(hostname);
+  }
+
+  function isSpaceBilibiliHostname(hostname) {
+    return /^space\.bilibili\.com$/i.test(hostname);
+  }
+
   // 判断是否为B站URL
   function isBilibiliUrl(url) {
-    return url.includes('bilibili.com/video') || url.includes('b23.tv') || /bilibili\.com\/video\/av\d+/i.test(url);
+    const parsedUrl = parseUrlForValidation(url);
+    if (!parsedUrl) return false;
+
+    const hostname = parsedUrl.hostname.toLowerCase();
+    if (hostname === 'b23.tv') {
+      return Boolean(parsedUrl.pathname.replace(/^\/+/, ''));
+    }
+
+    return isBilibiliHostname(hostname) && /^\/video\/(BV\w+|av\d+)/i.test(parsedUrl.pathname);
   }
 
   // 格式化数字（添加千位分隔符）
@@ -1165,7 +1308,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
       const videoId = extractBilibiliVideoId(url);
       if (!videoId) {
-        showError('无法识别的B站视频地址');
+        showUrlFormatError('video');
         return null;
       }
 
@@ -1458,7 +1601,7 @@ document.addEventListener('DOMContentLoaded', function () {
   function generateUrl() {
     const url = urlInput.value.trim();
     if (!url) {
-      showError('请先填写地址！');
+      showError(getUrlTypeConfig().emptyMessage);
       return '';
     }
 
@@ -1525,112 +1668,38 @@ document.addEventListener('DOMContentLoaded', function () {
     urlTypeDropdown.classList.remove('active');
   });
 
+  function handleUrlTypeOptionSelect(option) {
+    currentUrlType = option.getAttribute('data-value');
+
+    const iconSvg = option.querySelector('.option-icon').cloneNode(true);
+    urlTypeSelectedText.textContent = option.textContent.trim();
+
+    const triggerIcon = urlTypeTrigger.querySelector('.option-icon');
+    triggerIcon.innerHTML = iconSvg.innerHTML;
+
+    urlTypeOptions.forEach((opt) => opt.classList.remove('selected'));
+    option.classList.add('selected');
+
+    const isSingleVideo = currentUrlType === 'video';
+    generateUrlBtn.style.display = isSingleVideo ? 'block' : 'none';
+    getFavoriteBtn.style.display = isSingleVideo ? 'none' : 'block';
+    setUrlInputPlaceholder(currentUrlType);
+
+    urlTypeTrigger.classList.remove('active');
+    urlTypeDropdown.classList.remove('active');
+  }
+
   // 下拉选项点击事件
   urlTypeOptions.forEach(function (option) {
     option.addEventListener('click', function (e) {
       e.stopPropagation();
-
-      // 更新当前选中值
-      currentUrlType = this.getAttribute('data-value');
-
-      // 获取选项中的SVG图标
-      const iconSvg = this.querySelector('.option-icon').cloneNode(true);
-
-      // 更新选中文本和图标
-      urlTypeSelectedText.textContent = this.textContent.trim();
-
-      // 替换触发器中的图标
-      const triggerIcon = urlTypeTrigger.querySelector('.option-icon');
-      triggerIcon.innerHTML = iconSvg.innerHTML;
-
-      // 更新选中状态
-      urlTypeOptions.forEach((opt) => opt.classList.remove('selected'));
-      this.classList.add('selected');
-
-      // 根据类型显示不同按钮
-      if (currentUrlType === 'video') {
-        generateUrlBtn.style.display = 'block';
-        getFavoriteBtn.style.display = 'none';
-        urlInput.placeholder = '请输入B站单个视频地址';
-      } else if (currentUrlType === 'search') {
-        generateUrlBtn.style.display = 'none';
-        getFavoriteBtn.style.display = 'block';
-        urlInput.placeholder = '请输入B站搜索页面地址';
-      } else if (currentUrlType === 'favorite') {
-        generateUrlBtn.style.display = 'none';
-        getFavoriteBtn.style.display = 'block';
-        urlInput.placeholder = '请输入B站收藏夹地址';
-      } else if (currentUrlType === 'collection') {
-        generateUrlBtn.style.display = 'none';
-        getFavoriteBtn.style.display = 'block';
-        urlInput.placeholder = '请输入B站合集地址';
-      } else if (currentUrlType === 'user') {
-        generateUrlBtn.style.display = 'none';
-        getFavoriteBtn.style.display = 'block';
-        urlInput.placeholder = '请输入B站个人主页地址';
-      } else if (currentUrlType === 'selection') {
-        generateUrlBtn.style.display = 'none';
-        getFavoriteBtn.style.display = 'block';
-        urlInput.placeholder = '请输入B站视频选集地址 (含分P)';
-      }
-
-      // 关闭下拉框
-      urlTypeTrigger.classList.remove('active');
-      urlTypeDropdown.classList.remove('active');
+      handleUrlTypeOptionSelect(this);
     });
 
-    // 同样更新触摸事件处理
     option.addEventListener('touchend', function (e) {
       e.stopPropagation();
       e.preventDefault();
-
-      // 更新当前选中值
-      currentUrlType = this.getAttribute('data-value');
-
-      // 获取选项中的SVG图标
-      const iconSvg = this.querySelector('.option-icon').cloneNode(true);
-
-      // 更新选中文本和图标
-      urlTypeSelectedText.textContent = this.textContent.trim();
-
-      // 替换触发器中的图标
-      const triggerIcon = urlTypeTrigger.querySelector('.option-icon');
-      triggerIcon.innerHTML = iconSvg.innerHTML;
-
-      // 更新选中状态
-      urlTypeOptions.forEach((opt) => opt.classList.remove('selected'));
-      this.classList.add('selected');
-
-      // 根据类型显示不同按钮
-      if (currentUrlType === 'video') {
-        generateUrlBtn.style.display = 'block';
-        getFavoriteBtn.style.display = 'none';
-        urlInput.placeholder = '请输入B站视频地址';
-      } else if (currentUrlType === 'search') {
-        generateUrlBtn.style.display = 'none';
-        getFavoriteBtn.style.display = 'block';
-        urlInput.placeholder = '请输入B站搜索页面地址';
-      } else if (currentUrlType === 'favorite') {
-        generateUrlBtn.style.display = 'none';
-        getFavoriteBtn.style.display = 'block';
-        urlInput.placeholder = '请输入B站收藏夹地址';
-      } else if (currentUrlType === 'collection') {
-        generateUrlBtn.style.display = 'none';
-        getFavoriteBtn.style.display = 'block';
-        urlInput.placeholder = '请输入B站合集地址';
-      } else if (currentUrlType === 'user') {
-        generateUrlBtn.style.display = 'none';
-        getFavoriteBtn.style.display = 'block';
-        urlInput.placeholder = '请输入B站个人主页地址';
-      } else if (currentUrlType === 'selection') {
-        generateUrlBtn.style.display = 'none';
-        getFavoriteBtn.style.display = 'block';
-        urlInput.placeholder = '请输入B站视频地址 (含分P)';
-      }
-
-      // 关闭下拉框
-      urlTypeTrigger.classList.remove('active');
-      urlTypeDropdown.classList.remove('active');
+      handleUrlTypeOptionSelect(this);
     });
   });
 
@@ -1815,10 +1884,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
     // 获取URL
     const url = urlInput.value.trim();
-    if (!url) {
-      showError('请先填写视频地址！');
-      return;
-    }
+    const videoId = validateUrlInput('video', url);
+    if (!videoId) return;
 
     // 重置当前视频信息和字幕数据
     currentVideoInfo = null;
@@ -1832,7 +1899,7 @@ document.addEventListener('DOMContentLoaded', function () {
         addVideoToTable(videoInfo);
       }
     } else {
-      showError('不是B站视频链接，无法添加');
+      showUrlFormatError('video');
     }
   });
 
@@ -1892,17 +1959,8 @@ document.addEventListener('DOMContentLoaded', function () {
       const inputUrl = urlInput.value.trim();
 
       if (currentUrlType === 'search') {
-        if (!inputUrl) {
-          showError('请输入B站搜索页面地址');
-          urlInput.focus();
-          return;
-        }
-
-        const searchInfo = parseSearchPageUrl(inputUrl);
-        if (!searchInfo) {
-          showError('无法识别的搜索页面地址，请检查格式');
-          return;
-        }
+        const searchInfo = validateUrlInput('search', inputUrl);
+        if (!searchInfo) return;
 
         await fetchSearchPageVideos(searchInfo);
         return;
@@ -1910,17 +1968,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
       // 处理用户主页地址
       if (currentUrlType === 'user') {
-        if (!inputUrl) {
-          showError('请输入B站个人主页地址');
-          urlInput.focus();
-          return;
-        }
-
-        const mid = parseUserUrl(inputUrl);
-        if (!mid) {
-          showError('无法识别的用户主页地址，请检查格式');
-          return;
-        }
+        const mid = validateUrlInput('user', inputUrl);
+        if (!mid) return;
 
         await fetchUserVideos(mid);
         return;
@@ -1928,17 +1977,8 @@ document.addEventListener('DOMContentLoaded', function () {
 
       // 处理合集地址
       if (currentUrlType === 'collection') {
-        if (!inputUrl) {
-          showError('请输入B站合集地址');
-          urlInput.focus();
-          return;
-        }
-
-        const collectionInfo = parseCollectionUrl(inputUrl);
-        if (!collectionInfo) {
-          showError('无法识别的合集地址，请检查格式');
-          return;
-        }
+        const collectionInfo = validateUrlInput('collection', inputUrl);
+        if (!collectionInfo) return;
 
         await fetchCollectionVideos(collectionInfo.mid, collectionInfo.season_id);
         return;
@@ -1946,40 +1986,16 @@ document.addEventListener('DOMContentLoaded', function () {
 
       // 处理视频选集
       if (currentUrlType === 'selection') {
-        if (!inputUrl) {
-          showError('请输入B站视频地址');
-          urlInput.focus();
-          return;
-        }
-
-        const videoId = extractBilibiliVideoId(inputUrl);
-        if (!videoId) {
-          showError('无法识别的视频地址，请检查格式');
-          return;
-        }
+        const videoId = validateUrlInput('selection', inputUrl);
+        if (!videoId) return;
 
         await fetchVideoParts(videoId);
         return;
       }
 
       // 处理收藏夹地址
-      const favoriteUrl = inputUrl;
-      if (!favoriteUrl) {
-        showError('请输入B站收藏夹地址');
-        urlInput.focus();
-        return;
-      }
-
-      // 从URL中提取fid参数
-      const fidRegex = /[?&]fid=(\d+)/;
-      const fidMatch = favoriteUrl.match(fidRegex);
-
-      if (!fidMatch || !fidMatch[1]) {
-        showError('无法从URL中提取收藏夹ID (fid参数)');
-        return;
-      }
-
-      const fid = fidMatch[1];
+      const fid = validateUrlInput('favorite', inputUrl);
+      if (!fid) return;
       console.log('从URL中提取的收藏夹ID:', fid);
 
       // 禁用按钮并显示加载状态
@@ -2450,12 +2466,21 @@ document.addEventListener('DOMContentLoaded', function () {
 
   // 从URL中提取用户mid
   function parseUserUrl(url) {
-    // 匹配格式: https://space.bilibili.com/521041866
-    const regex = /space\.bilibili\.com\/(\d+)/;
-    const match = url.match(regex);
-    if (match && match.length >= 2) {
-      return match[1];
+    const parsedUrl = parseUrlForValidation(url);
+    if (!parsedUrl || !isSpaceBilibiliHostname(parsedUrl.hostname)) {
+      return null;
     }
+
+    // 匹配格式: https://space.bilibili.com/521041866 或 /521041866/video
+    const pathSegments = parsedUrl.pathname.split('/').filter(Boolean);
+    if (!/^\d+$/.test(pathSegments[0] || '')) {
+      return null;
+    }
+
+    if (pathSegments.length === 1 || (pathSegments.length === 2 && pathSegments[1] === 'video')) {
+      return pathSegments[0];
+    }
+
     return null;
   }
 
