@@ -235,8 +235,17 @@ function encWbi(params, img_key, sub_key) {
   return query + '&w_rid=' + wbi_sign;
 }
 
+const WBI_KEYS_CACHE_TTL = 10 * 60 * 1000;
+let cachedWbiKeys = null;
+let cachedWbiKeysAt = 0;
+
 // 获取最新的 img_key 和 sub_key
 async function getWbiKeys() {
+  const now = Date.now();
+  if (cachedWbiKeys && now - cachedWbiKeysAt < WBI_KEYS_CACHE_TTL) {
+    return cachedWbiKeys;
+  }
+
   const res = await fetch('https://api.bilibili.com/x/web-interface/nav', {
     headers: {
       'User-Agent':
@@ -245,12 +254,18 @@ async function getWbiKeys() {
     },
   });
   const json = await res.json();
-  const img_url = json.data.wbi_img.img_url;
-  const sub_url = json.data.wbi_img.sub_url;
-  return {
+  const img_url = json?.data?.wbi_img?.img_url;
+  const sub_url = json?.data?.wbi_img?.sub_url;
+  if (!img_url || !sub_url) {
+    throw new Error('获取Wbi签名密钥失败');
+  }
+
+  cachedWbiKeys = {
     img_key: img_url.substring(img_url.lastIndexOf('/') + 1, img_url.lastIndexOf('.')),
     sub_key: sub_url.substring(sub_url.lastIndexOf('/') + 1, sub_url.lastIndexOf('.')),
   };
+  cachedWbiKeysAt = now;
+  return cachedWbiKeys;
 }
 
 chrome.action.onClicked.addListener(async (tab) => {

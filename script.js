@@ -1000,6 +1000,69 @@ document.addEventListener('DOMContentLoaded', function () {
     return addedCount;
   }
 
+  function isBilibiliSearchPageUrl(url) {
+    try {
+      const parsedUrl = new URL(url);
+      return /search\.bilibili\.com$/i.test(parsedUrl.hostname) && /^\/(all|video)\/?$/i.test(parsedUrl.pathname);
+    } catch (error) {
+      return false;
+    }
+  }
+
+  async function getActiveSearchPageTab() {
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    const activeTab = tabs[0];
+    if (!activeTab?.id || !isBilibiliSearchPageUrl(activeTab.url || '')) {
+      return null;
+    }
+    return activeTab;
+  }
+
+  async function extractSearchPageBvidsFromDom(tabId) {
+    const results = await chrome.scripting.executeScript({
+      target: { tabId },
+      func: () => {
+        const bvids = [];
+        const seen = new Set();
+        const excludedBvids = new Set(['BV1Xx411c7cH']);
+        const anchors = document.querySelectorAll('a[href*="/video/BV"]');
+
+        anchors.forEach((anchor) => {
+          const candidates = [anchor.getAttribute('biliscope-videoid') || '', anchor.getAttribute('href') || '', anchor.href || ''];
+          for (const candidate of candidates) {
+            const match = candidate.match(/BV[0-9A-Za-z]{10}/);
+            if (match && !excludedBvids.has(match[0]) && !seen.has(match[0])) {
+              seen.add(match[0]);
+              bvids.push(match[0]);
+              break;
+            }
+          }
+        });
+
+        return bvids;
+      },
+    });
+
+    return Array.isArray(results?.[0]?.result) ? results[0].result : [];
+  }
+
+  async function fetchBilibiliVideoInfoByBvid(bvid) {
+    const response = await chrome.runtime.sendMessage({
+      action: 'fetchBilibiliInfo',
+      videoId: bvid,
+    });
+
+    if (!response?.success) {
+      console.warn('搜索页面视频详情获取失败:', bvid, response?.message || '未知错误');
+      return null;
+    }
+
+    return {
+      ...response,
+      mid: response?.full_data?.owner?.mid || response?.mid || 0,
+    };
+  }
+
   async function fetchSearchPageVideos(searchInfo) {
     console.log('开始获取搜索页面视频:', searchInfo);
 
@@ -1011,54 +1074,55 @@ document.addEventListener('DOMContentLoaded', function () {
         获取中
       `;
 
-    showSuccess('正在获取搜索页面视频，请稍候...');
+    showProgress(true);
+    updateProgress(0, '准备获取视频...');
 
     try {
-      const response = await new Promise((resolve, reject) => {
-        const timeoutId = setTimeout(() => {
-          reject(new Error('请求超时，background.js没有及时响应'));
-        }, 15000);
-
-        chrome.runtime.sendMessage(
-          {
-            action: 'fetchSearchVideoList',
-            keyword: searchInfo.keyword,
-            order: searchInfo.order,
-            page: searchInfo.page,
-          },
-          (response) => {
-            clearTimeout(timeoutId);
-            const error = chrome.runtime.lastError;
-            if (error) {
-              reject(error);
-              return;
-            }
-            resolve(response);
-          },
-        );
-      });
-
-      if (response && response.success && response.data) {
-        const medias = response.data.medias || [];
-        if (medias.length === 0) {
-          showError('当前搜索页面没有可添加的视频');
-          return;
-        }
-
-        const addedCount = processAndAddSearchVideosToTable(medias);
-        if (addedCount > 0) {
-          showSuccess(`成功添加 ${addedCount} 个搜索结果视频到表格`);
-        } else {
-          showSuccess('当前搜索结果视频已全部在表格中');
-        }
+      const activeSearchTab = await getActiveSearchPageTab();
+      if (!activeSearchTab) {
+        showError('请先打开并切换到对应的B站搜索页面');
         return;
       }
 
-      showError(response?.message || '获取搜索页面视频失败');
+      const bvids = await extractSearchPageBvidsFromDom(activeSearchTab.id);
+      if (bvids.length === 0) {
+        showError('当前搜索页面没有可添加的视频，请确认页面已加载完成');
+        return;
+      }
+
+      let addedCount = 0;
+      let failedCount = 0;
+
+      for (let i = 0; i < bvids.length; i++) {
+        const currentPercent = Math.max(1, Math.floor(((i + 1) / bvids.length) * 100));
+        updateProgress(currentPercent, '获取视频中...');
+        const videoInfo = await fetchBilibiliVideoInfoByBvid(bvids[i]);
+        if (!videoInfo) {
+          failedCount++;
+          continue;
+        }
+
+        if (addVideoToTable(videoInfo, false)) {
+          addedCount++;
+        }
+      }
+
+      if (addedCount > 0) {
+        updateVideoTable();
+        updateProgress(100, '获取完成');
+        await new Promise((resolve) => setTimeout(resolve, 500));
+        const failedMessage = failedCount > 0 ? `，${failedCount} 个视频详情获取失败` : '';
+        showSuccess(`成功添加 ${addedCount} 个搜索结果视频到表格${failedMessage}`);
+      } else if (failedCount > 0) {
+        showError(`搜索页面视频详情获取失败，失败数量: ${failedCount}`);
+      } else {
+        showSuccess('当前搜索结果视频已全部在表格中');
+      }
     } catch (error) {
       console.error('获取搜索页面视频出错:', error);
       showError('获取搜索页面视频失败: ' + (error.message || '未知错误'));
     } finally {
+      showProgress(false);
       getFavoriteBtn.disabled = false;
       getFavoriteBtn.innerHTML = `
         <svg viewBox="0 0 24 24">
