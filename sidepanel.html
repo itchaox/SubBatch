@@ -851,7 +851,7 @@
 
       th:nth-child(6),
       td:nth-child(6) {
-        width: 90px;
+        width: 150px;
         text-align: center;
         white-space: nowrap;
       }
@@ -961,7 +961,8 @@
 
       .subtitle-language-select {
         display: inline-block;
-        width: 86px;
+        flex: 0 0 84px;
+        width: 84px;
       }
 
       .subtitle-language-trigger {
@@ -982,6 +983,49 @@
       .subtitle-language-select.open .subtitle-language-trigger {
         border-color: #3370ff;
         box-shadow: 0 0 0 2px rgba(51, 112, 255, 0.12);
+      }
+
+      .subtitle-language-cell {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+        width: 100%;
+        min-width: 0;
+      }
+
+      .subtitle-language-static {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        min-width: 42px;
+        max-width: 72px;
+        color: #333;
+        font-size: 12px;
+        line-height: 1.2;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      .queue-transcribe-row-btn {
+        flex: 0 0 auto;
+        height: 28px;
+        padding: 0 8px;
+        border: 1px solid #ffd591;
+        border-radius: 6px;
+        background-color: #fff7e6;
+        color: #ad6800;
+        font-size: 12px;
+        line-height: 26px;
+        cursor: pointer;
+        white-space: nowrap;
+      }
+
+      .queue-transcribe-row-btn:hover {
+        border-color: #ffc069;
+        background-color: #ffe7ba;
+        color: #874d00;
       }
 
       .subtitle-language-menu {
@@ -1966,7 +2010,7 @@
               <col style="width: 100px; min-width: 100px" />
               <col style="width: 100px; min-width: 100px" />
               <col style="width: 120px; min-width: 120px" />
-              <col style="width: 90px; min-width: 90px" />
+              <col style="width: 150px; min-width: 150px" />
               <col style="width: 100px; min-width: 100px" />
             </colgroup>
             <thead>
@@ -2035,7 +2079,7 @@
               <col style="width: 100px; min-width: 100px" />
               <col style="width: 100px; min-width: 100px" />
               <col style="width: 120px; min-width: 120px" />
-              <col style="width: 90px; min-width: 90px" />
+              <col style="width: 150px; min-width: 150px" />
               <col style="width: 100px; min-width: 100px" />
             </colgroup>
             <tbody id="videoTableBody">

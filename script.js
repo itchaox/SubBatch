@@ -284,6 +284,35 @@ document.addEventListener('DOMContentLoaded', function () {
     video.blockReason = CHARGE_EXCLUSIVE_BLOCK_REASON;
   }
 
+  function canManuallyQueueForTranscription(video) {
+    if (!video || !hasSubtitleTracks(video)) return false;
+    if (isTranscribedSubtitle(video)) return false;
+
+    const status = video.subtitleStatus || '';
+    if (
+      status === '获取中' ||
+      status === 'AI转写中' ||
+      status === '转写中' ||
+      status === CHARGE_EXCLUSIVE_BLOCK_STATUS ||
+      status.startsWith('信息不完整')
+    ) {
+      return false;
+    }
+
+    return true;
+  }
+
+  function markVideoAsNoExternalSubtitleForTranscription(video) {
+    if (!video) return;
+    video.subtitleStatus = '无外挂字幕';
+    video.subtitleText = null;
+    video.subtitleTracks = [];
+    video.selectedSubtitleTrackIds = [];
+    video.subtitleTrackContents = {};
+    video.transcribedLanguage = null;
+    video.transcribedLanguageName = null;
+  }
+
   function getNoExternalSubtitleCount() {
     return videoList.filter((video) => video?.subtitleStatus && video.subtitleStatus.includes('无外挂字幕')).length;
   }
@@ -476,16 +505,35 @@ document.addEventListener('DOMContentLoaded', function () {
 
     ensureSubtitleSelection(video);
 
-    if (video.subtitleTracks.length === 1) {
-      return `<span style="color: #333;">${escapeHtml(getSubtitleLanguageName(video.subtitleTracks[0]))}</span>`;
-    }
+    const languageControlHtml =
+      video.subtitleTracks.length === 1
+        ? `<span class="subtitle-language-static">${escapeHtml(getSubtitleLanguageName(video.subtitleTracks[0]))}</span>`
+        : `
+          <div class="subtitle-language-select" data-index="${index}">
+            <button class="subtitle-language-trigger" type="button" data-index="${index}">
+              <span>${escapeHtml(getSubtitleLanguageDisplayText(video))}</span>
+              <span>▾</span>
+            </button>
+          </div>
+        `;
+
+    const queueButtonHtml = canManuallyQueueForTranscription(video)
+      ? `
+        <button
+          class="queue-transcribe-row-btn"
+          type="button"
+          data-index="${index}"
+          title="没有想要的语言？加入无外挂字幕队列"
+        >
+          转写
+        </button>
+      `
+      : '';
 
     return `
-      <div class="subtitle-language-select" data-index="${index}">
-        <button class="subtitle-language-trigger" type="button" data-index="${index}">
-          <span>${escapeHtml(getSubtitleLanguageDisplayText(video))}</span>
-          <span>▾</span>
-        </button>
+      <div class="subtitle-language-cell">
+        ${languageControlHtml}
+        ${queueButtonHtml}
       </div>
     `;
   }
@@ -2878,6 +2926,28 @@ document.addEventListener('DOMContentLoaded', function () {
           return;
         }
         openSubtitleLanguageMenu(index, this);
+      });
+    });
+
+    document.querySelectorAll('.queue-transcribe-row-btn').forEach((btn) => {
+      btn.addEventListener('click', function (event) {
+        event.stopPropagation();
+        const index = parseInt(this.getAttribute('data-index'));
+        if (isNaN(index) || index < 0 || index >= videoList.length) {
+          showError('无效的视频索引');
+          return;
+        }
+
+        const video = videoList[index];
+        if (!canManuallyQueueForTranscription(video)) {
+          showError('当前视频无法加入转写队列');
+          return;
+        }
+
+        closeSubtitleLanguageMenu();
+        markVideoAsNoExternalSubtitleForTranscription(video);
+        updateVideoTable();
+        showSuccess('已加入无外挂字幕队列，可点击“转写无字幕”生成字幕');
       });
     });
 
