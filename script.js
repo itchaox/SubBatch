@@ -168,6 +168,8 @@ document.addEventListener('DOMContentLoaded', function () {
   let skipTranscribeConfirmDialog = false;
   const CHARGE_EXCLUSIVE_BLOCK_REASON = 'charge-exclusive';
   const CHARGE_EXCLUSIVE_BLOCK_STATUS = '充电专属不可获取';
+  const LOCAL_TRANSCRIPTION_TRACK_ID = 'local-transcription';
+  const LOCAL_TRANSCRIPTION_SOURCE = 'local-transcription';
   const TXT_VIDEO_INFO_ALL_OPTION_VALUE = 'all';
   const TXT_VIDEO_INFO_FIELD_OPTIONS = [
     { value: 'title', label: '标题' },
@@ -294,6 +296,7 @@ document.addEventListener('DOMContentLoaded', function () {
       status === 'AI转写中' ||
       status === '转写中' ||
       status === CHARGE_EXCLUSIVE_BLOCK_STATUS ||
+      status.includes('无外挂字幕') ||
       status.startsWith('信息不完整')
     ) {
       return false;
@@ -306,9 +309,6 @@ document.addEventListener('DOMContentLoaded', function () {
     if (!video) return;
     video.subtitleStatus = '无外挂字幕';
     video.subtitleText = null;
-    video.subtitleTracks = [];
-    video.selectedSubtitleTrackIds = [];
-    video.subtitleTrackContents = {};
     video.transcribedLanguage = null;
     video.transcribedLanguageName = null;
   }
@@ -368,6 +368,20 @@ document.addEventListener('DOMContentLoaded', function () {
 
   function getSubtitleTrackId(track, index = 0) {
     return String(track?.trackId || `${track?.id ?? track?.lan ?? 'track'}-${track?.lan || 'unknown'}-${index}`);
+  }
+
+  function isTranscribedSubtitleTrack(track) {
+    return !!(
+      track &&
+      (track.source === LOCAL_TRANSCRIPTION_SOURCE ||
+        track.type === 'transcribed' ||
+        track.isTranscribed === true ||
+        track.trackId === LOCAL_TRANSCRIPTION_TRACK_ID)
+    );
+  }
+
+  function hasNonTranscribedSubtitleTracks(video) {
+    return hasSubtitleTracks(video) && video.subtitleTracks.some((track) => !isTranscribedSubtitleTrack(track));
   }
 
   function getSubtitleLanguageName(track) {
@@ -455,6 +469,47 @@ document.addEventListener('DOMContentLoaded', function () {
     return video?.transcribedLanguageName || getTranscriptionLanguageName(video?.transcribedLanguage);
   }
 
+  function upsertTranscribedSubtitleTrack(video, result) {
+    if (!video || !result?.srtContent) return null;
+
+    const language = normalizeWhisperLanguageCode(result.language);
+    const languageName = result.languageName || getTranscriptionLanguageName(language);
+    const track = {
+      trackId: LOCAL_TRANSCRIPTION_TRACK_ID,
+      index: 0,
+      id: LOCAL_TRANSCRIPTION_TRACK_ID,
+      lan: language,
+      lan_doc: languageName,
+      subtitle_url: '',
+      type: 'transcribed',
+      source: LOCAL_TRANSCRIPTION_SOURCE,
+      isTranscribed: true,
+    };
+
+    const originalTracks = Array.isArray(video.subtitleTracks)
+      ? video.subtitleTracks.filter((subtitleTrack) => !isTranscribedSubtitleTrack(subtitleTrack))
+      : [];
+
+    video.subtitleTracks = [track, ...originalTracks];
+    video.selectedSubtitleTrackIds = [track.trackId];
+    video.subtitleTrackContents = video.subtitleTrackContents || {};
+    video.subtitleTrackContents[track.trackId] = {
+      success: true,
+      subtitleText: result.srtContent,
+      subtitles: result.chunks || [],
+      metadata: {
+        lan: language,
+        lan_doc: languageName,
+        source: LOCAL_TRANSCRIPTION_SOURCE,
+      },
+    };
+    video.subtitleText = result.srtContent;
+    video.transcribedLanguage = language;
+    video.transcribedLanguageName = languageName;
+
+    return track;
+  }
+
   function sanitizeLanguageSuffix(languageName) {
     return String(languageName || '字幕').replace(/[\\/:*?"<>|]/g, '_').trim() || '字幕';
   }
@@ -495,7 +550,7 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   function getSubtitleLanguageCellHtml(video, index) {
-    if (isTranscribedSubtitle(video)) {
+    if (isTranscribedSubtitle(video) && !hasNonTranscribedSubtitleTracks(video)) {
       return `<span class="transcribed-language-badge">${escapeHtml(getTranscribedLanguageName(video))}</span>`;
     }
 
@@ -701,6 +756,26 @@ document.addEventListener('DOMContentLoaded', function () {
 
     if (video.subtitleTrackContents[trackId]?.subtitleText) {
       return video.subtitleTrackContents[trackId];
+    }
+
+    if (isTranscribedSubtitleTrack(track)) {
+      if (video.subtitleText) {
+        const language = getSubtitleTrackLanguageCode(track);
+        const languageName = getSubtitleLanguageName(track);
+        video.subtitleTrackContents[trackId] = {
+          success: true,
+          subtitleText: video.subtitleText,
+          subtitles: [],
+          metadata: {
+            lan: language,
+            lan_doc: languageName,
+            source: LOCAL_TRANSCRIPTION_SOURCE,
+          },
+        };
+        return video.subtitleTrackContents[trackId];
+      }
+
+      throw new Error('转写字幕内容不存在');
     }
 
     const response = await chrome.runtime.sendMessage({
@@ -3552,13 +3627,12 @@ document.addEventListener('DOMContentLoaded', function () {
               });
 
               videoToTranscribe.subtitleStatus = '转写字幕';
-              videoToTranscribe.subtitleText = transcribeResult.srtContent;
-              videoToTranscribe.subtitleTracks = [];
-              videoToTranscribe.selectedSubtitleTrackIds = [];
-              videoToTranscribe.subtitleTrackContents = {};
-              videoToTranscribe.transcribedLanguage = normalizeWhisperLanguageCode(transcribeResult.language);
-              videoToTranscribe.transcribedLanguageName =
-                transcribeResult.languageName || getTranscriptionLanguageName(transcribeResult.language);
+              upsertTranscribedSubtitleTrack(videoToTranscribe, {
+                srtContent: transcribeResult.srtContent,
+                chunks: transcribeResult.chunks,
+                language: transcribeResult.language,
+                languageName: transcribeResult.languageName,
+              });
               successCount++;
               updateVideoTable();
               continue;
@@ -3566,13 +3640,12 @@ document.addEventListener('DOMContentLoaded', function () {
 
             if (response.srtContent) {
               videoToTranscribe.subtitleStatus = '转写字幕';
-              videoToTranscribe.subtitleText = response.srtContent;
-              videoToTranscribe.subtitleTracks = [];
-              videoToTranscribe.selectedSubtitleTrackIds = [];
-              videoToTranscribe.subtitleTrackContents = {};
-              videoToTranscribe.transcribedLanguage = normalizeWhisperLanguageCode(response.language);
-              videoToTranscribe.transcribedLanguageName =
-                response.languageName || getTranscriptionLanguageName(response.language);
+              upsertTranscribedSubtitleTrack(videoToTranscribe, {
+                srtContent: response.srtContent,
+                chunks: response.chunks,
+                language: response.language,
+                languageName: response.languageName,
+              });
               successCount++;
               updateVideoTable();
               continue;
