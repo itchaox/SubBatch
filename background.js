@@ -1,3 +1,15 @@
+try {
+  importScripts('extension-config.js');
+} catch (error) {
+  console.warn('加载扩展配置失败，使用本地增强版默认配置:', error);
+}
+
+const subBatchExtensionConfig = globalThis.SubBatchExtensionConfig || {};
+
+function isAudioTranscriptionEnabled() {
+  return subBatchExtensionConfig.enableAudioTranscription !== false;
+}
+
 chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch((error) => console.error(error));
 
 // 全局变量声明
@@ -2401,6 +2413,14 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   // 处理音频转字幕请求
   if (message.action === 'transcribeAudio') {
     console.log('收到音频转字幕请求:', message);
+
+    if (!isAudioTranscriptionEnabled()) {
+      sendResponse({
+        success: false,
+        message: '商店版不支持音频转字幕',
+      });
+      return true;
+    }
 
     const { bvid, cid } = message;
 

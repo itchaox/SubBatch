@@ -1,6 +1,13 @@
 document.addEventListener('DOMContentLoaded', function () {
   console.log('DOM加载完成，初始化脚本...');
 
+  const subBatchExtensionConfig = window.SubBatchExtensionConfig || {};
+  const isAudioTranscriptionEnabled = subBatchExtensionConfig.enableAudioTranscription !== false;
+  console.log('SubBatch 版本配置:', {
+    edition: subBatchExtensionConfig.edition || 'local',
+    enableAudioTranscription: isAudioTranscriptionEnabled,
+  });
+
   function getCookieResponseLogSummary(response) {
     const cookie = typeof response?.cookie === 'string' ? response.cookie : '';
     return {
@@ -85,6 +92,11 @@ document.addEventListener('DOMContentLoaded', function () {
   const transcribeAudioBtnDefaultHtml = transcribeAudioBtn ? transcribeAudioBtn.innerHTML : '';
   const noSubtitleBanner = document.getElementById('noSubtitleBanner');
   const noSubtitleBannerText = document.getElementById('noSubtitleBannerText');
+
+  if (!isAudioTranscriptionEnabled && transcribeAudioBtn) {
+    transcribeAudioBtn.style.display = 'none';
+    transcribeAudioBtn.setAttribute('aria-hidden', 'true');
+  }
 
   // 进度条相关元素
   const progressContainer = document.getElementById('progressContainer');
@@ -307,6 +319,7 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   function canManuallyQueueForTranscription(video) {
+    if (!isAudioTranscriptionEnabled) return false;
     if (!video || !hasSubtitleTracks(video)) return false;
     if (isTranscribedSubtitle(video)) return false;
 
@@ -347,11 +360,14 @@ document.addEventListener('DOMContentLoaded', function () {
       return;
     }
 
-    noSubtitleBannerText.textContent = `${noExternalSubtitleCount} 个视频无外挂字幕，可点击“转写无字幕”按钮生成字幕`;
+    noSubtitleBannerText.textContent = isAudioTranscriptionEnabled
+      ? `${noExternalSubtitleCount} 个视频无外挂字幕，可点击“转写无字幕”按钮生成字幕`
+      : `${noExternalSubtitleCount} 个视频无外挂字幕`;
     noSubtitleBanner.classList.add('show');
   }
 
   function shouldAttemptAudioTranscription(video) {
+    if (!isAudioTranscriptionEnabled) return false;
     if (!video || !video.bvid) return false;
     if (hasSubtitleContent(video)) return false;
 
@@ -3270,7 +3286,9 @@ document.addEventListener('DOMContentLoaded', function () {
     const noExternalSubtitleCount = getNoExternalSubtitleCount();
     const noSubtitleFollowupText =
       noExternalSubtitleCount > 0
-        ? ` ${noExternalSubtitleCount} 个视频无外挂字幕，可点击“转写无字幕”按钮生成字幕`
+        ? isAudioTranscriptionEnabled
+          ? ` ${noExternalSubtitleCount} 个视频无外挂字幕，可点击“转写无字幕”按钮生成字幕`
+          : ` ${noExternalSubtitleCount} 个视频无外挂字幕`
         : '';
     const skippedChargeText = skippedCount > 0 ? ` 跳过: ${skippedCount}` : '';
 
@@ -3519,7 +3537,7 @@ document.addEventListener('DOMContentLoaded', function () {
   }
 
   // 音频转字幕按钮事件监听
-  if (transcribeAudioBtn) {
+  if (transcribeAudioBtn && isAudioTranscriptionEnabled) {
     console.log('添加音频转字幕按钮事件监听');
     transcribeAudioBtn.addEventListener('click', async function () {
       console.log('音频转字幕按钮被点击');
@@ -3703,18 +3721,22 @@ document.addEventListener('DOMContentLoaded', function () {
         }, 2000);
       }
     });
-  } else {
+  } else if (isAudioTranscriptionEnabled) {
     console.warn('音频转字幕按钮未找到');
+  } else {
+    console.log('商店版配置已关闭音频转字幕入口');
   }
 
   // 监听转写进度消息
-  chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
-    if (message.action === 'transcribeProgress') {
-      console.log('收到转写进度:', message);
-      updateTranscribeProgress(message.progress || 0, message.message || '处理中...');
-    }
-    return true;
-  });
+  if (isAudioTranscriptionEnabled) {
+    chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+      if (message.action === 'transcribeProgress') {
+        console.log('收到转写进度:', message);
+        updateTranscribeProgress(message.progress || 0, message.message || '处理中...');
+      }
+      return true;
+    });
+  }
 
   // 批量导出字幕
   async function batchExportSubtitles() {
