@@ -3,11 +3,34 @@ chrome.sidePanel.setPanelBehavior({ openPanelOnActionClick: true }).catch((error
 // 全局变量声明
 let bilibiliCookie = '';
 
+function getCookieLogSummary(cookie) {
+  const value = typeof cookie === 'string' ? cookie : '';
+  return {
+    hasCookie: value.trim() !== '',
+    length: value.length,
+    hasSessData: value.includes('SESSDATA='),
+    hasBiliJct: value.includes('bili_jct='),
+    hasDedeUserID: value.includes('DedeUserID='),
+  };
+}
+
+function sanitizeHeadersForLog(headers = {}) {
+  return Object.fromEntries(
+    Object.entries(headers).map(([key, value]) => {
+      if (/^(cookie|authorization|proxy-authorization|set-cookie)$/i.test(key)) {
+        const length = typeof value === 'string' ? value.length : 0;
+        return [key, length > 0 ? `[已隐藏，长度 ${length}]` : '[空]'];
+      }
+      return [key, value];
+    }),
+  );
+}
+
 // 在扩展启动时从localStorage读取Cookie
 chrome.storage.local.get(['bilibiliCookie'], function (result) {
   if (result.bilibiliCookie) {
     bilibiliCookie = result.bilibiliCookie;
-    console.log('从存储中加载Cookie (部分显示):', bilibiliCookie.substring(0, 20) + '...');
+    console.log('从存储中加载Cookie:', getCookieLogSummary(bilibiliCookie));
   } else {
     console.log('存储中没有找到Cookie');
   }
@@ -283,7 +306,7 @@ let lastReloadTime = 0;
 function logCookieStatus() {
   try {
     if (bilibiliCookie && bilibiliCookie.trim() !== '') {
-      console.log('当前Cookie状态: 已设置 (部分显示): ' + bilibiliCookie.substring(0, 20) + '...');
+      console.log('当前Cookie状态:', getCookieLogSummary(bilibiliCookie));
 
       // 检查Cookie是否包含必要的部分
       const hasSessData = bilibiliCookie.includes('SESSDATA=');
@@ -392,7 +415,7 @@ async function fetchWithHeaders(url) {
     // 如果有Cookie，添加到请求头中
     if (bilibiliCookie && bilibiliCookie.trim() !== '') {
       headers['Cookie'] = bilibiliCookie;
-      console.log('请求已添加Cookie (部分显示):', bilibiliCookie.substring(0, 20) + '...');
+      console.log('请求已添加Cookie:', getCookieLogSummary(bilibiliCookie));
     } else {
       console.log('请求未添加Cookie，因为Cookie未设置或为空');
       // 尝试再次从storage获取Cookie
@@ -401,7 +424,7 @@ async function fetchWithHeaders(url) {
         if (result.bilibiliCookie && result.bilibiliCookie.trim() !== '') {
           bilibiliCookie = result.bilibiliCookie;
           headers['Cookie'] = bilibiliCookie;
-          console.log('从storage重新获取Cookie并添加到请求头 (部分显示):', bilibiliCookie.substring(0, 20) + '...');
+          console.log('从storage重新获取Cookie并添加到请求头:', getCookieLogSummary(bilibiliCookie));
         }
       } catch (storageError) {
         console.error('从storage获取Cookie失败:', storageError);
@@ -414,7 +437,7 @@ async function fetchWithHeaders(url) {
       return await fetchWbiRequest(url, headers);
     }
 
-    console.log('发送请求前的完整Headers:', JSON.stringify(headers));
+    console.log('发送请求前的Headers(已脱敏):', sanitizeHeadersForLog(headers));
 
     const response = await fetch(url, {
       method: 'GET',
@@ -441,7 +464,7 @@ async function fetchWbiRequest(url, headers) {
   try {
     // 使用原始的WBI URL，不替换为v2接口
     console.log('使用WBI接口请求:', url);
-    console.log('请求头:', JSON.stringify(headers));
+    console.log('请求头(已脱敏):', sanitizeHeadersForLog(headers));
 
     const response = await fetch(url, {
       method: 'GET',
@@ -751,10 +774,7 @@ async function getBilibiliSubtitle(cid, bvid, retryCount = 2) {
           // 添加详细日志
           console.log('===== AI字幕URL请求开始 =====');
           console.log(`请求URL: ${aiSubtitleUrl}`);
-          console.log(`Cookie状态: ${bilibiliCookie ? '已设置' : '未设置'}`);
-          if (bilibiliCookie) {
-            console.log(`Cookie前20字符: ${bilibiliCookie.substring(0, 20)}`);
-          }
+          console.log('Cookie状态:', getCookieLogSummary(bilibiliCookie));
           console.log('===== AI字幕URL请求开始结束 =====');
 
           const aiSubtitleData = await fetchWithHeaders(aiSubtitleUrl);
@@ -1428,7 +1448,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     console.log('收到Cookie更新请求');
     bilibiliCookie = message.cookie || '';
     if (bilibiliCookie.trim() !== '') {
-      console.log(`Cookie已更新 (部分显示): ${bilibiliCookie.substring(0, 20)}...`);
+      console.log('Cookie已更新:', getCookieLogSummary(bilibiliCookie));
     } else {
       console.log('Cookie已清除');
     }
@@ -1644,7 +1664,10 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
             },
           });
 
-          console.log('脚本执行结果:', results);
+          console.log('脚本执行结果:', {
+            hasResult: !!(results && results[0] && results[0].result),
+            cookieLength: results && results[0] && results[0].result ? results[0].result.length : 0,
+          });
 
           if (results && results[0] && results[0].result && results[0].result.trim() !== '') {
             const fullCookie = results[0].result;
@@ -1852,7 +1875,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       // 如果有Cookie，添加到请求头中
       if (bilibiliCookie && bilibiliCookie.trim() !== '') {
         headers['Cookie'] = bilibiliCookie;
-        console.log('合集请求已添加Cookie (部分显示):', bilibiliCookie.substring(0, 20) + '...');
+        console.log('合集请求已添加Cookie:', getCookieLogSummary(bilibiliCookie));
       } else {
         console.log('合集请求未添加Cookie，因为Cookie未设置或为空');
       }
@@ -2089,7 +2112,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       // 如果有Cookie，添加到请求头中
       if (bilibiliCookie && bilibiliCookie.trim() !== '') {
         headers['Cookie'] = bilibiliCookie;
-        console.log('收藏夹请求已添加Cookie (部分显示):', bilibiliCookie.substring(0, 20) + '...');
+        console.log('收藏夹请求已添加Cookie:', getCookieLogSummary(bilibiliCookie));
       } else {
         console.log('收藏夹请求未添加Cookie，因为Cookie未设置或为空');
       }
@@ -2540,11 +2563,7 @@ async function fetchSubtitleWithAid(aid, cid, retryCount = 2) {
     // 记录请求前的关键信息
     console.log('===== 字幕请求前信息 =====');
     console.log(`请求URL: ${subtitleInfoUrl}`);
-    console.log(`Cookie状态: ${bilibiliCookie ? '已设置' : '未设置'}`);
-    if (bilibiliCookie) {
-      console.log(`Cookie长度: ${bilibiliCookie.length}`);
-      console.log(`Cookie前20字符: ${bilibiliCookie.substring(0, 20)}`);
-    }
+    console.log('Cookie状态:', getCookieLogSummary(bilibiliCookie));
     diagnoseCookie(); // 运行Cookie诊断
     console.log('===== 字幕请求前信息结束 =====');
 
@@ -2621,10 +2640,7 @@ async function fetchSubtitleWithAid(aid, cid, retryCount = 2) {
           // 添加详细日志
           console.log('===== AI字幕URL请求开始 =====');
           console.log(`请求URL: ${aiSubtitleUrl}`);
-          console.log(`Cookie状态: ${bilibiliCookie ? '已设置' : '未设置'}`);
-          if (bilibiliCookie) {
-            console.log(`Cookie前20字符: ${bilibiliCookie.substring(0, 20)}`);
-          }
+          console.log('Cookie状态:', getCookieLogSummary(bilibiliCookie));
           console.log('===== AI字幕URL请求开始结束 =====');
 
           const aiSubtitleData = await fetchWithHeaders(aiSubtitleUrl);
@@ -2664,7 +2680,7 @@ async function fetchSubtitleWithAid(aid, cid, retryCount = 2) {
               // 如果有Cookie，添加到请求头中
               if (bilibiliCookie && bilibiliCookie.trim() !== '') {
                 subtitleHeaders['Cookie'] = bilibiliCookie;
-                console.log('AI字幕请求添加Cookie (部分显示):', bilibiliCookie.substring(0, 20) + '...');
+                console.log('AI字幕请求添加Cookie:', getCookieLogSummary(bilibiliCookie));
               }
 
               const subtitleResponse = await fetch(fullAiSubtitleUrl, {
@@ -2773,7 +2789,7 @@ async function fetchSubtitleWithAid(aid, cid, retryCount = 2) {
       // 如果有Cookie，添加到请求头中
       if (bilibiliCookie && bilibiliCookie.trim() !== '') {
         subtitleHeaders['Cookie'] = bilibiliCookie;
-        console.log('字幕内容请求添加Cookie (部分显示):', bilibiliCookie.substring(0, 20) + '...');
+        console.log('字幕内容请求添加Cookie:', getCookieLogSummary(bilibiliCookie));
       }
 
       const subtitleResponse = await fetch(fullSubtitleUrl, {
@@ -2951,7 +2967,7 @@ async function testWbiApi(aid, cid) {
       console.log('未添加Cookie，因为Cookie未设置或为空');
     }
 
-    console.log('请求头:', JSON.stringify(headers, null, 2));
+    console.log('请求头(已脱敏):', sanitizeHeadersForLog(headers));
 
     // 发送请求
     console.log('正在发送请求...');
@@ -3354,7 +3370,7 @@ async function downloadAudioDirectly(audioUrl, backupUrls) {
 
   // 获取所有 Cookie（包括 httpOnly 的 buvid3/buvid4 等）
   const cookie = await getAllBilibiliCookies();
-  console.log('使用完整 Cookie (前50字符):', cookie.substring(0, 50));
+  console.log('使用Cookie:', getCookieLogSummary(cookie));
 
   // 构建 URL 尝试列表
   const urlsToTry = [audioUrl];
@@ -3455,7 +3471,7 @@ async function getAllBilibiliCookies() {
     .join('; ');
 
   console.log(
-    `获取到完整 Cookie (${allCookies.length} 个, 去重后 ${uniqueMap.size} 个), 包含 SESSDATA: ${cookieString.includes('SESSDATA')}`,
+    `获取到Cookie汇总 (${allCookies.length} 个, 去重后 ${uniqueMap.size} 个), 包含 SESSDATA: ${cookieString.includes('SESSDATA')}`,
   );
   return cookieString;
 }

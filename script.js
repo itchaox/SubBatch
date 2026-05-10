@@ -1,6 +1,16 @@
 document.addEventListener('DOMContentLoaded', function () {
   console.log('DOM加载完成，初始化脚本...');
 
+  function getCookieResponseLogSummary(response) {
+    const cookie = typeof response?.cookie === 'string' ? response.cookie : '';
+    return {
+      success: !!response?.success,
+      message: response?.message || '',
+      hasCookie: cookie.trim() !== '',
+      cookieLength: cookie.length,
+    };
+  }
+
   const getPageUrlBtn = document.getElementById('getPageUrlBtn');
   const urlInput = document.getElementById('urlInput');
   const generateUrlBtn = document.getElementById('generateUrlBtn');
@@ -1869,7 +1879,7 @@ document.addEventListener('DOMContentLoaded', function () {
     updateCookieInputControls();
 
     const cookie = bilibiliCookieInput.value.trim();
-    console.log('设置Cookie (部分显示):', cookie ? cookie.substring(0, 20) + '...' : '空');
+    console.log('设置Cookie:', { hasCookie: cookie !== '', cookieLength: cookie.length });
 
     // 即使Cookie为空也发送设置请求，这样可以清除Cookie
     chrome.runtime.sendMessage(
@@ -1969,7 +1979,7 @@ document.addEventListener('DOMContentLoaded', function () {
         showSuccess('正在获取Cookie，请稍候...');
 
         const response = await chrome.runtime.sendMessage({ action: 'getCookie' });
-        console.log('获取Cookie响应:', response);
+        console.log('获取Cookie响应:', getCookieResponseLogSummary(response));
 
         // 恢复按钮状态
         getCookieBtn.disabled = false;
