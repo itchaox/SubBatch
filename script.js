@@ -5900,8 +5900,15 @@ async function initFrontendWhisper(onProgress) {
  * @param {Function} onProgress - 进度回调
  * @returns {Promise<{text: string, chunks: Array, srtContent: string}>}
  */
+function formatTranscriptionElapsedTime(durationMs) {
+  const totalSeconds = Math.max(0, Math.round(durationMs / 1000));
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+  return `${minutes}分${String(seconds).padStart(2, '0')}秒`;
+}
+
 async function transcribeAudioInFrontend(audioBuffer, onProgress) {
-  console.time('⏱️ 转写总耗时');
+  const transcriptionStartTime = performance.now();
   try {
     // 初始化 Whisper
     console.time('⏱️ 模型加载');
@@ -5934,11 +5941,13 @@ async function transcribeAudioInFrontend(audioBuffer, onProgress) {
 
       const singleChunkResult = await transcribeSingleChunk(input_features, 0, onProgress);
       transcriptionLanguage = normalizeWhisperLanguageCode(singleChunkResult.language);
-      return buildTranscriptionResultFromChunks(
+      const transcriptionResult = buildTranscriptionResultFromChunks(
         singleChunkResult.chunks,
         singleChunkResult.text,
         transcriptionLanguage,
       );
+      console.log('⏱️ 转写总耗时:', formatTranscriptionElapsedTime(performance.now() - transcriptionStartTime));
+      return transcriptionResult;
     }
 
     // 长音频：分块处理
@@ -6032,7 +6041,7 @@ async function transcribeAudioInFrontend(audioBuffer, onProgress) {
       '文本长度:',
       transcriptionResult.text.length,
     );
-    console.timeEnd('⏱️ 转写总耗时');
+    console.log('⏱️ 转写总耗时:', formatTranscriptionElapsedTime(performance.now() - transcriptionStartTime));
 
     return transcriptionResult;
   } catch (error) {
