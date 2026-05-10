@@ -1246,19 +1246,25 @@
         border-radius: 4px;
         box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
         z-index: 1000;
-        overflow: hidden;
-        max-height: 0;
+        overflow-y: auto;
+        max-height: 300px;
         opacity: 0;
-        transform: translateY(-10px);
-        transition: all 0.3s cubic-bezier(0.23, 1, 0.32, 1);
+        visibility: hidden;
+        transform: translateY(-4px);
+        transition:
+          opacity 0.12s ease,
+          transform 0.12s ease,
+          visibility 0s linear 0.12s;
         pointer-events: none;
         border: 1px solid #ebeef5;
+        will-change: opacity, transform;
       }
 
       .custom-select-dropdown.active {
-        max-height: 300px;
         opacity: 1;
+        visibility: visible;
         transform: translateY(0);
+        transition-delay: 0s;
         pointer-events: auto;
       }
 
@@ -2287,7 +2293,7 @@
               class="custom-select-trigger"
               id="formatSelectTrigger"
             >
-              <span class="custom-select-selected-text">TXT 格式（纯文本）</span>
+              <span class="custom-select-selected-text">TXT</span>
               <svg
                 class="select-arrow-icon"
                 viewBox="0 0 24 24"
@@ -2303,25 +2309,25 @@
                 class="custom-select-option selected"
                 data-value="txt"
               >
-                TXT 格式（纯文本）
-              </div>
-              <div
-                class="custom-select-option"
-                data-value="srt"
-              >
-                SRT 格式（带时间戳）
+                TXT
               </div>
               <div
                 class="custom-select-option"
                 data-value="md"
               >
-                MD 格式（Markdown 格式）
+                MD
               </div>
               <div
                 class="custom-select-option"
                 data-value="doc"
               >
-                DOC 格式（Word 格式）
+                DOC
+              </div>
+              <div
+                class="custom-select-option"
+                data-value="srt"
+              >
+                SRT
               </div>
             </div>
           </div>
