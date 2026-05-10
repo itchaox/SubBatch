@@ -75,7 +75,7 @@ SubBatch/
 │  Presentation Layer (script.js + sidepanel.html)    │
 │  ─ Side Panel UI、视频表格管理、导出逻辑            │
 │  ─ 前端 Whisper 推理（WebGPU/WASM）                 │
-│  ─ 音频解码、分块、去重、SRT/TXT 格式化             │
+│  ─ 音频解码、分块、去重、SRT/TXT/MD/DOC 格式化      │
 ├─────────────────────────────────────────────────────┤
 │  Background Layer (background.js)                   │
 │  ─ Service Worker — B站 API 全部调用逻辑            │
@@ -176,7 +176,7 @@ getBilibiliSubtitle(cid, bvid)
   → 分块（30 秒/块，6 秒重叠）
   → 逐块：特征提取 → Whisper 推理 → 解码 → 单块去重
   → 合并所有块：时间戳去重 + TXT 边界重叠裁剪
-  → 生成 SRT/TXT
+  → 生成 SRT/TXT/MD/DOC
 ```
 
 ### 1. 音频流获取
@@ -306,11 +306,13 @@ for (let i = 0; i < numChunks; i++) {
 
 这也是它在 TXT 导出场景下效果特别好的原因：去掉了分块重叠导致的重复，但不会破坏正文逻辑。
 
-### 6. SRT/TXT 导出
+### 6. SRT/TXT/MD/DOC 导出
 
 **SRT 格式：** 标准序号 + `HH:MM:SS,mmm --> HH:MM:SS,mmm` + 文本
 
 **TXT 格式：** 纯文本，移除时间戳和序号；中文路径下会额外做“可读但不过度加工”的换行增强，可选附加视频信息前缀（标题 + 链接）
+
+**MD / DOC 格式：** 内容与 TXT 纯文本导出一致，只改变文件后缀为 `.md` / `.doc`
 
 **批量导出：** JSZip 打包为 `SubBatch_YYYY-MM-DD-HH-MM-SS_FMT.zip`
 

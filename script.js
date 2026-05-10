@@ -44,6 +44,11 @@ document.addEventListener('DOMContentLoaded', function () {
       formatErrorMessage: '请输入正确的搜索页面地址格式',
     },
   };
+  const EXPORT_FORMAT_VALUES = ['txt', 'srt', 'md', 'doc'];
+
+  function normalizeExportFormat(format) {
+    return EXPORT_FORMAT_VALUES.includes(format) ? format : 'txt';
+  }
 
   const bilibiliCookieInput = document.getElementById('bilibiliCookie');
   const cookieClearBtn = document.querySelector('.cookie-clear-btn');
@@ -3721,7 +3726,7 @@ document.addEventListener('DOMContentLoaded', function () {
         return;
       }
 
-      const exportFormat = defaultExportFormat === 'srt' ? 'srt' : 'txt';
+      const exportFormat = normalizeExportFormat(defaultExportFormat);
       console.log(`使用默认导出格式: ${exportFormat}`);
       executeExport(videosWithSubtitle, exportFormat);
     } catch (error) {
@@ -4022,7 +4027,7 @@ document.addEventListener('DOMContentLoaded', function () {
             );
           }
 
-          // 添加视频信息前缀（仅TXT格式，SRT不能破坏格式）
+          // 添加视频信息前缀（纯文本类格式，SRT不能破坏格式）
           if (format !== 'srt') {
             await ensureVideoExportMetadata(video);
             subtitleContent = prependVideoInfoText(subtitleContent, video);
@@ -4781,7 +4786,7 @@ document.addEventListener('DOMContentLoaded', function () {
   // 从 storage 加载设置
   chrome.storage.local.get(['defaultExportFormat'], (result) => {
     const savedExportFormat = result.defaultExportFormat;
-    defaultExportFormat = savedExportFormat === 'srt' ? 'srt' : 'txt';
+    defaultExportFormat = normalizeExportFormat(savedExportFormat);
 
     if (savedExportFormat && savedExportFormat !== defaultExportFormat) {
       chrome.storage.local.set({ defaultExportFormat });
@@ -4816,7 +4821,7 @@ document.addEventListener('DOMContentLoaded', function () {
       option.addEventListener('click', (e) => {
         e.stopPropagation();
         const value = option.getAttribute('data-value');
-        defaultExportFormat = value;
+        defaultExportFormat = normalizeExportFormat(value);
         formatSelectedText.textContent = getCustomSelectOptionLabel(option);
         formatSelectOptions.forEach((o) => o.classList.remove('selected'));
         option.classList.add('selected');
