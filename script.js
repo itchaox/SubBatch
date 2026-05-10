@@ -3721,193 +3721,14 @@ document.addEventListener('DOMContentLoaded', function () {
         return;
       }
 
-      // 检查是否设置了默认导出格式
-      if (defaultExportFormat === 'srt' || defaultExportFormat === 'txt') {
-        console.log(`使用默认导出格式: ${defaultExportFormat}`);
-        executeExport(videosWithSubtitle, defaultExportFormat);
-      } else {
-        // 创建格式选择弹窗
-        showFormatSelectionDialog((selectedFormat) => {
-          if (!selectedFormat) {
-            return; // 用户取消了选择
-          }
-
-          console.log(`选择了导出格式: ${selectedFormat}`);
-
-          // 继续执行导出流程，并传入所选格式
-          executeExport(videosWithSubtitle, selectedFormat);
-        });
-      }
+      const exportFormat = defaultExportFormat === 'srt' ? 'srt' : 'txt';
+      console.log(`使用默认导出格式: ${exportFormat}`);
+      executeExport(videosWithSubtitle, exportFormat);
     } catch (error) {
       console.error('批量导出字幕外层错误:', error);
       showError('批量导出字幕失败: ' + (error.message || '未知错误'));
       showProgress(false);
     }
-  }
-
-  // 显示格式选择弹窗
-  function showFormatSelectionDialog(callback) {
-    // 创建弹窗背景
-    const dialogOverlay = document.createElement('div');
-    dialogOverlay.style.position = 'fixed';
-    dialogOverlay.style.top = '0';
-    dialogOverlay.style.left = '0';
-    dialogOverlay.style.width = '100%';
-    dialogOverlay.style.height = '100%';
-    dialogOverlay.style.backgroundColor = 'rgba(0, 0, 0, 0.5)';
-    dialogOverlay.style.display = 'flex';
-    dialogOverlay.style.justifyContent = 'center';
-    dialogOverlay.style.alignItems = 'center';
-    dialogOverlay.style.zIndex = '2000';
-    dialogOverlay.style.backdropFilter = 'blur(3px)';
-
-    // 创建弹窗内容
-    const dialogContent = document.createElement('div');
-    dialogContent.style.backgroundColor = 'white';
-    dialogContent.style.borderRadius = '12px';
-    dialogContent.style.padding = '20px';
-    dialogContent.style.width = '360px';
-    dialogContent.style.maxWidth = '90%';
-    dialogContent.style.boxShadow = '0 10px 25px rgba(0, 0, 0, 0.15)';
-    dialogContent.style.textAlign = 'center';
-
-    // 标题
-    const title = document.createElement('h3');
-    title.textContent = '选择字幕导出格式';
-    title.style.margin = '0 0 16px 0';
-    title.style.color = '#333';
-    title.style.fontSize = '18px';
-
-    // 格式对比表
-    const formatTable = document.createElement('div');
-    formatTable.style.margin = '0 0 20px 0';
-    formatTable.style.border = '1px solid #eee';
-    formatTable.style.borderRadius = '8px';
-    formatTable.style.overflow = 'hidden';
-    formatTable.style.fontSize = '13px';
-    formatTable.style.textAlign = 'left';
-
-    formatTable.innerHTML = `
-      <table style="width:100%; border-collapse:collapse; margin-bottom:20px;">
-        <tr style="background-color:#f8f9fa">
-          <th style="padding:8px 12px; border-bottom:1px solid #eee;">格式</th>
-          <th style="padding:8px 12px; border-bottom:1px solid #eee;">特点</th>
-        </tr>
-        <tr>
-          <td style="padding:8px 12px; border-bottom:1px solid #eee;"><b>SRT</b></td>
-          <td style="padding:8px 12px; border-bottom:1px solid #eee;">包含时间戳，支持播放器同步显示</td>
-        </tr>
-        <tr>
-          <td style="padding:8px 12px;"><b>TXT</b></td>
-          <td style="padding:8px 12px;">纯文本内容，适合阅读和 AI 知识库</td>
-        </tr>
-      </table>
-    `;
-
-    // 按钮容器
-    const buttonContainer = document.createElement('div');
-    buttonContainer.style.display = 'flex';
-    buttonContainer.style.justifyContent = 'center';
-    buttonContainer.style.gap = '16px';
-    buttonContainer.style.marginTop = '8px';
-
-    // SRT按钮
-    const srtButton = document.createElement('button');
-    srtButton.textContent = '导出 SRT 格式';
-    srtButton.style.padding = '10px 16px';
-    srtButton.style.backgroundColor = '#3370ff';
-    srtButton.style.color = 'white';
-    srtButton.style.border = 'none';
-    srtButton.style.borderRadius = '6px';
-    srtButton.style.cursor = 'pointer';
-    srtButton.style.fontWeight = '500';
-    srtButton.style.flex = '1';
-    srtButton.style.maxWidth = '140px';
-    srtButton.style.transition = 'all 0.3s ease';
-
-    // TXT按钮
-    const txtButton = document.createElement('button');
-    txtButton.textContent = '导出 TXT 格式';
-    txtButton.style.padding = '10px 16px';
-    txtButton.style.backgroundColor = '#f0f2f5';
-    txtButton.style.color = '#333';
-    txtButton.style.border = 'none';
-    txtButton.style.borderRadius = '6px';
-    txtButton.style.cursor = 'pointer';
-    txtButton.style.fontWeight = '500';
-    txtButton.style.flex = '1';
-    txtButton.style.maxWidth = '140px';
-    txtButton.style.transition = 'all 0.3s ease';
-
-    // 按钮悬停效果
-    srtButton.onmouseover = function () {
-      this.style.backgroundColor = '#2860e1';
-      this.style.transform = 'translateY(-2px)';
-      this.style.boxShadow = '0 4px 12px rgba(51, 112, 255, 0.3)';
-    };
-    srtButton.onmouseout = function () {
-      this.style.backgroundColor = '#3370ff';
-      this.style.transform = 'translateY(0)';
-      this.style.boxShadow = 'none';
-    };
-
-    txtButton.onmouseover = function () {
-      this.style.backgroundColor = '#e4e6e8';
-      this.style.transform = 'translateY(-2px)';
-      this.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.1)';
-    };
-    txtButton.onmouseout = function () {
-      this.style.backgroundColor = '#f0f2f5';
-      this.style.transform = 'translateY(0)';
-      this.style.boxShadow = 'none';
-    };
-
-    // 取消按钮
-    const cancelButton = document.createElement('button');
-    cancelButton.textContent = '取消';
-    cancelButton.style.marginTop = '16px';
-    cancelButton.style.padding = '8px 16px';
-    cancelButton.style.backgroundColor = 'transparent';
-    cancelButton.style.color = '#666';
-    cancelButton.style.border = 'none';
-    cancelButton.style.borderRadius = '6px';
-    cancelButton.style.cursor = 'pointer';
-    cancelButton.style.fontSize = '13px';
-
-    cancelButton.onmouseover = function () {
-      this.style.backgroundColor = '#f0f2f5';
-    };
-    cancelButton.onmouseout = function () {
-      this.style.backgroundColor = 'transparent';
-    };
-
-    // 添加事件监听
-    srtButton.addEventListener('click', () => {
-      document.body.removeChild(dialogOverlay);
-      callback('srt');
-    });
-
-    txtButton.addEventListener('click', () => {
-      document.body.removeChild(dialogOverlay);
-      callback('txt');
-    });
-
-    cancelButton.addEventListener('click', () => {
-      document.body.removeChild(dialogOverlay);
-      callback(null);
-    });
-
-    // 组装弹窗
-    buttonContainer.appendChild(srtButton);
-    buttonContainer.appendChild(txtButton);
-    dialogContent.appendChild(title);
-    dialogContent.appendChild(formatTable);
-    dialogContent.appendChild(buttonContainer);
-    dialogContent.appendChild(cancelButton);
-    dialogOverlay.appendChild(dialogContent);
-
-    // 显示弹窗
-    document.body.appendChild(dialogOverlay);
   }
 
   // 根据设置生成文件名
@@ -4860,7 +4681,7 @@ document.addEventListener('DOMContentLoaded', function () {
   const settingsBtn = document.getElementById('settingsBtn');
   const settingsModal = document.getElementById('settingsModal');
   const settingsModalCloseBtn = document.getElementById('settingsModalCloseBtn');
-  let defaultExportFormat = 'ask'; // 默认值
+  let defaultExportFormat = 'txt'; // 默认值
   let prependVideoInfoFields = [];
 
   chrome.storage.local.get(['skipTranscribeConfirmDialog'], (result) => {
@@ -4959,17 +4780,21 @@ document.addEventListener('DOMContentLoaded', function () {
 
   // 从 storage 加载设置
   chrome.storage.local.get(['defaultExportFormat'], (result) => {
-    if (result.defaultExportFormat) {
-      defaultExportFormat = result.defaultExportFormat;
-      if (formatSelectedText) {
-        const matchOption = document.querySelector(
-          `#formatSelectDropdown .custom-select-option[data-value="${defaultExportFormat}"]`,
-        );
-        if (matchOption) {
-          formatSelectedText.textContent = getCustomSelectOptionLabel(matchOption);
-          formatSelectOptions.forEach((o) => o.classList.remove('selected'));
-          matchOption.classList.add('selected');
-        }
+    const savedExportFormat = result.defaultExportFormat;
+    defaultExportFormat = savedExportFormat === 'srt' ? 'srt' : 'txt';
+
+    if (savedExportFormat && savedExportFormat !== defaultExportFormat) {
+      chrome.storage.local.set({ defaultExportFormat });
+    }
+
+    if (formatSelectedText) {
+      const matchOption = document.querySelector(
+        `#formatSelectDropdown .custom-select-option[data-value="${defaultExportFormat}"]`,
+      );
+      if (matchOption) {
+        formatSelectedText.textContent = getCustomSelectOptionLabel(matchOption);
+        formatSelectOptions.forEach((o) => o.classList.remove('selected'));
+        matchOption.classList.add('selected');
       }
     }
   });
