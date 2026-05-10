@@ -1268,6 +1268,39 @@
         pointer-events: auto;
       }
 
+      .export-mode-tip {
+        display: none;
+        align-items: flex-start;
+        gap: 6px;
+        margin: 6px 0 0 0;
+        color: #8c5a00;
+        font-size: 12px;
+        line-height: 1.45;
+      }
+
+      .export-mode-tip.show {
+        display: flex;
+      }
+
+      .export-mode-tip-icon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 13px;
+        height: 13px;
+        margin-top: 2px;
+        border-radius: 50%;
+        background-color: #faad14;
+        color: #fff;
+        font-size: 9px;
+        font-weight: bold;
+        flex-shrink: 0;
+      }
+
+      .export-mode-tip-text {
+        flex: 1;
+      }
+
       #fileNameSelectDropdown.active {
         max-height: 360px;
       }
@@ -2283,6 +2316,57 @@
         </button>
         <h3 style="margin: 0 0 20px 0; font-size: 16px; font-weight: 600">设置</h3>
         <div style="display: flex; align-items: center; gap: 12px">
+          <span style="font-size: 14px; color: #333; font-weight: 500; white-space: nowrap">导出模式</span>
+          <div
+            class="custom-select-container"
+            id="exportModeSelectContainer"
+            style="flex: 1; position: relative; z-index: 102"
+          >
+            <div
+              class="custom-select-trigger"
+              id="exportModeSelectTrigger"
+            >
+              <span class="custom-select-selected-text">ZIP 压缩</span>
+              <svg
+                class="select-arrow-icon"
+                viewBox="0 0 24 24"
+              >
+                <path d="M7 10l5 5 5-5z" />
+              </svg>
+            </div>
+            <div
+              class="custom-select-dropdown"
+              id="exportModeSelectDropdown"
+            >
+              <div
+                class="custom-select-option selected"
+                data-value="zip"
+              >
+                ZIP 压缩
+              </div>
+              <div
+                class="custom-select-option"
+                data-value="single"
+              >
+                单个文件
+              </div>
+            </div>
+          </div>
+        </div>
+        <div
+          class="export-mode-tip"
+          id="exportModeTip"
+        >
+          <span
+            class="export-mode-tip-icon"
+            aria-hidden="true"
+            >!</span
+          >
+          <span class="export-mode-tip-text">
+            若开启浏览器【下载前询问每个文件的保存位置】，批量下载时会逐个确认。
+          </span>
+        </div>
+        <div style="display: flex; align-items: center; gap: 12px; margin-top: 16px">
           <span style="font-size: 14px; color: #333; font-weight: 500; white-space: nowrap">导出文件格式</span>
           <div
             class="custom-select-container"

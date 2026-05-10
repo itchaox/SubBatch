@@ -45,9 +45,14 @@ document.addEventListener('DOMContentLoaded', function () {
     },
   };
   const EXPORT_FORMAT_VALUES = ['txt', 'srt', 'md', 'doc'];
+  const EXPORT_MODE_VALUES = ['zip', 'single'];
 
   function normalizeExportFormat(format) {
     return EXPORT_FORMAT_VALUES.includes(format) ? format : 'txt';
+  }
+
+  function normalizeExportMode(mode) {
+    return EXPORT_MODE_VALUES.includes(mode) ? mode : 'zip';
   }
 
   const bilibiliCookieInput = document.getElementById('bilibiliCookie');
@@ -3701,17 +3706,10 @@ document.addEventListener('DOMContentLoaded', function () {
     return true;
   });
 
-  // 批量导出字幕为独立的TXT文件
+  // 批量导出字幕
   async function batchExportSubtitles() {
     try {
       console.log('开始批量导出字幕');
-
-      // 检查是否有JSZip对象
-      if (typeof JSZip === 'undefined') {
-        console.error('JSZip库未加载，无法执行批量导出');
-        showError('JSZip库未加载，无法执行批量导出。请确保jszip.min.js文件已正确加载');
-        return;
-      }
 
       if (videoList.length === 0) {
         showError('表格为空，无法导出');
@@ -3727,8 +3725,16 @@ document.addEventListener('DOMContentLoaded', function () {
       }
 
       const exportFormat = normalizeExportFormat(defaultExportFormat);
-      console.log(`使用默认导出格式: ${exportFormat}`);
-      executeExport(videosWithSubtitle, exportFormat);
+      const exportMode = normalizeExportMode(defaultExportMode);
+
+      if (exportMode === 'zip' && typeof JSZip === 'undefined') {
+        console.error('JSZip库未加载，无法执行ZIP导出');
+        showError('JSZip库未加载，无法执行ZIP导出。请确保jszip.min.js文件已正确加载');
+        return;
+      }
+
+      console.log(`使用默认导出格式: ${exportFormat}，导出模式: ${exportMode}`);
+      executeExport(videosWithSubtitle, exportFormat, exportMode);
     } catch (error) {
       console.error('批量导出字幕外层错误:', error);
       showError('批量导出字幕失败: ' + (error.message || '未知错误'));
@@ -3966,9 +3972,90 @@ document.addEventListener('DOMContentLoaded', function () {
     return tasks;
   }
 
+  function resetExportButton(exportTableBtn) {
+    if (!exportTableBtn) return;
+    exportTableBtn.disabled = false;
+    exportTableBtn.innerHTML = `
+      <svg viewBox="0 0 24 24">
+        <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" />
+      </svg>
+      导出字幕
+    `;
+  }
+
+  async function triggerSubtitleFileDownload(fileName, subtitleContent) {
+    const blob =
+      subtitleContent instanceof Blob
+        ? subtitleContent
+        : new Blob([subtitleContent], { type: 'text/plain;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+
+    if (chrome.downloads?.download) {
+      try {
+        await new Promise((resolve, reject) => {
+          chrome.downloads.download(
+            {
+              url,
+              filename: fileName,
+              conflictAction: 'uniquify',
+              saveAs: false,
+            },
+            (downloadId) => {
+              const error = chrome.runtime.lastError;
+              if (error) {
+                reject(new Error(error.message));
+                return;
+              }
+              if (!downloadId) {
+                reject(new Error('下载任务未能创建'));
+                return;
+              }
+              resolve(downloadId);
+            },
+          );
+        });
+      } finally {
+        setTimeout(() => {
+          URL.revokeObjectURL(url);
+        }, 1000);
+      }
+      return;
+    }
+
+    const downloadLink = document.createElement('a');
+    downloadLink.href = url;
+    downloadLink.download = fileName;
+    document.body.appendChild(downloadLink);
+    downloadLink.click();
+    document.body.removeChild(downloadLink);
+    setTimeout(() => {
+      URL.revokeObjectURL(url);
+    }, 1000);
+  }
+
+  function buildZipDownloadFileName(format) {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    const hours = String(now.getHours()).padStart(2, '0');
+    const minutes = String(now.getMinutes()).padStart(2, '0');
+    const seconds = String(now.getSeconds()).padStart(2, '0');
+    return `SubBatch_${year}-${month}-${day}-${hours}-${minutes}-${seconds}_${format.toUpperCase()}.zip`;
+  }
+
+  function wait(ms) {
+    return new Promise((resolve) => {
+      setTimeout(resolve, ms);
+    });
+  }
+
   // 执行导出流程
-  async function executeExport(videosWithSubtitle, format) {
+  async function executeExport(videosWithSubtitle, format, exportMode = 'zip') {
     try {
+      const normalizedExportMode = normalizeExportMode(exportMode);
+      const isZipMode = normalizedExportMode === 'zip';
+
       // 获取并禁用导出按钮，显示处理状态
       const exportTableBtn = document.getElementById('exportTableBtn');
       if (exportTableBtn) {
@@ -3990,22 +4077,17 @@ document.addEventListener('DOMContentLoaded', function () {
       if (exportTasks.length === 0) {
         showError('没有可导出的字幕语言，请先选择字幕语言');
         showProgress(false);
-        if (exportTableBtn) {
-          exportTableBtn.disabled = false;
-          exportTableBtn.innerHTML = `
-            <svg viewBox="0 0 24 24">
-              <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" />
-            </svg>
-            导出字幕
-          `;
-        }
+        resetExportButton(exportTableBtn);
         return;
       }
 
-      showSuccess(`开始批量导出${format.toUpperCase()}字幕，共 ${exportTasks.length} 个文件`);
+      showSuccess(
+        `开始批量导出${format.toUpperCase()}字幕，共 ${exportTasks.length} 个文件${
+          isZipMode ? '，将打包为ZIP压缩包' : ''
+        }`,
+      );
 
-      // 创建一个临时的zip文件夹
-      const zipContent = new JSZip();
+      const zipContent = isZipMode ? new JSZip() : null;
       let exportedCount = 0;
       let errorCount = 0;
 
@@ -4033,8 +4115,12 @@ document.addEventListener('DOMContentLoaded', function () {
             subtitleContent = prependVideoInfoText(subtitleContent, video);
           }
 
-          // 将字幕内容添加到zip文件
-          zipContent.file(fileName, subtitleContent);
+          if (isZipMode) {
+            zipContent.file(fileName, subtitleContent);
+          } else {
+            await triggerSubtitleFileDownload(fileName, subtitleContent);
+            await wait(50);
+          }
           exportedCount++;
 
           // 更新进度条
@@ -4051,69 +4137,33 @@ document.addEventListener('DOMContentLoaded', function () {
 
       if (exportedCount === 0) {
         showProgress(false);
-        if (exportTableBtn) {
-          exportTableBtn.disabled = false;
-          exportTableBtn.innerHTML = `
-            <svg viewBox="0 0 24 24">
-              <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" />
-            </svg>
-            导出字幕
-          `;
-        }
+        resetExportButton(exportTableBtn);
         showError(`导出失败，${errorCount} 个字幕文件未能生成`);
         return;
       }
 
-      // 更新进度为100%
-      updateProgress(100, '压缩文件中...');
+      if (isZipMode) {
+        updateProgress(100, '压缩文件中...');
 
-      // 生成zip文件
-      const zipBlob = await zipContent.generateAsync({ type: 'blob' });
+        const zipBlob = await zipContent.generateAsync({ type: 'blob' });
+        await triggerSubtitleFileDownload(buildZipDownloadFileName(format), zipBlob);
+      } else {
+        updateProgress(100, '已触发文件下载');
+      }
 
-      // 创建下载链接
-      const url = URL.createObjectURL(zipBlob);
-      const downloadLink = document.createElement('a');
-      downloadLink.href = url;
-
-      // 格式化当前日期时间为 'SubBatch_年-月-日-时-分-秒_格式' 格式
-      const now = new Date();
-      const year = now.getFullYear();
-      const month = String(now.getMonth() + 1).padStart(2, '0');
-      const day = String(now.getDate()).padStart(2, '0');
-      const hours = String(now.getHours()).padStart(2, '0');
-      const minutes = String(now.getMinutes()).padStart(2, '0');
-      const seconds = String(now.getSeconds()).padStart(2, '0');
-      const formattedDateTime = `SubBatch_${year}-${month}-${day}-${hours}-${minutes}-${seconds}_${format.toUpperCase()}`;
-
-      downloadLink.download = `${formattedDateTime}.zip`;
-
-      // 触发下载
-      document.body.appendChild(downloadLink);
-      downloadLink.click();
-
-      // 清理
-      document.body.removeChild(downloadLink);
-      URL.revokeObjectURL(url);
-
-      // 短暂延迟后隐藏进度条
       setTimeout(() => {
         showProgress(false);
       }, 1500);
 
-      // 恢复按钮状态
-      if (exportTableBtn) {
-        exportTableBtn.disabled = false;
-        exportTableBtn.innerHTML = `
-          <svg viewBox="0 0 24 24">
-            <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" />
-          </svg>
-          导出字幕
-        `;
-      }
+      resetExportButton(exportTableBtn);
 
       // 显示结果
       if (errorCount === 0) {
-        showSuccess(`成功导出 ${exportedCount} 个${format.toUpperCase()}字幕文件到zip压缩包`);
+        showSuccess(
+          isZipMode
+            ? `成功导出 ${exportedCount} 个${format.toUpperCase()}字幕文件到ZIP压缩包`
+            : `成功导出 ${exportedCount} 个${format.toUpperCase()}字幕文件`,
+        );
       } else {
         showSuccess(`导出完成，成功: ${exportedCount}，失败: ${errorCount}`);
       }
@@ -4126,15 +4176,7 @@ document.addEventListener('DOMContentLoaded', function () {
 
       // 恢复按钮状态
       const exportTableBtn = document.getElementById('exportTableBtn');
-      if (exportTableBtn) {
-        exportTableBtn.disabled = false;
-        exportTableBtn.innerHTML = `
-          <svg viewBox="0 0 24 24">
-            <path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z" />
-          </svg>
-          导出字幕
-        `;
-      }
+      resetExportButton(exportTableBtn);
     }
   }
 
@@ -4686,6 +4728,7 @@ document.addEventListener('DOMContentLoaded', function () {
   const settingsBtn = document.getElementById('settingsBtn');
   const settingsModal = document.getElementById('settingsModal');
   const settingsModalCloseBtn = document.getElementById('settingsModalCloseBtn');
+  let defaultExportMode = 'zip';
   let defaultExportFormat = 'txt'; // 默认值
   let prependVideoInfoFields = [];
 
@@ -4694,6 +4737,12 @@ document.addEventListener('DOMContentLoaded', function () {
   });
 
   // 自定义下拉框元素
+  const exportModeSelectTrigger = document.getElementById('exportModeSelectTrigger');
+  const exportModeSelectDropdown = document.getElementById('exportModeSelectDropdown');
+  const exportModeSelectContainer = document.getElementById('exportModeSelectContainer');
+  const exportModeSelectOptions = document.querySelectorAll('#exportModeSelectDropdown .custom-select-option');
+  const exportModeSelectedText = document.querySelector('#exportModeSelectTrigger .custom-select-selected-text');
+  const exportModeTip = document.getElementById('exportModeTip');
   const formatSelectTrigger = document.getElementById('formatSelectTrigger');
   const formatSelectDropdown = document.getElementById('formatSelectDropdown');
   const formatSelectContainer = document.getElementById('formatSelectContainer');
@@ -4705,7 +4754,15 @@ document.addEventListener('DOMContentLoaded', function () {
     return option.querySelector('.custom-select-option-title')?.textContent?.trim() || option.textContent.trim();
   }
 
+  function updateExportModeTip() {
+    if (!exportModeTip) return;
+    exportModeTip.classList.toggle('show', defaultExportMode === 'single');
+  }
+
   function closeAllSettingsDropdowns() {
+    if (exportModeSelectContainer) exportModeSelectContainer.classList.remove('dropdown-open');
+    if (exportModeSelectTrigger) exportModeSelectTrigger.classList.remove('active');
+    if (exportModeSelectDropdown) exportModeSelectDropdown.classList.remove('active');
     if (formatSelectContainer) formatSelectContainer.classList.remove('dropdown-open');
     if (formatSelectTrigger) formatSelectTrigger.classList.remove('active');
     if (formatSelectDropdown) formatSelectDropdown.classList.remove('active');
@@ -4781,6 +4838,62 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     persistTxtVideoInfoFields();
+  }
+
+  chrome.storage.local.get(['defaultExportMode'], (result) => {
+    const savedExportMode = result.defaultExportMode;
+    defaultExportMode = normalizeExportMode(savedExportMode);
+    updateExportModeTip();
+
+    if (savedExportMode && savedExportMode !== defaultExportMode) {
+      chrome.storage.local.set({ defaultExportMode });
+    }
+
+    if (exportModeSelectedText) {
+      const matchOption = document.querySelector(
+        `#exportModeSelectDropdown .custom-select-option[data-value="${defaultExportMode}"]`,
+      );
+      if (matchOption) {
+        exportModeSelectedText.textContent = getCustomSelectOptionLabel(matchOption);
+        exportModeSelectOptions.forEach((o) => o.classList.remove('selected'));
+        matchOption.classList.add('selected');
+      }
+    }
+  });
+
+  if (exportModeSelectTrigger && exportModeSelectDropdown) {
+    exportModeSelectTrigger.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const wasOpen = exportModeSelectTrigger.classList.contains('active');
+      closeAllSettingsDropdowns();
+      if (!wasOpen) {
+        exportModeSelectContainer?.classList.add('dropdown-open');
+        exportModeSelectTrigger.classList.add('active');
+        exportModeSelectDropdown.classList.add('active');
+      }
+    });
+
+    exportModeSelectOptions.forEach((option) => {
+      option.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const value = option.getAttribute('data-value');
+        defaultExportMode = normalizeExportMode(value);
+        updateExportModeTip();
+        exportModeSelectedText.textContent = getCustomSelectOptionLabel(option);
+        exportModeSelectOptions.forEach((o) => o.classList.remove('selected'));
+        option.classList.add('selected');
+        exportModeSelectTrigger.classList.remove('active');
+        exportModeSelectDropdown.classList.remove('active');
+        chrome.storage.local.set({ defaultExportMode });
+      });
+    });
+
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('#exportModeSelectContainer')) {
+        exportModeSelectTrigger.classList.remove('active');
+        exportModeSelectDropdown.classList.remove('active');
+      }
+    });
   }
 
   // 从 storage 加载设置

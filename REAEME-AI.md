@@ -22,7 +22,7 @@
 | 语音识别 | Transformers.js + ONNX Runtime | WebGPU 优先，WASM 降级 |
 | 模型 | whisper-large-v3-turbo (q4f16) | WebGPU 推理，编码器 370MB + 解码器 194MB |
 | 降级模型 | whisper-small (quantized) | WASM/CPU 推理，兼容无 WebGPU 的设备 |
-| 文件处理 | JSZip + Blob API | ZIP 批量导出 |
+| 文件处理 | JSZip + Blob API + chrome.downloads | ZIP 打包导出 + 单文件批量下载 |
 
 ### 第三方依赖
 
@@ -32,7 +32,7 @@
 | `ort-wasm-simd-threaded.jsep.wasm` | `libs/` | ONNX Runtime WebAssembly 引擎（SIMD + JSEP） |
 | `ort-wasm-simd-threaded.jsep.mjs` | `libs/` | ONNX Runtime JSEP 绑定（WebGPU 后端） |
 | `ort-wasm-simd-threaded.wasm` | `libs/` | ONNX Runtime 纯 WASM 后端（极小，96B，仅做 loader） |
-| `jszip.min.js` | 根目录 | ZIP 文件生成 |
+| `jszip.min.js` | 根目录 | ZIP 压缩模式文件生成 |
 
 ## 项目结构
 
@@ -86,7 +86,7 @@ SubBatch/
 │  Data Layer                                         │
 │  ─ chrome.storage.local — Cookie、用户设置持久化    │
 │  ─ models/ — 本地 ONNX 模型文件                     │
-│  ─ JSZip — ZIP 文件导出                             │
+│  ─ JSZip — ZIP 压缩模式；chrome.downloads — 单文件批量下载 │
 └─────────────────────────────────────────────────────┘
 ```
 
@@ -314,7 +314,7 @@ for (let i = 0; i < numChunks; i++) {
 
 **MD / DOC 格式：** 内容与 TXT 纯文本导出一致，只改变文件后缀为 `.md` / `.doc`
 
-**批量导出：** JSZip 打包为 `SubBatch_YYYY-MM-DD-HH-MM-SS_FMT.zip`
+**批量导出：** 默认用 JSZip 打包为 `SubBatch_YYYY-MM-DD-HH-MM-SS_FMT.zip`；选择“单个文件”时，使用 `chrome.downloads` 一次性创建多个下载任务。若浏览器开启“下载前询问每个文件的保存位置”，Chrome 仍会按文件弹出保存确认。
 
 #### 中文 TXT 换行优化（已实现）
 
