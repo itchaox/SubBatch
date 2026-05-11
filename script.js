@@ -65,11 +65,13 @@ document.addEventListener('DOMContentLoaded', function () {
   const EXPORT_MODE_VALUES = ['zip', 'single'];
 
   function normalizeExportFormat(format) {
-    return EXPORT_FORMAT_VALUES.includes(format) ? format : 'txt';
+    const normalizedFormat = String(format || '').trim().toLowerCase();
+    return EXPORT_FORMAT_VALUES.includes(normalizedFormat) ? normalizedFormat : 'txt';
   }
 
   function normalizeExportMode(mode) {
-    return EXPORT_MODE_VALUES.includes(mode) ? mode : 'zip';
+    const normalizedMode = String(mode || '').trim().toLowerCase();
+    return EXPORT_MODE_VALUES.includes(normalizedMode) ? normalizedMode : 'zip';
   }
 
   const bilibiliCookieInput = document.getElementById('bilibiliCookie');
@@ -3756,7 +3758,7 @@ document.addEventListener('DOMContentLoaded', function () {
         return;
       }
 
-      const exportFormat = normalizeExportFormat(defaultExportFormat);
+      const exportFormat = getCurrentExportFormat();
       const exportMode = normalizeExportMode(defaultExportMode);
 
       if (exportMode === 'zip' && typeof JSZip === 'undefined') {
@@ -4015,11 +4017,30 @@ document.addEventListener('DOMContentLoaded', function () {
     `;
   }
 
-  async function triggerSubtitleFileDownload(fileName, subtitleContent) {
+  function getExportMimeType(format) {
+    switch (normalizeExportFormat(format)) {
+      case 'md':
+        return 'text/markdown;charset=utf-8';
+      case 'doc':
+        return 'application/msword;charset=utf-8';
+      case 'srt':
+        return 'application/x-subrip;charset=utf-8';
+      default:
+        return 'text/plain;charset=utf-8';
+    }
+  }
+
+  function getExportFormatFromFileName(fileName) {
+    const match = String(fileName || '').match(/\.([^.\\/]+)$/);
+    return normalizeExportFormat(match?.[1]);
+  }
+
+  async function triggerSubtitleFileDownload(fileName, subtitleContent, format = '') {
+    const downloadFormat = format || getExportFormatFromFileName(fileName);
     const blob =
       subtitleContent instanceof Blob
         ? subtitleContent
-        : new Blob([subtitleContent], { type: 'text/plain;charset=utf-8' });
+        : new Blob([subtitleContent], { type: getExportMimeType(downloadFormat) });
     const url = URL.createObjectURL(blob);
 
     if (chrome.downloads?.download) {
@@ -4150,7 +4171,7 @@ document.addEventListener('DOMContentLoaded', function () {
           if (isZipMode) {
             zipContent.file(fileName, subtitleContent);
           } else {
-            await triggerSubtitleFileDownload(fileName, subtitleContent);
+            await triggerSubtitleFileDownload(fileName, subtitleContent, format);
             await wait(50);
           }
           exportedCount++;
@@ -4786,6 +4807,43 @@ document.addEventListener('DOMContentLoaded', function () {
     return option.querySelector('.custom-select-option-title')?.textContent?.trim() || option.textContent.trim();
   }
 
+  function syncExportFormatSelect(format) {
+    const normalizedFormat = normalizeExportFormat(format);
+    if (formatSelectTrigger) {
+      formatSelectTrigger.dataset.value = normalizedFormat;
+    }
+
+    const matchOption = document.querySelector(
+      `#formatSelectDropdown .custom-select-option[data-value="${normalizedFormat}"]`,
+    );
+    if (!matchOption) return normalizedFormat;
+
+    if (formatSelectedText) {
+      formatSelectedText.textContent = getCustomSelectOptionLabel(matchOption);
+    }
+    formatSelectOptions.forEach((option) => option.classList.remove('selected'));
+    matchOption.classList.add('selected');
+
+    return normalizedFormat;
+  }
+
+  function setDefaultExportFormat(format, shouldPersist = false) {
+    defaultExportFormat = syncExportFormatSelect(format);
+    if (shouldPersist) {
+      chrome.storage.local.set({ defaultExportFormat });
+    }
+    return defaultExportFormat;
+  }
+
+  function getCurrentExportFormat() {
+    const triggerFormat = formatSelectTrigger?.dataset.value;
+    const selectedFormat = document
+      .querySelector('#formatSelectDropdown .custom-select-option.selected')
+      ?.getAttribute('data-value');
+
+    return normalizeExportFormat(triggerFormat || selectedFormat || defaultExportFormat);
+  }
+
   function updateExportModeTip() {
     if (!exportModeTip) return;
     exportModeTip.classList.toggle('show', defaultExportMode === 'single');
@@ -4931,21 +4989,10 @@ document.addEventListener('DOMContentLoaded', function () {
   // 从 storage 加载设置
   chrome.storage.local.get(['defaultExportFormat'], (result) => {
     const savedExportFormat = result.defaultExportFormat;
-    defaultExportFormat = normalizeExportFormat(savedExportFormat);
+    const normalizedExportFormat = setDefaultExportFormat(savedExportFormat);
 
-    if (savedExportFormat && savedExportFormat !== defaultExportFormat) {
-      chrome.storage.local.set({ defaultExportFormat });
-    }
-
-    if (formatSelectedText) {
-      const matchOption = document.querySelector(
-        `#formatSelectDropdown .custom-select-option[data-value="${defaultExportFormat}"]`,
-      );
-      if (matchOption) {
-        formatSelectedText.textContent = getCustomSelectOptionLabel(matchOption);
-        formatSelectOptions.forEach((o) => o.classList.remove('selected'));
-        matchOption.classList.add('selected');
-      }
+    if (savedExportFormat && savedExportFormat !== normalizedExportFormat) {
+      chrome.storage.local.set({ defaultExportFormat: normalizedExportFormat });
     }
   });
 
@@ -4966,13 +5013,9 @@ document.addEventListener('DOMContentLoaded', function () {
       option.addEventListener('click', (e) => {
         e.stopPropagation();
         const value = option.getAttribute('data-value');
-        defaultExportFormat = normalizeExportFormat(value);
-        formatSelectedText.textContent = getCustomSelectOptionLabel(option);
-        formatSelectOptions.forEach((o) => o.classList.remove('selected'));
-        option.classList.add('selected');
+        setDefaultExportFormat(value, true);
         formatSelectTrigger.classList.remove('active');
         formatSelectDropdown.classList.remove('active');
-        chrome.storage.local.set({ defaultExportFormat });
       });
     });
 
