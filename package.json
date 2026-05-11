@@ -19,5 +19,8 @@
   "bugs": {
     "url": "https://github.com/itchaox/SubBatch/issues"
   },
-  "homepage": "https://github.com/itchaox/SubBatch#readme"
+  "homepage": "https://github.com/itchaox/SubBatch#readme",
+  "devDependencies": {
+    "terser": "^5.47.1"
+  }
 }
