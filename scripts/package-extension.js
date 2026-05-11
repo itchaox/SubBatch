@@ -16,7 +16,6 @@ const commonFiles = [
   'sidepanel.html',
   'jszip.min.js',
   'images',
-  'LICENSE',
 ];
 
 const specs = {

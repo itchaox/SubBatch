@@ -2,6 +2,8 @@
   "name": "subbatch",
   "version": "1.0.0",
   "description": "SubBatch 是一个强大的浏览器扩展插件，专为批量获取和导出 B 站视频字幕而设计。它可以帮助用户轻松获取单个或批量视频的字幕数据，并支持导出为 SRT、TXT、MD 或 DOC 格式的字幕文件，特别适合用于 AI 知识库建设（如 NotebookLM）、学习笔记整理或视频内容分析。",
+  "private": true,
+  "license": "UNLICENSED",
   "main": "background.js",
   "scripts": {
     "package": "npm run package:store && npm run package:local",
@@ -9,17 +11,8 @@
     "package:local": "node scripts/package-extension.js local",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/itchaox/SubBatch.git"
-  },
   "keywords": [],
   "author": "",
-  "license": "ISC",
-  "bugs": {
-    "url": "https://github.com/itchaox/SubBatch/issues"
-  },
-  "homepage": "https://github.com/itchaox/SubBatch#readme",
   "devDependencies": {
     "terser": "^5.47.1"
   }
