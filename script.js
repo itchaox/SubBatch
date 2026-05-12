@@ -4179,9 +4179,6 @@ document.addEventListener('DOMContentLoaded', function () {
           // 更新进度条
           const percent = Math.floor(((index + 1) / exportTasks.length) * 100);
           updateProgress(percent, `已处理 ${exportedCount}/${exportTasks.length} 个字幕`);
-
-          // 每添加一个更新一次状态
-          showSuccess(`已处理 ${exportedCount}/${exportTasks.length} 个字幕`);
         } catch (videoError) {
           console.error(`导出字幕失败:`, videoError);
           errorCount++;
