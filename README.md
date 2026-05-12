@@ -110,9 +110,9 @@ SubBatch 是一个强大的浏览器扩展插件，专为批量获取和导出 B
 
 ## 📦 版本打包
 
-- **商店版**：运行 `npm run package:store`，生成 `dist/subbatch-store.zip`。该版本不包含音频转字幕、模型、libs、offscreen 页面和相关权限，适合提交 Chrome / Edge 商店。
-- **本地增强版**：运行 `npm run package:local`，生成 `dist/subbatch-local-enhanced.zip`。该版本保留 Whisper 模型和高质量本地音频转字幕能力。
-- **安装说明**：本地增强版安装流程见 `docs/local-enhanced-install.md`，打包时也会复制到 `dist/subbatch-local-enhanced-install.md`。
+- **商店版**：运行 `npm run package:store`，生成 `dist/subbatch-store-v<manifest.version>.zip`，例如当前版本为 `dist/subbatch-store-v2.0.0.zip`。该版本不包含音频转字幕、模型、libs、offscreen 页面和相关权限，适合提交 Chrome / Edge 商店。
+- **本地增强版**：运行 `npm run package:local`，生成 `dist/subbatch-local-v<manifest.version>.zip`，例如当前版本为 `dist/subbatch-local-v2.0.0.zip`。该版本保留 Whisper 模型和高质量本地音频转字幕能力。
+- **安装说明**：本地增强版安装流程见 `docs/local-enhanced-install.md`，打包时也会复制到 `dist/subbatch-local-v<manifest.version>-install.md`。
 
 ## 📊 AI 知识库应用场景
 

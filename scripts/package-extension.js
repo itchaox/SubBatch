@@ -20,8 +20,7 @@ const commonFiles = [
 
 const specs = {
   store: {
-    stageName: 'subbatch-store',
-    zipName: 'subbatch-store.zip',
+    packageBaseName: 'subbatch-store',
     config: {
       edition: 'store',
       enableAudioTranscription: false,
@@ -29,8 +28,7 @@ const specs = {
     files: commonFiles,
   },
   local: {
-    stageName: 'subbatch-local-enhanced',
-    zipName: 'subbatch-local-enhanced.zip',
+    packageBaseName: 'subbatch-local',
     config: {
       edition: 'local',
       enableAudioTranscription: true,
@@ -44,7 +42,9 @@ if (!specs[edition]) {
   process.exit(1);
 }
 
-const spec = specs[edition];
+const sourceManifest = readManifest();
+const packageVersion = getManifestVersion(sourceManifest);
+const spec = createVersionedSpec(specs[edition], packageVersion);
 const stageDir = path.join(distDir, spec.stageName);
 const zipPath = path.join(distDir, spec.zipName);
 
@@ -83,6 +83,24 @@ function readManifest() {
   return JSON.parse(fs.readFileSync(path.join(rootDir, 'manifest.json'), 'utf8'));
 }
 
+function getManifestVersion(manifest) {
+  if (!manifest.version || typeof manifest.version !== 'string') {
+    throw new Error('manifest.json 缺少有效的 version 字段');
+  }
+
+  return manifest.version;
+}
+
+function createVersionedSpec(baseSpec, version) {
+  const packageName = `${baseSpec.packageBaseName}-v${version}`;
+
+  return {
+    ...baseSpec,
+    stageName: packageName,
+    zipName: `${packageName}.zip`,
+  };
+}
+
 function withoutValues(values, valuesToRemove) {
   const removeSet = new Set(valuesToRemove);
   return values.filter((value) => !removeSet.has(value));
@@ -115,12 +133,19 @@ function createLocalManifest(manifest) {
 }
 
 function writeGeneratedFiles() {
-  const manifest = readManifest();
-  const outputManifest = edition === 'store' ? createStoreManifest(manifest) : createLocalManifest(manifest);
+  const outputManifest = edition === 'store' ? createStoreManifest(sourceManifest) : createLocalManifest(sourceManifest);
   const configContent = `globalThis.SubBatchExtensionConfig = ${JSON.stringify(spec.config, null, 2)};\n`;
 
   fs.writeFileSync(path.join(stageDir, 'manifest.json'), `${JSON.stringify(outputManifest, null, 2)}\n`);
   fs.writeFileSync(path.join(stageDir, 'extension-config.js'), configContent);
+}
+
+function renderInstallGuide(content) {
+  return content
+    .replace(/subbatch-local-enhanced\.zip/g, spec.zipName)
+    .replace(/subbatch-local-enhanced/g, spec.stageName)
+    .replace(/subbatch-local-v<manifest\.version>\.zip/g, spec.zipName)
+    .replace(/subbatch-local-v<manifest\.version>/g, spec.stageName);
 }
 
 function copyInstallGuide() {
@@ -129,7 +154,8 @@ function copyInstallGuide() {
   const guidePath = path.join(rootDir, 'docs', 'local-enhanced-install.md');
   if (!fs.existsSync(guidePath)) return;
 
-  fs.copyFileSync(guidePath, path.join(distDir, 'subbatch-local-enhanced-install.md'));
+  const guideContent = fs.readFileSync(guidePath, 'utf8');
+  fs.writeFileSync(path.join(distDir, `${spec.stageName}-install.md`), renderInstallGuide(guideContent));
 }
 
 async function minifyLocalJavaScriptFiles() {

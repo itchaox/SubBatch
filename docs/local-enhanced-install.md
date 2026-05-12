@@ -4,20 +4,20 @@
 
 ## Chrome 安装
 
-1. 下载并解压 `subbatch-local-enhanced.zip`。
+1. 下载并解压 `subbatch-local-v<manifest.version>.zip`。
 2. 打开 `chrome://extensions`。
 3. 开启右上角“开发者模式”。
 4. 点击“加载已解压的扩展程序”。
-5. 选择解压后的 `subbatch-local-enhanced` 文件夹。
+5. 选择解压后的 `subbatch-local-v<manifest.version>` 文件夹。
 6. 打开 B 站页面后点击扩展图标，在侧边栏中使用。
 
 ## Edge 安装
 
-1. 下载并解压 `subbatch-local-enhanced.zip`。
+1. 下载并解压 `subbatch-local-v<manifest.version>.zip`。
 2. 打开 `edge://extensions`。
 3. 开启左侧“开发人员模式”。
 4. 点击“加载解压缩的扩展”。
-5. 选择解压后的 `subbatch-local-enhanced` 文件夹。
+5. 选择解压后的 `subbatch-local-v<manifest.version>` 文件夹。
 6. 打开 B 站页面后点击扩展图标，在侧边栏中使用。
 
 ## 使用提醒
