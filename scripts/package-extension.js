@@ -9,14 +9,7 @@ const distDir = path.join(rootDir, 'dist');
 
 const edition = process.argv[2];
 
-const commonFiles = [
-  'manifest.json',
-  'background.js',
-  'script.js',
-  'sidepanel.html',
-  'jszip.min.js',
-  'images',
-];
+const commonFiles = ['manifest.json', 'background.js', 'script.js', 'sidepanel.html', 'jszip.min.js', 'images'];
 
 const specs = {
   store: {
@@ -125,15 +118,16 @@ function createStoreManifest(manifest) {
 function createLocalManifest(manifest) {
   const localManifest = JSON.parse(JSON.stringify(manifest));
 
-  localManifest.name = 'SubBatch 本地增强版';
+  localManifest.name = 'SubBatch - B站字幕批量下载工具';
   localManifest.description =
-    'SubBatch 本地增强版：批量获取和导出 B 站视频字幕，并内置 Whisper 模型支持高质量本地音频转字幕。';
+    '一键批量下载B站(Bilibili)视频字幕，支持导出SRT/TXT/MD/DOC格式。支持批量处理个人主页、收藏夹、合集、视频选集、单个视频的字幕，本地处理，安全高效。';
 
   return localManifest;
 }
 
 function writeGeneratedFiles() {
-  const outputManifest = edition === 'store' ? createStoreManifest(sourceManifest) : createLocalManifest(sourceManifest);
+  const outputManifest =
+    edition === 'store' ? createStoreManifest(sourceManifest) : createLocalManifest(sourceManifest);
   const configContent = `globalThis.SubBatchExtensionConfig = ${JSON.stringify(spec.config, null, 2)};\n`;
 
   fs.writeFileSync(path.join(stageDir, 'manifest.json'), `${JSON.stringify(outputManifest, null, 2)}\n`);
@@ -247,39 +241,35 @@ async function minifyHtmlContent(source, minify) {
   let html = await replaceAsync(
     source,
     /<style\b([^>]*)>([\s\S]*?)<\/style>/gi,
-    (match, attributes, css) => `<style${attributes}>${minifyCssContent(css)}</style>`
+    (match, attributes, css) => `<style${attributes}>${minifyCssContent(css)}</style>`,
   );
 
-  html = await replaceAsync(
-    html,
-    /<script\b([^>]*)>([\s\S]*?)<\/script>/gi,
-    async (match, attributes, script) => {
-      if (!shouldMinifyInlineScript(attributes) || !script.trim()) {
-        return match;
-      }
-
-      const result = await minify(script, {
-        ecma: 2020,
-        compress: {
-          passes: 2,
-          toplevel: false,
-        },
-        mangle: {
-          toplevel: false,
-        },
-        format: {
-          comments: false,
-        },
-        sourceMap: false,
-      });
-
-      if (!result.code) {
-        throw new Error('Terser 未生成内联脚本代码');
-      }
-
-      return `<script${attributes}>${result.code}</script>`;
+  html = await replaceAsync(html, /<script\b([^>]*)>([\s\S]*?)<\/script>/gi, async (match, attributes, script) => {
+    if (!shouldMinifyInlineScript(attributes) || !script.trim()) {
+      return match;
     }
-  );
+
+    const result = await minify(script, {
+      ecma: 2020,
+      compress: {
+        passes: 2,
+        toplevel: false,
+      },
+      mangle: {
+        toplevel: false,
+      },
+      format: {
+        comments: false,
+      },
+      sourceMap: false,
+    });
+
+    if (!result.code) {
+      throw new Error('Terser 未生成内联脚本代码');
+    }
+
+    return `<script${attributes}>${result.code}</script>`;
+  });
 
   const rawBlocks = [];
   html = html.replace(/<(script|style)\b[^>]*>[\s\S]*?<\/\1>/gi, (block) => {
