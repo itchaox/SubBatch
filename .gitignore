@@ -8,6 +8,10 @@ bin-release/
 # Other files and folders
 .settings/
 node_modules/
+TODO/
+.DS_Store
+*.DS_Store
+.DS_Store/
 
 # Executables
 *.swf
